@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser, requireAdmin } from '@/lib/permissions';
+import { notifyTaskPublished } from '@/lib/email';
 
 export async function GET(req: NextRequest) {
   await requireUser();
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
       data: { taskId: task.id },
     });
   }
+
+  await notifyTaskPublished(task);
 
   return NextResponse.json(task, { status: 201 });
 }

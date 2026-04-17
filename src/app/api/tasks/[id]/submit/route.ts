@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
+import { notifySubmission } from '@/lib/email';
 
 const bodySchema = z.object({
   note: z.string().min(1).max(5000),
@@ -33,6 +34,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     await tx.task.update({ where: { id: task.id }, data: { status: 'SUBMITTED' } });
     return sub;
+  });
+
+  await notifySubmission({
+    taskId: task.id,
+    taskTitle: task.title,
+    submitterName: user.name ?? '',
+    submitterEmail: user.email ?? '',
+    note,
   });
 
   return NextResponse.json(submission, { status: 201 });
