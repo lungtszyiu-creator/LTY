@@ -55,67 +55,88 @@ export default function UsersTable({ initial, meId }: { initial: U[]; meId: stri
 
   return (
     <div className="space-y-6">
-      <form onSubmit={addUser} className="flex flex-wrap items-end gap-2 rounded-xl border bg-white p-4">
-        <label className="flex-1">
-          <span className="mb-1 block text-xs font-medium text-slate-700">邮箱</span>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
+      <form onSubmit={addUser} className="card rise flex flex-wrap items-end gap-3 p-5">
+        <div className="flex-1 min-w-[240px]">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">邮箱</label>
+          <input
+            value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
             placeholder="name@company.com"
-            className="w-full rounded-lg border px-3 py-2 text-sm focus:border-slate-400 focus:outline-none" />
-        </label>
-        <label>
-          <span className="mb-1 block text-xs font-medium text-slate-700">角色</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as any)}
-            className="rounded-lg border px-3 py-2 text-sm focus:border-slate-400 focus:outline-none">
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">角色</label>
+          <select value={role} onChange={(e) => setRole(e.target.value as any)} className="select">
             <option value="MEMBER">成员</option>
             <option value="ADMIN">管理员</option>
           </select>
-        </label>
-        <button type="submit" disabled={busy}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
-          添加
+        </div>
+        <button type="submit" disabled={busy} className="btn btn-primary">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" /></svg>
+          {busy ? '添加中…' : '添加成员'}
         </button>
         {err && <p className="w-full text-sm text-rose-600">{err}</p>}
       </form>
 
-      <div className="overflow-hidden rounded-xl border bg-white">
+      <div className="card rise rise-delay-1 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50/70 text-xs uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-4 py-3 text-left">用户</th>
-              <th className="px-4 py-3 text-left">邮箱</th>
-              <th className="px-4 py-3 text-left">角色</th>
-              <th className="px-4 py-3 text-left">状态</th>
-              <th className="px-4 py-3 text-right">操作</th>
+              <th className="px-5 py-3 text-left font-medium">用户</th>
+              <th className="px-5 py-3 text-left font-medium">邮箱</th>
+              <th className="px-5 py-3 text-left font-medium">角色</th>
+              <th className="px-5 py-3 text-left font-medium">状态</th>
+              <th className="px-5 py-3 text-right font-medium">操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-slate-100">
             {users.map((u) => (
-              <tr key={u.id}>
-                <td className="px-4 py-3">{u.name ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">{u.email}</td>
-                <td className="px-4 py-3">
-                  <select value={u.role} onChange={(e) => patch(u.id, { role: e.target.value as any })}
-                    className="rounded border px-2 py-1 text-xs">
+              <tr key={u.id} className="transition hover:bg-slate-50/60">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-300 to-fuchsia-300 text-xs font-semibold text-white">
+                      {(u.name ?? u.email).slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="font-medium">{u.name ?? '—'}</span>
+                    {u.id === meId && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">你</span>}
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-slate-600">{u.email}</td>
+                <td className="px-5 py-3">
+                  <select
+                    value={u.role}
+                    onChange={(e) => patch(u.id, { role: e.target.value as any })}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                  >
                     <option value="MEMBER">成员</option>
                     <option value="ADMIN">管理员</option>
                   </select>
                 </td>
-                <td className="px-4 py-3">
-                  <label className="inline-flex items-center gap-2">
-                    <input type="checkbox" checked={u.active}
-                      onChange={(e) => patch(u.id, { active: e.target.checked })} />
-                    <span className="text-xs text-slate-600">{u.active ? '已激活' : '已禁用'}</span>
-                  </label>
+                <td className="px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => patch(u.id, { active: !u.active })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${u.active ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                    aria-pressed={u.active}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${u.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="ml-2 text-xs text-slate-500">{u.active ? '已激活' : '已禁用'}</span>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-5 py-3 text-right">
                   {u.id !== meId && (
-                    <button onClick={() => remove(u.id)} className="text-xs text-rose-600 hover:underline">
+                    <button onClick={() => remove(u.id)} className="text-xs text-slate-400 hover:text-rose-600">
                       删除
                     </button>
                   )}
                 </td>
               </tr>
             ))}
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-10 text-center text-sm text-slate-500">还没有用户</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

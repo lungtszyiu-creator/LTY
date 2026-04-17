@@ -19,11 +19,13 @@ export default async function AdminUsersPage() {
   });
 
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-semibold">用户管理</h1>
-      <p className="mb-6 text-sm text-slate-600">
-        预注册用户邮箱后，对方用 Google 登录即可直接进入。已存在用户可改角色或禁用。
-      </p>
+    <div className="pt-8">
+      <div className="mb-6 rise">
+        <h1 className="text-3xl font-semibold tracking-tight">用户管理</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          预注册成员邮箱后，对方即可用 Google 登录进入。可随时改角色或禁用访问。
+        </p>
+      </div>
       <UsersTable
         initial={users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }))}
         meId={session.user.id}
