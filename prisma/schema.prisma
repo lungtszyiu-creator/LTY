@@ -1,0 +1,123 @@
+// Prisma schema for task-pool
+// On deploy: change provider to "postgresql" and point DATABASE_URL at Neon/Supabase.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- NextAuth tables (Prisma adapter) ----
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---- Application tables ----
+// Status values (stored as String for portability):
+//   Role:             "ADMIN" | "MEMBER"
+//   TaskStatus:       "OPEN" | "CLAIMED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "ARCHIVED"
+//   SubmissionStatus: "PENDING" | "APPROVED" | "REJECTED"
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("MEMBER") // "ADMIN" | "MEMBER"
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  tasksCreated  Task[]        @relation("TaskCreator")
+  tasksClaimed  Task[]        @relation("TaskClaimant")
+  submissions   Submission[]
+  reviewed      Submission[]  @relation("SubmissionReviewer")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String
+  reward      String?    // free-form reward text ("￥100" / "奶茶一杯" 等)
+  status      String     @default("OPEN")
+  deadline    DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  creatorId   String
+  creator     User       @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  claimantId  String?
+  claimant    User?      @relation("TaskClaimant", fields: [claimantId], references: [id])
+  claimedAt   DateTime?
+
+  submissions Submission[]
+  attachments Attachment[] @relation("TaskAttachments")
+}
+
+model Submission {
+  id          String    @id @default(cuid())
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  note        String    // submitter's description of work done
+  status      String    @default("PENDING")
+  reviewerId  String?
+  reviewer    User?     @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
+  reviewNote  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  attachments Attachment[] @relation("SubmissionAttachments")
+}
+
+model Attachment {
+  id           String      @id @default(cuid())
+  filename     String      // original filename
+  storedPath   String      // relative path under UPLOAD_DIR
+  mimeType     String
+  size         Int
+  createdAt    DateTime    @default(now())
+
+  taskId       String?
+  task         Task?       @relation("TaskAttachments", fields: [taskId], references: [id], onDelete: Cascade)
+  submissionId String?
+  submission   Submission? @relation("SubmissionAttachments", fields: [submissionId], references: [id], onDelete: Cascade)
+}
