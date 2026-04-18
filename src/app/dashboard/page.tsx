@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
 import PriorityBadge from '@/components/PriorityBadge';
+import ContributionBadge from '@/components/ContributionBadge';
 import Countdown from '@/components/Countdown';
 import MyStats from '@/components/MyStats';
 
@@ -131,6 +132,7 @@ export default async function DashboardPage({
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={t.status} />
                     <PriorityBadge priority={t.priority} />
+                    <ContributionBadge contribution={t.contribution} size="sm" />
                   </div>
                   <div className="flex items-center gap-2">
                     {t.points > 0 && (

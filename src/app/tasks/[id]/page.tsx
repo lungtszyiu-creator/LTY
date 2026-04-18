@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
 import PriorityBadge from '@/components/PriorityBadge';
+import ContributionBadge from '@/components/ContributionBadge';
 import Countdown from '@/components/Countdown';
 import TaskActions from './TaskActions';
 import ReviewFormClient from './ReviewFormClient';
@@ -59,6 +60,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={task.status} />
               <PriorityBadge priority={task.priority} />
+              <ContributionBadge contribution={task.contribution} />
               <span className="text-xs text-slate-400">·</span>
               <span className="text-xs text-slate-500">创建于 {fmt(task.createdAt)}</span>
             </div>

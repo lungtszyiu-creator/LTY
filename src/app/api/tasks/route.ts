@@ -34,6 +34,7 @@ const createSchema = z.object({
   deadline: z.string().datetime().optional().nullable(),
   points: z.number().int().min(0).max(999).optional(),
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
+  contribution: z.enum(['CROSS_TEAM', 'PROCESS', 'KNOWLEDGE', 'FIREFIGHT', 'EXTERNAL', 'GROWTH', 'OTHER']),
   attachmentIds: z.array(z.string()).optional(),
 });
 
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
       deadline: data.deadline ? new Date(data.deadline) : null,
       points: data.points ?? 10,
       priority: data.priority ?? 'NORMAL',
+      contribution: data.contribution,
       creatorId: admin.id,
       status: 'OPEN',
     },

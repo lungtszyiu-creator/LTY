@@ -50,6 +50,9 @@ model VerificationToken {
 //   Role:             "ADMIN" | "MEMBER"
 //   TaskStatus:       "OPEN" | "CLAIMED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "ARCHIVED"
 //   SubmissionStatus: "PENDING" | "APPROVED" | "REJECTED"
+//   Contribution:     "CROSS_TEAM" | "PROCESS" | "KNOWLEDGE" | "FIREFIGHT" | "EXTERNAL" | "GROWTH" | "OTHER"
+//   PositionLevel:    "EXECUTIVE" | "MANAGER" | "STAFF"
+//   FAQCategory:      "TASK_POOL" | "COMP" | "PROCESS" | "OTHER"
 
 model User {
   id            String    @id @default(cuid())
@@ -75,8 +78,9 @@ model Task {
   title       String
   description String
   reward      String?    // free-form reward text ("￥100" / "奶茶一杯" 等)
-  points      Int        @default(10)   // numeric score used by leaderboard
-  priority    String     @default("NORMAL") // "LOW" | "NORMAL" | "HIGH" | "URGENT"
+  points       Int       @default(10)   // numeric score used by leaderboard
+  priority     String    @default("NORMAL")   // see enum comment above
+  contribution String    @default("OTHER")    // see Contribution enum; marks task as "额外贡献" — not a core duty
   status      String     @default("OPEN")
   deadline    DateTime?
   createdAt   DateTime   @default(now())
@@ -108,6 +112,31 @@ model Submission {
   createdAt   DateTime  @default(now())
 
   attachments Attachment[] @relation("SubmissionAttachments")
+}
+
+model Position {
+  id                   String   @id @default(cuid())
+  title                String   // 岗位名称，例如 "市场运营 - 增长方向"
+  level                String   @default("STAFF") // EXECUTIVE | MANAGER | STAFF
+  department           String?  // 所属部门
+  coreResponsibilities String   // 本职职责（Lane A）
+  kpis                 String   // 考核重点
+  notInTaskPool        String?  // 哪些事属于本职，不进任务池（显式划界）
+  order                Int      @default(0)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model FAQ {
+  id        String   @id @default(cuid())
+  category  String   @default("TASK_POOL") // see FAQCategory enum comment
+  question  String
+  answer    String
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Attachment {
