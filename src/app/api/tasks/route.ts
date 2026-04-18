@@ -32,6 +32,8 @@ const createSchema = z.object({
   description: z.string().min(1),
   reward: z.string().max(100).optional().nullable(),
   deadline: z.string().datetime().optional().nullable(),
+  points: z.number().int().min(0).max(999).optional(),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
   attachmentIds: z.array(z.string()).optional(),
 });
 
@@ -46,6 +48,8 @@ export async function POST(req: NextRequest) {
       description: data.description,
       reward: data.reward ?? null,
       deadline: data.deadline ? new Date(data.deadline) : null,
+      points: data.points ?? 10,
+      priority: data.priority ?? 'NORMAL',
       creatorId: admin.id,
       status: 'OPEN',
     },

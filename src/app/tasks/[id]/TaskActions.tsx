@@ -23,7 +23,13 @@ export default function TaskActions({ task, me }: Props) {
     setBusy(true); setErr(null);
     try {
       const res = await fetch(`/api/tasks/${task.id}/claim`, { method: 'POST' });
-      if (!res.ok) throw new Error((await res.json()).error || '操作失败');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as any));
+        if (body?.error === 'TOO_MANY_CLAIMS') {
+          throw new Error(`同时进行中任务不能超过 ${body.limit ?? 3} 条，请先完成或释放一条`);
+        }
+        throw new Error(body.error || '操作失败');
+      }
       setConfirmOpen(false);
       setClaimed(true);
       setTimeout(() => router.refresh(), 900);

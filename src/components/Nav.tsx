@@ -18,6 +18,7 @@ export default function Nav() {
   const isAdmin = user.role === 'ADMIN';
   const links = [
     { href: '/dashboard', label: '看板' },
+    { href: '/leaderboard', label: '战功榜' },
     ...(isAdmin ? [{ href: '/admin/tasks/new', label: '发布任务' }] : []),
     ...(isAdmin ? [{ href: '/admin/users', label: '用户管理' }] : []),
   ];

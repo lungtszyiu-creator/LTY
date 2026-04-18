@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import FileUpload, { type UploadedFile } from '@/components/FileUpload';
+import { PRIORITY_META, type Priority } from '@/lib/constants';
+
+const PRIORITIES: Priority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
 export default function NewTaskForm() {
   const router = useRouter();
@@ -10,16 +13,23 @@ export default function NewTaskForm() {
   const [description, setDescription] = useState('');
   const [reward, setReward] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [priority, setPriority] = useState<Priority>('NORMAL');
+  const [points, setPoints] = useState<number>(10);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  function selectPriority(p: Priority) {
+    setPriority(p);
+    setPoints(Number(PRIORITY_META[p].pointsHint));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
       const body: any = {
-        title, description,
+        title, description, priority, points,
         reward: reward || null,
         deadline: deadline ? new Date(deadline).toISOString() : null,
         attachmentIds: files.map((f) => f.id),
@@ -68,12 +78,47 @@ export default function NewTaskForm() {
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-800">优先级</label>
+          <div className="grid grid-cols-4 gap-2">
+            {PRIORITIES.map((p) => {
+              const m = PRIORITY_META[p];
+              const active = priority === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => selectPriority(p)}
+                  className={`relative flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-xs transition ${
+                    active
+                      ? `${m.bg} ring-2 ${m.ring} ${m.text}`
+                      : 'bg-white ring-1 ring-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${m.dot} ${active && p === 'URGENT' ? 'urgent-pulse' : ''}`} />
+                  <span className={active ? 'font-medium' : ''}>{m.label}</span>
+                  <span className="text-[10px] opacity-60">{m.pointsHint}分</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-800">奖励</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-800">积分</label>
+            <input
+              type="number" min={0} max={999}
+              value={points} onChange={(e) => setPoints(Math.max(0, Math.min(999, Number(e.target.value))))}
+              className="input"
+            />
+            <p className="mt-1 text-xs text-slate-400">完成并通过后计入领取人</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-800">奖励描述</label>
             <input
               value={reward} onChange={(e) => setReward(e.target.value)}
-              placeholder="￥100 · 奶茶一杯 · 调休半天"
+              placeholder="￥100 · 奶茶一杯"
               className="input"
             />
           </div>
@@ -123,20 +168,33 @@ export default function NewTaskForm() {
         <div className="card relative overflow-hidden p-5">
           <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-70" />
           <div className="mb-3 flex items-start justify-between gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-              待领取
-            </span>
-            {reward && (
-              <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
-                {reward}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                待领取
+              </span>
+              {priority !== 'NORMAL' && (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs ring-1 ${PRIORITY_META[priority].bg} ${PRIORITY_META[priority].text} ${PRIORITY_META[priority].ring}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_META[priority].dot} ${priority === 'URGENT' ? 'urgent-pulse' : ''}`} />
+                  {PRIORITY_META[priority].label}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                {points}<span className="text-[10px] font-normal opacity-60">分</span>
+              </span>
+              {reward && (
+                <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
+                  {reward}
+                </div>
+              )}
+            </div>
           </div>
           <h3 className="mb-1.5 text-base font-semibold tracking-tight">
             {title || <span className="text-slate-300">标题会显示在这里</span>}
           </h3>
-          <p className="mb-4 line-clamp-3 text-sm leading-relaxed text-slate-500 min-h-[60px]">
+          <p className="mb-4 line-clamp-3 min-h-[60px] text-sm leading-relaxed text-slate-500">
             {description || <span className="text-slate-300">任务说明会显示在这里</span>}
           </p>
           {deadline && (
@@ -147,18 +205,18 @@ export default function NewTaskForm() {
           )}
         </div>
 
-        <ul className="mt-5 space-y-3 px-1 text-xs text-slate-500">
+        <ul className="mt-5 space-y-2.5 px-1 text-xs text-slate-500">
           <li className="flex gap-2">
             <span className="mt-0.5 text-slate-400">①</span>
-            <span>填写清晰的标题和可验收的标准，减少沟通成本。</span>
+            <span>优先级决定建议积分；积分会累计到排行榜，驱动成员投入。</span>
           </li>
           <li className="flex gap-2">
             <span className="mt-0.5 text-slate-400">②</span>
-            <span>奖励写得越具体，成员动力越高（金额、物品或时间均可）。</span>
+            <span>紧急任务自带脉动红光，不会被错过。</span>
           </li>
           <li className="flex gap-2">
             <span className="mt-0.5 text-slate-400">③</span>
-            <span>发布后成员会收到邮件，且可在看板直接领取。</span>
+            <span>每人同时最多 3 条进行中任务，防止占坑。</span>
           </li>
         </ul>
       </aside>

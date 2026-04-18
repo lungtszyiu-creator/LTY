@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
+import { MAX_CONCURRENT_CLAIMS } from '@/lib/constants';
 
 // POST = claim, DELETE = release (by claimant or admin)
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -9,6 +10,17 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   if (!task) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
   if (task.status !== 'OPEN')
     return NextResponse.json({ error: 'NOT_CLAIMABLE' }, { status: 409 });
+
+  // Anti-hoarding: cap concurrent in-progress tasks per member.
+  const inProgress = await prisma.task.count({
+    where: { claimantId: user.id, status: { in: ['CLAIMED', 'SUBMITTED'] } },
+  });
+  if (inProgress >= MAX_CONCURRENT_CLAIMS) {
+    return NextResponse.json(
+      { error: 'TOO_MANY_CLAIMS', limit: MAX_CONCURRENT_CLAIMS },
+      { status: 429 }
+    );
+  }
 
   const updated = await prisma.task.update({
     where: { id: params.id, status: 'OPEN' },

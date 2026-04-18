@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
+import PriorityBadge from '@/components/PriorityBadge';
 import Countdown from '@/components/Countdown';
 import TaskActions from './TaskActions';
 import ReviewFormClient from './ReviewFormClient';
@@ -55,14 +56,21 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={task.status} />
+              <PriorityBadge priority={task.priority} />
               <span className="text-xs text-slate-400">·</span>
               <span className="text-xs text-slate-500">创建于 {fmt(task.createdAt)}</span>
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
           </div>
           <div className="flex items-start gap-2">
+            {task.points > 0 && (
+              <div className="rounded-xl bg-slate-900/5 px-3 py-2.5 text-right">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">积分</div>
+                <div className="text-base font-semibold tabular-nums">{task.points}</div>
+              </div>
+            )}
             {task.reward && (
               <div className="reward-chip rounded-xl px-4 py-2.5 text-right">
                 <div className="text-[10px] uppercase tracking-wider opacity-80">奖励</div>

@@ -3,7 +3,9 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
+import PriorityBadge from '@/components/PriorityBadge';
 import Countdown from '@/components/Countdown';
+import MyStats from '@/components/MyStats';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,7 +69,11 @@ export default async function DashboardPage({
         )}
       </div>
 
-      <section className="rise rise-delay-1 mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6">
+        <MyStats userId={session.user.id} />
+      </div>
+
+      <section className="rise rise-delay-2 mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {counters.map((c) => (
           <Link
             key={c.key}
@@ -122,12 +128,22 @@ export default async function DashboardPage({
               <Link href={`/tasks/${t.id}`} className="card lift relative block h-full overflow-hidden p-5">
                 <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-60" />
                 <div className="mb-3 flex items-start justify-between gap-3">
-                  <StatusBadge status={t.status} />
-                  {t.reward && (
-                    <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
-                      {t.reward}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={t.status} />
+                    <PriorityBadge priority={t.priority} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {t.points > 0 && (
+                      <span className="inline-flex items-baseline gap-0.5 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                        {t.points}<span className="text-[10px] font-normal opacity-60">分</span>
+                      </span>
+                    )}
+                    {t.reward && (
+                      <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
+                        {t.reward}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight">{t.title}</h3>
                 <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">{t.description}</p>

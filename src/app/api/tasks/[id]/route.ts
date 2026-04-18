@@ -30,6 +30,8 @@ const patchSchema = z.object({
   description: z.string().min(1).optional(),
   reward: z.string().max(100).nullable().optional(),
   deadline: z.string().datetime().nullable().optional(),
+  points: z.number().int().min(0).max(999).optional(),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['OPEN', 'CLAIMED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'ARCHIVED']).optional(),
 });
 

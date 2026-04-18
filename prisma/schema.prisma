@@ -75,6 +75,8 @@ model Task {
   title       String
   description String
   reward      String?    // free-form reward text ("￥100" / "奶茶一杯" 等)
+  points      Int        @default(10)   // numeric score used by leaderboard
+  priority    String     @default("NORMAL") // "LOW" | "NORMAL" | "HIGH" | "URGENT"
   status      String     @default("OPEN")
   deadline    DateTime?
   createdAt   DateTime   @default(now())

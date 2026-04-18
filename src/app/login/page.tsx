@@ -43,17 +43,17 @@ function LoginInner() {
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
           <div className="mb-10 flex flex-col items-center gap-5 rise">
-            <div className="relative flex h-[176px] w-[176px] items-center justify-center">
-              {/* Outer glow ring */}
-              <div className="absolute inset-[-48px] rounded-full bg-[radial-gradient(closest-side,rgba(232,201,143,0.32),rgba(212,72,49,0.12)_50%,transparent_72%)] blur-lg" aria-hidden />
+            <div className="relative flex h-[240px] w-[240px] items-center justify-center">
+              {/* Outer glow */}
+              <div className="absolute inset-[-72px] rounded-full bg-[radial-gradient(closest-side,rgba(232,201,143,0.35),rgba(212,72,49,0.14)_50%,transparent_72%)] blur-xl" aria-hidden />
               {/* Inner halo */}
-              <div className="absolute inset-[-16px] rounded-full bg-[radial-gradient(closest-side,rgba(245,230,200,0.3),transparent_70%)] blur-md" aria-hidden />
+              <div className="absolute inset-[-24px] rounded-full bg-[radial-gradient(closest-side,rgba(245,230,200,0.3),transparent_70%)] blur-md" aria-hidden />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.svg"
                 alt="LTY 旭珑"
-                className="relative h-full w-full object-contain drop-shadow-[0_14px_40px_rgba(0,0,0,0.6)] drop-shadow-[0_0_24px_rgba(232,201,143,0.4)]"
-                style={{ filter: 'brightness(1.12) saturate(1.08)' }}
+                className="relative h-full w-full object-contain drop-shadow-[0_18px_48px_rgba(0,0,0,0.6)] drop-shadow-[0_0_32px_rgba(232,201,143,0.45)]"
+                style={{ filter: 'brightness(1.15) saturate(1.1)' }}
               />
             </div>
             <div className="flex items-center gap-3 whitespace-nowrap">
