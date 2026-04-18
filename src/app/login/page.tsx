@@ -42,15 +42,22 @@ function LoginInner() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
-          <div className="mb-7 flex items-center justify-center gap-4 rise">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] ring-1 ring-amber-200/40">
+          <div className="mb-8 flex flex-col items-center gap-4 rise">
+            <div className="relative flex h-[108px] w-[108px] items-center justify-center">
+              {/* Warm golden halo behind the logo */}
+              <div className="absolute inset-[-24px] rounded-full bg-[radial-gradient(closest-side,rgba(232,201,143,0.4),rgba(212,72,49,0.08)_55%,transparent_75%)] blur-md" aria-hidden />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="LTY 旭珑" className="h-[78%] w-[78%] object-contain" />
+              <img
+                src="/logo.svg"
+                alt="LTY 旭珑"
+                className="relative h-full w-full object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.55)] drop-shadow-[0_0_18px_rgba(232,201,143,0.35)]"
+                style={{ filter: 'brightness(1.08) saturate(1.05)' }}
+              />
             </div>
             <div className="flex items-center gap-3 whitespace-nowrap">
-              <span className="text-lg font-semibold tracking-tight text-amber-50/95">LTY 旭珑</span>
-              <span className="h-4 w-px bg-amber-100/30" />
-              <span className="text-[11px] tracking-[0.3em] text-amber-100/60">TASK POOL</span>
+              <span className="text-xl font-semibold tracking-tight text-amber-50">LTY 旭珑</span>
+              <span className="h-5 w-px bg-amber-100/30" />
+              <span className="text-[11px] tracking-[0.32em] text-amber-100/60">TASK POOL</span>
             </div>
           </div>
 
