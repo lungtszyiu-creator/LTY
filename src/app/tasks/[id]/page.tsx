@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
+import Countdown from '@/components/Countdown';
 import TaskActions from './TaskActions';
 import ReviewFormClient from './ReviewFormClient';
 
@@ -49,7 +50,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       </Link>
 
       <article className="card rise relative overflow-hidden p-7">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-400 via-sky-400 to-emerald-400 opacity-70" />
+        <div className="accent-bar absolute inset-x-0 top-0 h-1 opacity-80" />
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -61,17 +62,47 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
           </div>
           {task.reward && (
-            <div className="rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 px-4 py-2.5 text-right ring-1 ring-amber-200">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-amber-700">奖励</div>
-              <div className="text-sm font-semibold text-amber-900">{task.reward}</div>
+            <div className="reward-chip rounded-xl px-4 py-2.5 text-right">
+              <div className="text-[10px] uppercase tracking-wider opacity-80">奖励</div>
+              <div className="text-sm">{task.reward}</div>
             </div>
           )}
         </div>
 
         <div className="mt-6 grid gap-4 border-y border-slate-100 py-4 text-sm sm:grid-cols-3">
           <Meta label="发布人" user={task.creator} />
-          <Meta label="领取人" user={task.claimant} empty="—" />
-          <Meta label="截止时间" raw={task.deadline ? fmt(task.deadline) : '—'} />
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">领取人</div>
+            {task.claimant ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[10px] font-semibold text-white">
+                    {initial(task.claimant.name ?? task.claimant.email)}
+                  </div>
+                  <span className="truncate">{task.claimant.name ?? task.claimant.email}</span>
+                </div>
+                {task.claimedAt && (task.status === 'CLAIMED' || task.status === 'SUBMITTED') && (
+                  <Countdown since={task.claimedAt.toISOString()} />
+                )}
+              </div>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
+          </div>
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">
+              {task.deadline && (task.status === 'OPEN' || task.status === 'CLAIMED' || task.status === 'REJECTED') ? '倒计时' : '截止时间'}
+            </div>
+            {task.deadline ? (
+              (task.status === 'OPEN' || task.status === 'CLAIMED' || task.status === 'REJECTED') ? (
+                <Countdown deadline={task.deadline.toISOString()} size="md" />
+              ) : (
+                <span className="font-medium">{fmt(task.deadline)}</span>
+              )
+            ) : (
+              <span className="text-slate-400">无截止</span>
+            )}
+          </div>
         </div>
 
         <div className="prose prose-slate mt-6 max-w-none whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700">

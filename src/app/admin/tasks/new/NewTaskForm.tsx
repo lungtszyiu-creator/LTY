@@ -120,14 +120,15 @@ export default function NewTaskForm() {
 
       <aside className="rise rise-delay-1 lg:sticky lg:top-20 lg:self-start">
         <div className="mb-2 px-1 text-xs uppercase tracking-wider text-slate-400">看板预览</div>
-        <div className="card p-5">
+        <div className="card relative overflow-hidden p-5">
+          <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-70" />
           <div className="mb-3 flex items-start justify-between gap-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
               <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
               待领取
             </span>
             {reward && (
-              <div className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+              <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
                 {reward}
               </div>
             )}

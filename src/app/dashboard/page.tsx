@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
+import Countdown from '@/components/Countdown';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,17 +15,6 @@ const FILTERS = [
   { key: 'APPROVED',  label: '已通过',   q: '?status=APPROVED' },
   { key: 'mine',      label: '我领取的', q: '?mine=claimed' },
 ];
-
-function formatDeadline(d: Date | null) {
-  if (!d) return null;
-  const diff = d.getTime() - Date.now();
-  const days = Math.floor(diff / 86400000);
-  if (diff < 0) return { text: '已过期', urgent: true };
-  if (days === 0) return { text: '今日截止', urgent: true };
-  if (days <= 2) return { text: `${days} 天后截止`, urgent: true };
-  if (days <= 7) return { text: `${days} 天后截止`, urgent: false };
-  return { text: d.toLocaleDateString('zh-CN'), urgent: false };
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -48,6 +38,8 @@ export default async function DashboardPage({
     },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
   });
+
+  const serialize = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
   const stats = await prisma.task.groupBy({ by: ['status'], _count: true });
   const statMap = Object.fromEntries(stats.map((s) => [s.status, s._count]));
@@ -124,50 +116,50 @@ export default async function DashboardPage({
         </div>
       ) : (
         <ul className="rise rise-delay-3 grid gap-3 sm:grid-cols-2">
-          {tasks.map((t) => {
-            const dl = formatDeadline(t.deadline);
-            return (
-              <li key={t.id}>
-                <Link href={`/tasks/${t.id}`} className="card lift block h-full p-5">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <StatusBadge status={t.status} />
-                    {t.reward && (
-                      <div className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
-                        {t.reward}
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight">{t.title}</h3>
-                  <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">{t.description}</p>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[9px] font-semibold text-slate-500">
-                        {(t.creator.name ?? t.creator.email ?? '?').slice(0, 1).toUpperCase()}
-                      </span>
-                      {t.creator.name ?? t.creator.email}
+          {tasks.map((t) => (
+            <li key={t.id}>
+              <Link href={`/tasks/${t.id}`} className="card lift relative block h-full overflow-hidden p-5">
+                <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-60" />
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <StatusBadge status={t.status} />
+                  {t.reward && (
+                    <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
+                      {t.reward}
+                    </div>
+                  )}
+                </div>
+                <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight">{t.title}</h3>
+                <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">{t.description}</p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 to-rose-200 text-[9px] font-semibold text-amber-900">
+                      {(t.creator.name ?? t.creator.email ?? '?').slice(0, 1).toUpperCase()}
                     </span>
-                    {t.claimant && (
-                      <>
-                        <span className="text-slate-300">→</span>
-                        <span className="inline-flex items-center gap-1">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-violet-300 to-fuchsia-300 text-[9px] font-semibold text-white">
-                            {(t.claimant.name ?? t.claimant.email ?? '?').slice(0, 1).toUpperCase()}
-                          </span>
-                          {t.claimant.name ?? t.claimant.email}
+                    {t.creator.name ?? t.creator.email}
+                  </span>
+                  {t.claimant && (
+                    <>
+                      <span className="text-slate-300">→</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
+                          {(t.claimant.name ?? t.claimant.email ?? '?').slice(0, 1).toUpperCase()}
                         </span>
-                      </>
-                    )}
-                    {dl && (
-                      <span className={`ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${dl.urgent ? 'bg-rose-50 text-rose-600' : 'text-slate-500'}`}>
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        {dl.text}
+                        {t.claimant.name ?? t.claimant.email}
                       </span>
+                    </>
+                  )}
+                  <span className="ml-auto flex items-center gap-2">
+                    {t.status === 'CLAIMED' && t.claimedAt && (
+                      <Countdown since={serialize(t.claimedAt)} />
                     )}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
+                    {t.deadline && (t.status === 'OPEN' || t.status === 'CLAIMED' || t.status === 'REJECTED') && (
+                      <Countdown deadline={serialize(t.deadline)} compact size="sm" />
+                    )}
+                  </span>
+                </div>
+              </Link>
+            </li>
+          ))}
         </ul>
       )}
     </div>
