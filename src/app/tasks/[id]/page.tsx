@@ -6,6 +6,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Countdown from '@/components/Countdown';
 import TaskActions from './TaskActions';
 import ReviewFormClient from './ReviewFormClient';
+import AdminTaskMenu from './AdminTaskMenu';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,12 +62,15 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
           </div>
-          {task.reward && (
-            <div className="reward-chip rounded-xl px-4 py-2.5 text-right">
-              <div className="text-[10px] uppercase tracking-wider opacity-80">奖励</div>
-              <div className="text-sm">{task.reward}</div>
-            </div>
-          )}
+          <div className="flex items-start gap-2">
+            {task.reward && (
+              <div className="reward-chip rounded-xl px-4 py-2.5 text-right">
+                <div className="text-[10px] uppercase tracking-wider opacity-80">奖励</div>
+                <div className="text-sm">{task.reward}</div>
+              </div>
+            )}
+            {isAdmin && <AdminTaskMenu taskId={task.id} taskTitle={task.title} />}
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 border-y border-slate-100 py-4 text-sm sm:grid-cols-3">
