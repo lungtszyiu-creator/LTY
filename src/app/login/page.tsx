@@ -42,16 +42,17 @@ function LoginInner() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
-          <div className="mb-6 flex items-center justify-center gap-3 rise">
+          <div className="mb-7 flex items-center justify-center gap-3 rise">
             {/* Logo placeholder — replace with /public/logo.svg once source is provided */}
             <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl shadow-lg ring-1 ring-amber-200/30">
               <div className="absolute inset-0 bg-gradient-to-br from-amber-200 via-rose-400 to-red-900" />
               <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent" />
               <span className="relative text-base font-bold text-white/95 drop-shadow">L</span>
             </div>
-            <div className="flex flex-col leading-tight text-left">
-              <span className="text-sm font-semibold tracking-tight text-amber-50/90">LTY 旭珑</span>
-              <span className="text-[10px] tracking-[0.28em] text-amber-100/60">TASK POOL</span>
+            <div className="flex items-center gap-3 whitespace-nowrap">
+              <span className="text-base font-semibold tracking-tight text-amber-50/95">LTY 旭珑</span>
+              <span className="h-4 w-px bg-amber-100/30" />
+              <span className="text-[11px] tracking-[0.3em] text-amber-100/60">TASK POOL</span>
             </div>
           </div>
 
