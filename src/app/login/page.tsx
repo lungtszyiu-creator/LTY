@@ -42,15 +42,13 @@ function LoginInner() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
-          <div className="mb-7 flex items-center justify-center gap-3 rise">
-            {/* Logo placeholder — replace with /public/logo.svg once source is provided */}
-            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl shadow-lg ring-1 ring-amber-200/30">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-200 via-rose-400 to-red-900" />
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent" />
-              <span className="relative text-base font-bold text-white/95 drop-shadow">L</span>
+          <div className="mb-7 flex items-center justify-center gap-4 rise">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-[0_10px_30px_-8px_rgba(0,0,0,0.5)] ring-1 ring-amber-200/40">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="LTY 旭珑" className="h-[78%] w-[78%] object-contain" />
             </div>
             <div className="flex items-center gap-3 whitespace-nowrap">
-              <span className="text-base font-semibold tracking-tight text-amber-50/95">LTY 旭珑</span>
+              <span className="text-lg font-semibold tracking-tight text-amber-50/95">LTY 旭珑</span>
               <span className="h-4 w-px bg-amber-100/30" />
               <span className="text-[11px] tracking-[0.3em] text-amber-100/60">TASK POOL</span>
             </div>

@@ -141,13 +141,12 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
   );
 }
 
-function Logo({ size = 8 }: { size?: 8 | 9 | 10 }) {
-  const sizeCls = { 8: 'h-8 w-8 text-xs', 9: 'h-9 w-9 text-sm', 10: 'h-10 w-10 text-base' }[size];
+function Logo({ size = 9 }: { size?: 8 | 9 | 10 }) {
+  const sizeCls = { 8: 'h-8 w-8', 9: 'h-9 w-9', 10: 'h-10 w-10' }[size];
   return (
-    <div className={`relative flex ${sizeCls} items-center justify-center overflow-hidden rounded-xl shadow-sm ring-1 ring-amber-200/40`}>
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-200 via-rose-400 to-red-900" />
-      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/25 to-transparent" />
-      <span className="relative font-bold text-white/95 drop-shadow-sm">L</span>
+    <div className={`flex ${sizeCls} shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-amber-200/70`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.svg" alt="LTY 旭珑" className="h-[78%] w-[78%] object-contain" />
     </div>
   );
 }
