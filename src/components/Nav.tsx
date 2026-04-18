@@ -21,9 +21,17 @@ export default function Nav() {
     <header className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         <div className="flex items-center gap-8">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-gradient-to-br from-slate-900 to-slate-700" />
-            <span className="text-[15px] font-semibold tracking-tight">任务池</span>
+          <Link href="/dashboard" className="flex items-center gap-2.5">
+            {/* Logo placeholder — replace `/public/logo.svg` once source is provided */}
+            <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg shadow-sm ring-1 ring-amber-200/40">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-200 via-rose-400 to-red-900" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent" />
+              <span className="relative text-xs font-bold text-white/95 drop-shadow-sm">L</span>
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[13px] font-semibold tracking-tight">LTY 旭珑</span>
+              <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">任务池</span>
+            </div>
           </Link>
           <nav className="flex items-center gap-1">
             {links.map((l) => {

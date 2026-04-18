@@ -26,7 +26,7 @@ async function send({ to, subject, html }: SendArgs) {
   if (unique.length === 0) return;
   try {
     await t.sendMail({
-      from: `"任务池" <${GMAIL_USER}>`,
+      from: `"LTY 旭珑 · 任务池" <${GMAIL_USER}>`,
       to: GMAIL_USER,        // send to self to satisfy SMTP "to" requirement
       bcc: unique,           // real recipients hidden from each other
       subject,
@@ -44,7 +44,7 @@ function esc(s: string) {
 }
 
 function wrap(inner: string) {
-  return `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;background:#fff;">${inner}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"><p style="font-size:12px;color:#64748b;">任务池系统邮件 · <a href="${APP_URL}" style="color:#475569;">${APP_URL}</a></p></div>`;
+  return `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;background:#fff;">${inner}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"><p style="font-size:12px;color:#64748b;">LTY 旭珑 · 任务池系统邮件 · <a href="${APP_URL}" style="color:#475569;">${APP_URL}</a></p></div>`;
 }
 
 export async function notifyTaskPublished(task: {
@@ -67,7 +67,7 @@ export async function notifyTaskPublished(task: {
     ${task.deadline ? `<p style="margin:8px 0;"><strong>截止：</strong>${esc(new Date(task.deadline).toLocaleString('zh-CN'))}</p>` : ''}
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看并领取 →</a></p>
   `);
-  await send({ to: emails, subject: `[任务池] 新任务：${task.title}`, html });
+  await send({ to: emails, subject: `[LTY · 任务池] 新任务：${task.title}`, html });
 }
 
 export async function notifySubmission(args: {
@@ -88,5 +88,5 @@ export async function notifySubmission(args: {
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;white-space:pre-wrap;font-size:14px;">${esc(notePreview)}</div>
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">前往审核 →</a></p>
   `);
-  await send({ to: emails, subject: `[任务池] 待审核：${args.taskTitle}`, html });
+  await send({ to: emails, subject: `[LTY · 任务池] 待审核：${args.taskTitle}`, html });
 }

@@ -4,8 +4,11 @@ import Providers from '@/components/Providers';
 import Nav from '@/components/Nav';
 
 export const metadata: Metadata = {
-  title: '任务池',
-  description: '发布 · 领取 · 完成 · 验收',
+  title: {
+    default: 'LTY 旭珑 · 任务池',
+    template: '%s · LTY 旭珑 · 任务池',
+  },
+  description: 'LTY 旭珑内部任务看板 · 发布 · 领取 · 完成 · 验收',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
