@@ -41,7 +41,8 @@ export default function ReviewFormClient({ submissionId }: { submissionId: strin
         <button
           onClick={() => review('APPROVED')}
           disabled={!!busy}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-white shadow-[0_8px_20px_-6px_rgba(5,150,105,0.45),inset_0_1px_0_rgba(255,255,255,0.25)] transition hover:shadow-[0_12px_28px_-6px_rgba(5,150,105,0.55),inset_0_1px_0_rgba(255,255,255,0.25)] disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, #34d399 0%, #059669 55%, #047857 100%)' }}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
           {busy === 'APPROVED' ? '通过中…' : '通过'}
@@ -49,7 +50,8 @@ export default function ReviewFormClient({ submissionId }: { submissionId: strin
         <button
           onClick={() => review('REJECTED')}
           disabled={!!busy}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3.5 py-2 text-sm font-medium text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:opacity-50"
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-white shadow-[0_8px_20px_-6px_rgba(225,29,72,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] transition hover:shadow-[0_12px_28px_-6px_rgba(225,29,72,0.5),inset_0_1px_0_rgba(255,255,255,0.2)] disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, #fb7185 0%, #e11d48 55%, #9f1239 100%)' }}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           {busy === 'REJECTED' ? '驳回中…' : '驳回'}

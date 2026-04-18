@@ -32,9 +32,12 @@ export default function Nav() {
                 <Link
                   key={l.href}
                   href={l.href}
-                  className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                    active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-900/5 hover:text-slate-900'
+                  className={`relative rounded-lg px-3 py-1.5 text-sm transition ${
+                    active
+                      ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
+                      : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
                   }`}
+                  style={active ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
                 >
                   {l.label}
                 </Link>

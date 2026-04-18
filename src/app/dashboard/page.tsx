@@ -92,9 +92,10 @@ export default async function DashboardPage({
               href={`/dashboard${f.q}`}
               className={`rounded-full px-3.5 py-1.5 text-sm transition ${
                 active
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                  ? 'text-amber-50 shadow-[0_8px_18px_-6px_rgba(139,30,42,0.5),inset_0_1px_0_rgba(245,230,200,0.3)]'
+                  : 'border border-slate-200 bg-white/70 text-slate-600 backdrop-blur hover:border-amber-200 hover:text-slate-900'
               }`}
+              style={active ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
             >
               {f.label}
             </Link>
