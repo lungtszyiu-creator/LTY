@@ -42,20 +42,22 @@ function LoginInner() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
-          <div className="mb-8 flex flex-col items-center gap-4 rise">
-            <div className="relative flex h-[108px] w-[108px] items-center justify-center">
-              {/* Warm golden halo behind the logo */}
-              <div className="absolute inset-[-24px] rounded-full bg-[radial-gradient(closest-side,rgba(232,201,143,0.4),rgba(212,72,49,0.08)_55%,transparent_75%)] blur-md" aria-hidden />
+          <div className="mb-10 flex flex-col items-center gap-5 rise">
+            <div className="relative flex h-[176px] w-[176px] items-center justify-center">
+              {/* Outer glow ring */}
+              <div className="absolute inset-[-48px] rounded-full bg-[radial-gradient(closest-side,rgba(232,201,143,0.32),rgba(212,72,49,0.12)_50%,transparent_72%)] blur-lg" aria-hidden />
+              {/* Inner halo */}
+              <div className="absolute inset-[-16px] rounded-full bg-[radial-gradient(closest-side,rgba(245,230,200,0.3),transparent_70%)] blur-md" aria-hidden />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.svg"
                 alt="LTY 旭珑"
-                className="relative h-full w-full object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.55)] drop-shadow-[0_0_18px_rgba(232,201,143,0.35)]"
-                style={{ filter: 'brightness(1.08) saturate(1.05)' }}
+                className="relative h-full w-full object-contain drop-shadow-[0_14px_40px_rgba(0,0,0,0.6)] drop-shadow-[0_0_24px_rgba(232,201,143,0.4)]"
+                style={{ filter: 'brightness(1.12) saturate(1.08)' }}
               />
             </div>
             <div className="flex items-center gap-3 whitespace-nowrap">
-              <span className="text-xl font-semibold tracking-tight text-amber-50">LTY 旭珑</span>
+              <span className="text-2xl font-semibold tracking-tight text-amber-50">LTY 旭珑</span>
               <span className="h-5 w-px bg-amber-100/30" />
               <span className="text-[11px] tracking-[0.32em] text-amber-100/60">TASK POOL</span>
             </div>

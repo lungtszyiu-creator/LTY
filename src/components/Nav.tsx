@@ -26,7 +26,7 @@ export default function Nav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-5 sm:px-6">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-6 px-5 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
           <Logo />
           <div className="flex items-baseline gap-2.5 whitespace-nowrap">
@@ -143,10 +143,10 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
 
 function Logo() {
   return (
-    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(closest-side,rgba(212,165,116,0.35),transparent_70%)] blur-[2px]" aria-hidden />
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+      <div className="absolute inset-[-4px] rounded-full bg-[radial-gradient(closest-side,rgba(212,165,116,0.38),transparent_72%)] blur-[3px]" aria-hidden />
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.svg" alt="LTY 旭珑" className="relative h-full w-full object-contain drop-shadow-[0_2px_6px_rgba(139,30,42,0.15)]" />
+      <img src="/logo.svg" alt="LTY 旭珑" className="relative h-full w-full object-contain drop-shadow-[0_3px_8px_rgba(139,30,42,0.2)]" />
     </div>
   );
 }
