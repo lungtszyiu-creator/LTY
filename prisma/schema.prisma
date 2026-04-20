@@ -55,6 +55,8 @@ model VerificationToken {
 //   FAQCategory:      "TASK_POOL" | "COMP" | "PROCESS" | "OTHER"
 //   NotificationKind: "TASK_PUBLISHED" | "SUBMISSION"
 //   NotificationStatus:"SENT" | "FAILED" | "NOT_CONFIGURED"
+//   RewardMethod:     "CASH" | "TRANSFER" | "VOUCHER" | "IN_KIND" | "POINTS_ONLY" | "OTHER"
+//   RewardStatus:     "PENDING" | "ISSUED" | "ACKNOWLEDGED" | "DISPUTED" | "CANCELLED"
 
 model User {
   id            String    @id @default(cuid())
@@ -67,13 +69,15 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  tasksCreated  Task[]        @relation("TaskCreator")
-  tasksClaimed  Task[]        @relation("TaskClaimant")
-  submissions   Submission[]
-  reviewed      Submission[]  @relation("SubmissionReviewer")
-  taskClaims    TaskClaim[]
+  accounts         Account[]
+  sessions         Session[]
+  tasksCreated     Task[]            @relation("TaskCreator")
+  tasksClaimed     Task[]            @relation("TaskClaimant")
+  submissions      Submission[]
+  reviewed         Submission[]      @relation("SubmissionReviewer")
+  taskClaims       TaskClaim[]
+  rewardsReceived  RewardIssuance[]  @relation("RewardRecipient")
+  rewardsIssued    RewardIssuance[]  @relation("RewardIssuer")
 }
 
 model Task {
@@ -104,6 +108,7 @@ model Task {
   submissions Submission[]
   attachments Attachment[] @relation("TaskAttachments")
   claims      TaskClaim[]
+  rewards     RewardIssuance[]
 }
 
 // Junction for multi-claim tasks — each row is one member who has committed to
@@ -192,4 +197,40 @@ model Attachment {
   task         Task?       @relation("TaskAttachments", fields: [taskId], references: [id], onDelete: Cascade)
   submissionId String?
   submission   Submission? @relation("SubmissionAttachments", fields: [submissionId], references: [id], onDelete: Cascade)
+  rewardId     String?
+  reward       RewardIssuance? @relation("RewardReceipts", fields: [rewardId], references: [id], onDelete: Cascade)
+}
+
+// One record per approved task. Captures what was promised, what was actually
+// paid out, by whom, when, and the recipient's acknowledgement. Double-entry
+// audit trail for the "任务 → 奖励发放" lifecycle.
+model RewardIssuance {
+  id             String   @id @default(cuid())
+  taskId         String
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipientId    String
+  recipient      User     @relation("RewardRecipient", fields: [recipientId], references: [id])
+
+  // Mirrors the task's reward/points at approval time. Editable after the fact
+  // (e.g. admin negotiates a bigger bonus for exceptional work) without
+  // mutating the original task record.
+  rewardText     String?  // "¥500" / "奶茶一杯" / "项目奖金 10%"
+  points         Int      @default(0)
+  method         String   @default("CASH")
+
+  status         String   @default("PENDING") // see RewardStatus enum comment
+  issuedAt       DateTime?
+  issuedById     String?
+  issuedBy       User?    @relation("RewardIssuer", fields: [issuedById], references: [id])
+  acknowledgedAt DateTime?
+  note           String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  receipts       Attachment[] @relation("RewardReceipts")
+
+  @@unique([taskId, recipientId])
+  @@index([recipientId, status])
+  @@index([status, createdAt])
 }

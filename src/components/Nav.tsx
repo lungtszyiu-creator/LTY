@@ -21,9 +21,11 @@ export default function Nav() {
   const links = [
     { href: '/dashboard', label: '看板' },
     { href: '/leaderboard', label: '战功榜' },
+    { href: '/rewards', label: '我的奖励' },
     { href: '/positions', label: '岗位' },
     { href: '/faq', label: 'Q&A' },
     ...(isAdmin ? [{ href: '/admin/tasks/new', label: '发布任务' }] : []),
+    ...(isAdmin ? [{ href: '/admin/rewards', label: '奖励发放' }] : []),
     ...(isAdmin ? [{ href: '/admin/users', label: '用户管理' }] : []),
     ...(isAdmin ? [{ href: '/admin/notifications', label: '通知日志' }] : []),
   ];

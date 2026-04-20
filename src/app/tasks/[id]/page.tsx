@@ -43,6 +43,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         include: { user: { select: { id: true, name: true, email: true } } },
         orderBy: { claimedAt: 'asc' },
       },
+      rewards: {
+        include: {
+          recipient: { select: { id: true, name: true, email: true } },
+          issuedBy: { select: { id: true, name: true, email: true } },
+          receipts: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      },
     },
   });
   if (!task) notFound();
@@ -250,6 +258,85 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           </ul>
         )}
       </section>
+
+      {task.rewards.length > 0 && (
+        <section className="rise rise-delay-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold tracking-tight">🎁 奖励发放记录</h2>
+            {isAdmin && (
+              <Link href="/admin/rewards" className="text-xs text-slate-500 hover:text-slate-900">
+                前往奖励发放管理 →
+              </Link>
+            )}
+          </div>
+          <ul className="space-y-3">
+            {task.rewards.map((r) => {
+              const statusMeta: Record<string, { label: string; cls: string; dot: string }> = {
+                PENDING:      { label: '待发放',  cls: 'bg-amber-50 text-amber-800 ring-amber-200',     dot: 'bg-amber-500' },
+                ISSUED:       { label: '已发放',  cls: 'bg-sky-50 text-sky-700 ring-sky-200',           dot: 'bg-sky-500' },
+                ACKNOWLEDGED: { label: '已确认',  cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500' },
+                DISPUTED:     { label: '有异议',  cls: 'bg-rose-50 text-rose-700 ring-rose-200',         dot: 'bg-rose-500' },
+                CANCELLED:    { label: '已取消',  cls: 'bg-slate-100 text-slate-500 ring-slate-200',     dot: 'bg-slate-400' },
+              };
+              const meta = statusMeta[r.status] ?? statusMeta.PENDING;
+              const methodLabel: Record<string, string> = {
+                CASH: '现金', TRANSFER: '转账', VOUCHER: '代金券', IN_KIND: '实物', POINTS_ONLY: '仅积分', OTHER: '其他',
+              };
+              return (
+                <li key={r.id} className="card p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-xs font-semibold text-white">
+                        {initial(r.recipient.name ?? r.recipient.email)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{r.recipient.name ?? r.recipient.email}</span>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ${meta.cls}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                            {meta.label}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-700">
+                          {r.rewardText && <span>🎁 <strong>{r.rewardText}</strong></span>}
+                          {r.points > 0 && <span className="text-slate-500">{r.points} 积分</span>}
+                          <span className="text-xs text-slate-500">· {methodLabel[r.method] ?? r.method}</span>
+                        </div>
+                        {r.issuedAt && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            由 {r.issuedBy?.name ?? r.issuedBy?.email ?? '管理员'} 于 {fmt(r.issuedAt)} 标记已发放
+                          </div>
+                        )}
+                        {r.acknowledgedAt && (
+                          <div className="mt-0.5 text-xs text-emerald-700">
+                            收款人于 {fmt(r.acknowledgedAt)} 确认收到
+                          </div>
+                        )}
+                        {r.note && (
+                          <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-100">
+                            {r.note}
+                          </div>
+                        )}
+                        {r.receipts.length > 0 && (
+                          <ul className="mt-2 flex flex-wrap gap-2">
+                            {r.receipts.map((a) => (
+                              <li key={a.id}>
+                                <a href={`/api/attachments/${a.id}`} target="_blank" className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200">
+                                  📎 {a.filename}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

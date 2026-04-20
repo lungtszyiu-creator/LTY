@@ -12,6 +12,24 @@ import ReleaseButton from './ReleaseButton';
 
 export const dynamic = 'force-dynamic';
 
+function RewardChip({ status }: { status: string }) {
+  // Mini badge on dashboard cards for approved tasks so the reward lifecycle
+  // (waiting → paid → confirmed) is visible at a glance without opening detail.
+  const meta: Record<string, { label: string; cls: string }> = {
+    PENDING:      { label: '🎁 待发放',  cls: 'bg-amber-50 text-amber-800 ring-amber-200' },
+    ISSUED:       { label: '🎁 已发放',  cls: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    ACKNOWLEDGED: { label: '🎁 已领取',  cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    DISPUTED:     { label: '🎁 有异议',  cls: 'bg-rose-50 text-rose-700 ring-rose-200' },
+    CANCELLED:    { label: '🎁 已取消',  cls: 'bg-slate-100 text-slate-500 ring-slate-200' },
+  };
+  const m = meta[status] ?? meta.PENDING;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] ring-1 ${m.cls}`}>
+      {m.label}
+    </span>
+  );
+}
+
 const FILTERS = [
   { key: 'all',       label: '全部',     q: '' },
   { key: 'OPEN',      label: '待领取',   q: '?status=OPEN' },
@@ -52,6 +70,7 @@ export default async function DashboardPage({
         where: { releasedAt: null, userId: session.user.id },
         select: { id: true },
       },
+      rewards: { select: { status: true } },
     },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
   });
@@ -153,6 +172,9 @@ export default async function DashboardPage({
                         <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700 ring-1 ring-indigo-200">
                           👥 {t._count.claims}
                         </span>
+                      )}
+                      {t.status === 'APPROVED' && t.rewards[0] && (
+                        <RewardChip status={t.rewards[0].status} />
                       )}
                     </div>
                     <div className="flex items-center gap-2">

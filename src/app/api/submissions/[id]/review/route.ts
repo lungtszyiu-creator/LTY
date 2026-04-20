@@ -33,9 +33,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (submission.task.allowMultiClaim) {
       if (decision === 'APPROVED') {
-        // Winner chosen: auto-reject every other pending submission with a
-        // standard note; set claimantId to the winner so leaderboard/stats
-        // (which key off claimantId) credit the right user.
         await tx.submission.updateMany({
           where: { taskId: submission.taskId, status: 'PENDING', id: { not: submission.id } },
           data: {
@@ -54,9 +51,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           },
         });
       } else {
-        // Rejecting one submission out of many does NOT finalise the task;
-        // keep it open/submitted so others can still submit or new claimants
-        // can pick it up. If no pending submissions remain, flip to OPEN.
         const remaining = await tx.submission.count({
           where: { taskId: submission.taskId, status: 'PENDING' },
         });
@@ -72,6 +66,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         data: { status: nextTaskStatus },
       });
     }
+
+    // Auto-create a PENDING RewardIssuance when approving so the payout is
+    // always on an admin's to-do list — never "approved and forgotten". The
+    // (taskId, recipientId) unique key makes this idempotent if the admin
+    // re-approves or clicks twice. Non-fatal if already exists.
+    if (decision === 'APPROVED') {
+      const existing = await tx.rewardIssuance.findUnique({
+        where: { taskId_recipientId: { taskId: submission.taskId, recipientId: submission.userId } },
+      });
+      if (!existing) {
+        const inferredMethod = submission.task.reward ? 'CASH' : 'POINTS_ONLY';
+        await tx.rewardIssuance.create({
+          data: {
+            taskId: submission.taskId,
+            recipientId: submission.userId,
+            rewardText: submission.task.reward,
+            points: submission.task.points,
+            method: inferredMethod,
+            status: 'PENDING',
+          },
+        });
+      }
+    }
+
     return updatedSub;
   });
 

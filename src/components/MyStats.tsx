@@ -37,6 +37,24 @@ export default async function MyStats({ userId }: { userId: string }) {
           <Link href="/leaderboard" className="btn btn-ghost text-xs">查看榜单</Link>
         </div>
       </div>
+      {(s.rewardPending > 0 || s.rewardAwaitingAck > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-slate-500">🎁 奖励：</span>
+          {s.rewardPending > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200">
+              待发放 <strong className="tabular-nums">{s.rewardPending}</strong>
+            </span>
+          )}
+          {s.rewardAwaitingAck > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-sky-700 ring-1 ring-sky-200">
+              待你确认 <strong className="tabular-nums">{s.rewardAwaitingAck}</strong>
+            </span>
+          )}
+          <Link href="/rewards" className="text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline">
+            查看 →
+          </Link>
+        </div>
+      )}
       {nearLimit && (
         <p className="mt-3 text-xs text-rose-600">
           同时进行中已达上限（{MAX_CONCURRENT_CLAIMS} 条），完成并提交一条后才能领取新任务。

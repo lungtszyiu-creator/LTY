@@ -41,7 +41,7 @@ export async function fetchLeaderboard(): Promise<LeaderboardRow[]> {
 }
 
 export async function fetchMyStats(userId: string) {
-  const [inProgress, submittedByMe, approved, rejected, pointsAgg] = await Promise.all([
+  const [inProgress, submittedByMe, approved, rejected, pointsAgg, rewardPending, rewardIssued] = await Promise.all([
     prisma.task.count({ where: { claimantId: userId, status: 'CLAIMED' } }),
     prisma.task.count({ where: { claimantId: userId, status: 'SUBMITTED' } }),
     prisma.task.count({ where: { claimantId: userId, status: 'APPROVED' } }),
@@ -50,6 +50,8 @@ export async function fetchMyStats(userId: string) {
       where: { claimantId: userId, status: 'APPROVED' },
       _sum: { points: true },
     }),
+    prisma.rewardIssuance.count({ where: { recipientId: userId, status: 'PENDING' } }),
+    prisma.rewardIssuance.count({ where: { recipientId: userId, status: 'ISSUED' } }),
   ]);
   const points = pointsAgg._sum.points ?? 0;
   const leaderboard = await fetchLeaderboard();
@@ -60,6 +62,8 @@ export async function fetchMyStats(userId: string) {
     approved,
     rejected,
     points,
+    rewardPending,            // approved, waiting for admin to pay out
+    rewardAwaitingAck: rewardIssued, // admin paid, waiting for member to confirm
     rank: rank >= 0 ? rank + 1 : null,
     total: leaderboard.length,
   };
