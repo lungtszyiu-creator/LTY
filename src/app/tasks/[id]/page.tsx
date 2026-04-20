@@ -51,6 +51,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         },
         orderBy: { createdAt: 'asc' },
       },
+      penalties: {
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          issuedBy: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
     },
   });
   if (!task) notFound();
@@ -252,12 +259,61 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                     <div className="text-slate-700">{s.reviewNote}</div>
                   </div>
                 )}
-                {isAdmin && s.status === 'PENDING' && <ReviewFormClient submissionId={s.id} />}
+                {isAdmin && s.status === 'PENDING' && (
+                  <ReviewFormClient
+                    submissionId={s.id}
+                    submitterId={s.user.id}
+                    meId={me.id}
+                    suggestedPenaltyPoints={Math.max(1, (task.points ?? 0) * 2)}
+                  />
+                )}
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {task.penalties.length > 0 && (
+        <section className="rise rise-delay-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold tracking-tight text-rose-800">⚠️ 失败 / 扣罚记录</h2>
+            {isAdmin && (
+              <Link href="/admin/penalties" className="text-xs text-slate-500 hover:text-slate-900">
+                前往扣罚管理 →
+              </Link>
+            )}
+          </div>
+          <ul className="space-y-3">
+            {task.penalties.map((p) => (
+              <li key={p.id} className={`card p-4 sm:p-5 ${p.status === 'REVOKED' ? 'opacity-70' : 'ring-1 ring-rose-200'}`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-400 to-red-600 text-xs font-semibold text-white">
+                    {initial(p.user.name ?? p.user.email)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{p.user.name ?? p.user.email}</span>
+                      {p.status === 'ACTIVE' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700 ring-1 ring-rose-200">
+                          扣 {p.points} 分
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                          已撤销
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 whitespace-pre-wrap text-sm text-slate-700">{p.reason}</div>
+                    <div className="mt-1.5 text-xs text-slate-500">
+                      {p.issuedBy?.name ?? p.issuedBy?.email ?? '—'} · {fmt(p.createdAt)}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {task.rewards.length > 0 && (
         <section className="rise rise-delay-2">

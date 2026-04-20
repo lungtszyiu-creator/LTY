@@ -45,6 +45,7 @@ export default async function AdminRewardsPage() {
       </section>
 
       <RewardsAdminClient
+        meId={session.user.id}
         initial={items.map((i) => ({
           ...i,
           createdAt: i.createdAt.toISOString(),

@@ -3,38 +3,57 @@
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+// Keep the nav tight and symmetrical: just 4 top-level links for everyone.
+// Admin-only destinations live under a "管理" dropdown so they don't push the
+// layout around and labels stay perfectly aligned on the row.
+const PUBLIC_LINKS = [
+  { href: '/dashboard',   label: '看板' },
+  { href: '/leaderboard', label: '战功榜' },
+  { href: '/rewards',     label: '我的奖励' },
+  { href: '/faq',         label: 'Q&A' },
+];
+
+const ADMIN_LINKS = [
+  { href: '/admin/tasks/new',     label: '发布任务' },
+  { href: '/admin/rewards',       label: '奖励发放' },
+  { href: '/admin/penalties',     label: '扣罚登记' },
+  { href: '/admin/users',         label: '用户管理' },
+  { href: '/admin/notifications', label: '通知日志' },
+];
 
 export default function Nav() {
   const { data } = useSession();
   const user = data?.user;
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const adminRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setAdminOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!adminRef.current?.contains(e.target as Node)) setAdminOpen(false);
+    }
+    if (adminOpen) {
+      document.addEventListener('mousedown', onDoc);
+      return () => document.removeEventListener('mousedown', onDoc);
+    }
+  }, [adminOpen]);
 
   if (!user) return null;
 
   const isSuper = user.role === 'SUPER_ADMIN';
   const isAdmin = isSuper || user.role === 'ADMIN';
   const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
-  const links = [
-    { href: '/dashboard', label: '看板' },
-    { href: '/leaderboard', label: '战功榜' },
-    { href: '/rewards', label: '我的奖励' },
-    { href: '/positions', label: '岗位' },
-    { href: '/faq', label: 'Q&A' },
-    ...(isAdmin ? [{ href: '/admin/tasks/new', label: '发布任务' }] : []),
-    ...(isAdmin ? [{ href: '/admin/rewards', label: '奖励发放' }] : []),
-    ...(isAdmin ? [{ href: '/admin/users', label: '用户管理' }] : []),
-    ...(isAdmin ? [{ href: '/admin/notifications', label: '通知日志' }] : []),
-  ];
 
-  const activeHref = links.find((l) => pathname === l.href || (l.href !== '/dashboard' && pathname?.startsWith(l.href)))?.href;
+  const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-6 px-5 sm:px-6">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
           <Logo />
           <div className="flex items-baseline gap-2.5 whitespace-nowrap">
@@ -44,25 +63,64 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Desktop links */}
-        <nav className="hidden items-center gap-1.5 md:flex">
-          {links.map((l) => (
-            <NavLink key={l.href} href={l.href} active={activeHref === l.href}>
+        {/* Desktop nav: fixed-sized pill row so items stay aligned regardless of label length */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {PUBLIC_LINKS.map((l) => (
+            <NavLink key={l.href} href={l.href} active={pathname === l.href || (l.href !== '/dashboard' && !!pathname?.startsWith(l.href))}>
               {l.label}
             </NavLink>
           ))}
+          {isAdmin && (
+            <div ref={adminRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setAdminOpen((v) => !v)}
+                aria-expanded={adminOpen}
+                className={`relative inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-sm transition ${
+                  adminActive
+                    ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
+                    : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
+                }`}
+                style={adminActive ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
+              >
+                管理
+                <svg className={`h-3 w-3 transition ${adminOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {adminOpen && (
+                <div className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur-xl rise">
+                  <ul className="py-1">
+                    {ADMIN_LINKS.map((l) => {
+                      const active = pathname === l.href || pathname?.startsWith(l.href);
+                      return (
+                        <li key={l.href}>
+                          <Link
+                            href={l.href}
+                            onClick={() => setAdminOpen(false)}
+                            className={`flex items-center justify-between px-4 py-2 text-sm transition ${
+                              active ? 'bg-amber-50 text-amber-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {l.label}
+                            {active && <span className="text-xs">·</span>}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* Desktop user area */}
-        <div className="hidden items-center gap-4 md:flex">
-          <div className="flex items-center gap-2.5">
-            <Avatar name={user.name || user.email || '?'} />
-            <div className="flex items-baseline gap-2 whitespace-nowrap text-sm">
-              <span className="font-medium text-slate-800">{user.name || user.email}</span>
-              <span className="rounded-full bg-amber-100/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-amber-800 ring-1 ring-amber-200/60">
-                {roleLabel}
-              </span>
-            </div>
+        <div className="hidden items-center gap-3 md:flex">
+          <Avatar name={user.name || user.email || '?'} />
+          <div className="flex items-baseline gap-2 whitespace-nowrap text-sm">
+            <span className="max-w-[120px] truncate font-medium text-slate-800">{user.name || user.email}</span>
+            <span className="rounded-full bg-amber-100/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-amber-800 ring-1 ring-amber-200/60">
+              {roleLabel}
+            </span>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: '/login' })}
@@ -90,33 +148,26 @@ export default function Nav() {
       {/* Mobile drawer */}
       {open && (
         <div className="border-t border-slate-900/5 bg-white/95 backdrop-blur-xl md:hidden">
-          <nav className="mx-auto max-w-6xl px-5 py-3">
+          <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
-              {links.map((l) => (
-                <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm transition ${
-                      activeHref === l.href
-                        ? 'text-amber-50 shadow-[0_6px_14px_-6px_rgba(139,30,42,0.45),inset_0_1px_0_rgba(245,230,200,0.25)]'
-                        : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50'
-                    }`}
-                    style={activeHref === l.href ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
-                  >
-                    <span>{l.label}</span>
-                    <svg className="h-4 w-4 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5l7 7-7 7" /></svg>
-                  </Link>
-                </li>
+              {PUBLIC_LINKS.map((l) => (
+                <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
               ))}
+              {isAdmin && (
+                <>
+                  <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">管理</li>
+                  {ADMIN_LINKS.map((l) => (
+                    <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
+                  ))}
+                </>
+              )}
             </ul>
             <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <Avatar name={user.name || user.email || '?'} />
                 <div className="flex min-w-0 flex-col leading-tight">
                   <span className="truncate text-sm font-medium text-slate-800">{user.name || user.email}</span>
-                  <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                    {roleLabel}
-                  </span>
+                  <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{roleLabel}</span>
                 </div>
               </div>
               <button
@@ -149,9 +200,28 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
   );
 }
 
+function MobileLink({ href, children, active }: { href: string; children: React.ReactNode; active: boolean }) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm transition ${
+          active
+            ? 'text-amber-50 shadow-[0_6px_14px_-6px_rgba(139,30,42,0.45),inset_0_1px_0_rgba(245,230,200,0.25)]'
+            : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50'
+        }`}
+        style={active ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
+      >
+        <span>{children}</span>
+        <svg className="h-4 w-4 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5l7 7-7 7" /></svg>
+      </Link>
+    </li>
+  );
+}
+
 function Logo() {
   return (
-    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center sm:h-14 sm:w-14">
       <div className="absolute inset-[-4px] rounded-full bg-[radial-gradient(closest-side,rgba(212,165,116,0.38),transparent_72%)] blur-[3px]" aria-hidden />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="LTY 旭珑" className="relative h-full w-full object-contain drop-shadow-[0_3px_8px_rgba(139,30,42,0.2)]" />

@@ -13,6 +13,7 @@ type Reward = {
   method: string;
   status: string;
   note: string | null;
+  rejectReason: string | null;
   issuedAt: string | null;
   acknowledgedAt: string | null;
   createdAt: string;
@@ -105,6 +106,12 @@ export default function MyRewardsClient({ initial }: { initial: Reward[] }) {
                 )}
                 {r.acknowledgedAt && (
                   <div className="mt-0.5 text-xs text-emerald-700">你已于 {fmt(r.acknowledgedAt)} 确认收到</div>
+                )}
+                {r.rejectReason && (r.status === 'CANCELLED' || r.status === 'DISPUTED') && (
+                  <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 ring-1 ring-rose-200">
+                    <span className="font-medium">驳回理由：</span>
+                    <span className="whitespace-pre-wrap">{r.rejectReason}</span>
+                  </div>
                 )}
                 {r.note && (
                   <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-100">

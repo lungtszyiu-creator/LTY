@@ -155,3 +155,105 @@ export async function resendTaskPublished(taskId: string) {
   if (!task) throw new Error('TASK_NOT_FOUND');
   return notifyTaskPublished(task);
 }
+
+// Notify the submitter when their submission is APPROVED or REJECTED. Closes
+// the loop so members don't have to refresh the task page to find out what
+// happened.
+export async function notifySubmissionReviewed(args: {
+  taskId: string;
+  taskTitle: string;
+  recipientEmail: string;
+  decision: 'APPROVED' | 'REJECTED';
+  reviewerName: string;
+  note: string | null;
+}) {
+  if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const link = `${APP_URL}/tasks/${args.taskId}`;
+  const isApproved = args.decision === 'APPROVED';
+  const subject = isApproved
+    ? `[LTY · 任务池] ✅ 已通过：${args.taskTitle}`
+    : `[LTY · 任务池] ❌ 已驳回：${args.taskTitle}`;
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">${isApproved ? '✅ 你的提交已通过' : '❌ 你的提交被驳回'}</h2>
+    <p style="color:#475569;margin:0 0 16px;">任务《${esc(args.taskTitle)}》的审核结果出来了。</p>
+    <div style="background:${isApproved ? '#ecfdf5' : '#fef2f2'};border:1px solid ${isApproved ? '#a7f3d0' : '#fecaca'};border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:${isApproved ? '#065f46' : '#991b1b'};font-weight:600;">
+        ${isApproved ? '通过' : '驳回'} · 审核人 ${esc(args.reviewerName)}
+      </p>
+      ${args.note ? `<p style="margin:8px 0 0;color:#334155;white-space:pre-wrap;">${esc(args.note)}</p>` : ''}
+    </div>
+    ${isApproved ? '<p style="margin:8px 0;color:#475569;">奖励会自动进入"待发放"列表，发放后会再次通知你。</p>' : ''}
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
+  await logNotification({ kind: 'SUBMISSION_REVIEWED', taskId: args.taskId, subject, recipients: 1 }, result);
+  return result;
+}
+
+export async function notifyRewardStatusChanged(args: {
+  taskId: string;
+  taskTitle: string;
+  recipientEmail: string;
+  status: 'ISSUED' | 'CANCELLED' | 'DISPUTED';
+  rewardText: string | null;
+  points: number;
+  actorName: string;
+  reason?: string | null;
+}) {
+  if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const link = `${APP_URL}/rewards`;
+  const title =
+    args.status === 'ISSUED'    ? '🎁 奖励已发放' :
+    args.status === 'CANCELLED' ? '🚫 奖励被驳回 / 取消' :
+                                   '⚠️ 奖励被标记异议';
+  const subject = `[LTY · 任务池] ${title}：${args.taskTitle}`;
+  const bg =
+    args.status === 'ISSUED'    ? { box: '#eef2ff', border: '#c7d2fe', fg: '#3730a3' } :
+    args.status === 'CANCELLED' ? { box: '#fef2f2', border: '#fecaca', fg: '#991b1b' } :
+                                   { box: '#fffbeb', border: '#fde68a', fg: '#92400e' };
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">${title}</h2>
+    <p style="color:#475569;margin:0 0 16px;">任务《${esc(args.taskTitle)}》的奖励状态更新。</p>
+    <div style="background:${bg.box};border:1px solid ${bg.border};border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:${bg.fg};font-weight:600;">操作人：${esc(args.actorName)}</p>
+      ${args.rewardText ? `<p style="margin:6px 0 0;color:#334155;">🎁 ${esc(args.rewardText)}</p>` : ''}
+      ${args.points > 0 ? `<p style="margin:6px 0 0;color:#334155;">${args.points} 积分</p>` : ''}
+      ${args.reason ? `<p style="margin:10px 0 0;color:#334155;white-space:pre-wrap;"><strong>说明：</strong>${esc(args.reason)}</p>` : ''}
+    </div>
+    ${args.status === 'ISSUED' ? '<p style="margin:8px 0;color:#475569;">请在"我的奖励"页面点"已收到"确认回执。</p>' : ''}
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">前往"我的奖励" →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
+  await logNotification({ kind: 'REWARD_STATUS', taskId: args.taskId, subject, recipients: 1 }, result);
+  return result;
+}
+
+export async function notifyPenaltyIssued(args: {
+  recipientEmail: string;
+  userName: string;
+  issuerName: string;
+  points: number;
+  reason: string;
+  taskId?: string | null;
+  taskTitle?: string | null;
+}) {
+  if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const subject = `[LTY · 任务池] ⚠️ 不良记录：扣 ${args.points} 积分`;
+  const link = args.taskId ? `${APP_URL}/tasks/${args.taskId}` : `${APP_URL}/dashboard`;
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">⚠️ 你收到一条不良记录</h2>
+    <p style="color:#475569;margin:0 0 16px;">${esc(args.userName)}，你好。以下事项已被记录到你的档案：</p>
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:#991b1b;font-weight:600;">扣罚 ${args.points} 积分 · 登记人 ${esc(args.issuerName)}</p>
+      ${args.taskTitle ? `<p style="margin:6px 0 0;color:#334155;">关联任务：《${esc(args.taskTitle)}》</p>` : ''}
+      <p style="margin:10px 0 0;color:#334155;white-space:pre-wrap;"><strong>原因：</strong>${esc(args.reason)}</p>
+    </div>
+    <p style="margin:8px 0;color:#475569;font-size:13px;">
+      该记录将影响你的年度考核与年终奖金，同事在战功榜可见。若有异议请直接联系记录人。
+    </p>
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
+  await logNotification({ kind: 'PENALTY_ISSUED', taskId: args.taskId ?? null, subject, recipients: 1 }, result);
+  return result;
+}

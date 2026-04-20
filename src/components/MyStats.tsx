@@ -55,6 +55,14 @@ export default async function MyStats({ userId }: { userId: string }) {
           </Link>
         </div>
       )}
+      {s.penalties > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-rose-700 ring-1 ring-rose-200">
+            ⚠️ 不良记录 <strong className="tabular-nums">{s.penalties}</strong> 条 · 扣 <strong className="tabular-nums">{s.penalty}</strong> 分
+          </span>
+          <span className="text-slate-500">（净分 {s.net}）</span>
+        </div>
+      )}
       {nearLimit && (
         <p className="mt-3 text-xs text-rose-600">
           同时进行中已达上限（{MAX_CONCURRENT_CLAIMS} 条），完成并提交一条后才能领取新任务。

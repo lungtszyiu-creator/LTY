@@ -14,6 +14,7 @@ type Reward = {
   method: string;
   status: string;
   note: string | null;
+  rejectReason: string | null;
   issuedAt: string | null;
   acknowledgedAt: string | null;
   createdAt: string;
@@ -52,7 +53,7 @@ function initial(s: string | null | undefined) {
   return (s || '?').slice(0, 1).toUpperCase();
 }
 
-export default function RewardsAdminClient({ initial }: { initial: Reward[] }) {
+export default function RewardsAdminClient({ initial, meId }: { initial: Reward[]; meId: string }) {
   const [items, setItems] = useState<Reward[]>(initial);
   const [filter, setFilter] = useState<string>('PENDING');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export default function RewardsAdminClient({ initial }: { initial: Reward[] }) {
             <RewardRow
               key={r.id}
               item={r}
+              meId={meId}
               expanded={expanded === r.id}
               onToggle={() => setExpanded(expanded === r.id ? null : r.id)}
               onPatch={patch}
@@ -118,17 +120,20 @@ export default function RewardsAdminClient({ initial }: { initial: Reward[] }) {
 
 function RewardRow({
   item,
+  meId,
   expanded,
   onToggle,
   onPatch,
   onReplaceReceipts,
 }: {
   item: Reward;
+  meId: string;
   expanded: boolean;
   onToggle: () => void;
   onPatch: (id: string, data: any) => Promise<any>;
   onReplaceReceipts: (list: Attachment[]) => void;
 }) {
+  const isSelf = item.recipient.id === meId;
   const router = useRouter();
   const meta = STATUS_META[item.status] ?? STATUS_META.PENDING;
 
@@ -140,6 +145,10 @@ function RewardRow({
   const [busy, setBusy] = useState(false);
 
   async function markIssued() {
+    if (isSelf) {
+      alert('不能给自己标记已发放。请让另一位管理员处理，避免利益冲突。');
+      return;
+    }
     setBusy(true);
     try {
       await onPatch(item.id, {
@@ -150,7 +159,6 @@ function RewardRow({
         note: note || null,
         receiptAttachmentIds: files.map((f) => f.id),
       });
-      // Refresh the list so newly attached receipts show up.
       router.refresh();
       setFiles([]);
     } finally {
@@ -181,10 +189,16 @@ function RewardRow({
     try { await onPatch(item.id, { status: 'PENDING' }); router.refresh(); } finally { setBusy(false); }
   }
 
-  async function cancel() {
-    if (!confirm('取消这条发放？通常只在识别错误（例如重复审核）时使用。')) return;
+  async function rejectWithReason() {
+    const reason = prompt('驳回理由（必填，会邮件通知收款人 + 留档）：');
+    if (!reason || !reason.trim()) return;
     setBusy(true);
-    try { await onPatch(item.id, { status: 'CANCELLED' }); router.refresh(); } finally { setBusy(false); }
+    try {
+      await onPatch(item.id, { status: 'CANCELLED', rejectReason: reason.trim() });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -224,6 +238,17 @@ function RewardRow({
 
       {expanded && (
         <div className="border-t border-slate-100 bg-slate-50/40 p-4 sm:p-5">
+          {isSelf && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              ⚠️ 这条奖励的收款人就是你。为避免利益冲突，你不能给自己标记"已发放"——请让另一位管理员处理。
+            </div>
+          )}
+          {item.rejectReason && item.status === 'CANCELLED' && (
+            <div className="mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-xs text-rose-700 ring-1 ring-rose-200">
+              <div className="font-medium">已驳回 · 理由：</div>
+              <div className="mt-0.5 whitespace-pre-wrap">{item.rejectReason}</div>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">奖励内容</label>
@@ -290,22 +315,29 @@ function RewardRow({
 
           <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200/70 pt-4">
             {item.status !== 'CANCELLED' && (
-              <button onClick={cancel} disabled={busy} className="btn btn-ghost text-xs text-rose-600">
-                取消此条
+              <button onClick={rejectWithReason} disabled={busy} className="btn btn-ghost text-xs text-rose-600 ring-1 ring-rose-200">
+                驳回（不予发放）
               </button>
             )}
             {item.status === 'PENDING' && (
-              <button onClick={markIssued} disabled={busy} className="btn btn-primary">
+              <button
+                onClick={markIssued}
+                disabled={busy || isSelf}
+                title={isSelf ? '不能给自己发放' : undefined}
+                className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 {busy ? '保存中…' : '✓ 标记已发放'}
               </button>
             )}
-            {(item.status === 'ISSUED' || item.status === 'ACKNOWLEDGED' || item.status === 'DISPUTED') && (
+            {(item.status === 'ISSUED' || item.status === 'ACKNOWLEDGED' || item.status === 'DISPUTED' || item.status === 'CANCELLED') && (
               <>
-                <button onClick={save} disabled={busy} className="btn btn-ghost">
-                  保存修改
-                </button>
+                {item.status !== 'CANCELLED' && (
+                  <button onClick={save} disabled={busy} className="btn btn-ghost">
+                    保存修改
+                  </button>
+                )}
                 <button onClick={revert} disabled={busy} className="btn btn-ghost text-amber-700">
-                  撤回到"待发放"
+                  恢复到"待发放"
                 </button>
               </>
             )}

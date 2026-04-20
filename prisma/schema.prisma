@@ -57,6 +57,7 @@ model VerificationToken {
 //   NotificationStatus:"SENT" | "FAILED" | "NOT_CONFIGURED"
 //   RewardMethod:     "CASH" | "TRANSFER" | "VOUCHER" | "IN_KIND" | "POINTS_ONLY" | "OTHER"
 //   RewardStatus:     "PENDING" | "ISSUED" | "ACKNOWLEDGED" | "DISPUTED" | "CANCELLED"
+//   PenaltyStatus:    "ACTIVE" | "REVOKED"
 
 model User {
   id            String    @id @default(cuid())
@@ -78,6 +79,9 @@ model User {
   taskClaims       TaskClaim[]
   rewardsReceived  RewardIssuance[]  @relation("RewardRecipient")
   rewardsIssued    RewardIssuance[]  @relation("RewardIssuer")
+  penaltiesReceived Penalty[]        @relation("PenaltyTarget")
+  penaltiesIssued  Penalty[]         @relation("PenaltyIssuer")
+  penaltiesRevoked Penalty[]         @relation("PenaltyRevoker")
 }
 
 model Task {
@@ -109,6 +113,7 @@ model Task {
   attachments Attachment[] @relation("TaskAttachments")
   claims      TaskClaim[]
   rewards     RewardIssuance[]
+  penalties   Penalty[]
 }
 
 // Junction for multi-claim tasks — each row is one member who has committed to
@@ -228,9 +233,39 @@ model RewardIssuance {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Required when status = CANCELLED / DISPUTED so a rejection is always
+  // auditable. Shown to the recipient in their /rewards page.
+  rejectReason   String?
+
   receipts       Attachment[] @relation("RewardReceipts")
 
   @@unique([taskId, recipientId])
   @@index([recipientId, status])
   @@index([status, createdAt])
+}
+
+// Negative counterpart to RewardIssuance. Applied when a member claimed a
+// task, wasted time, and failed to deliver — or for other discipline events.
+// Deducted from leaderboard net score; visible to all members so peers can
+// see who is racking up failed attempts (soft social accountability).
+model Penalty {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("PenaltyTarget", fields: [userId], references: [id])
+  issuedById    String
+  issuedBy      User     @relation("PenaltyIssuer", fields: [issuedById], references: [id])
+  taskId        String?
+  task          Task?    @relation(fields: [taskId], references: [id])
+  reason        String        // required — why the penalty was issued
+  points        Int           // positive number; how many points deducted
+  status        String   @default("ACTIVE") // "ACTIVE" | "REVOKED"
+  revokedAt     DateTime?
+  revokedById   String?
+  revokedBy     User?    @relation("PenaltyRevoker", fields: [revokedById], references: [id])
+  revokeReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([createdAt])
 }
