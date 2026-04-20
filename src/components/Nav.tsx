@@ -52,8 +52,15 @@ export default function Nav() {
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
+    <header
+      className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/75 backdrop-blur-xl"
+      // PWA mode (added to iOS home screen) with statusBarStyle=black-translucent
+      // lets content render under the status bar by default, so the nav ends up
+      // behind the time/battery and is untappable. env(safe-area-inset-top) is
+      // the iOS-supplied value for the notch/status-bar height.
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      <div className="mx-auto flex h-[60px] max-w-6xl items-center justify-between gap-4 px-4 sm:h-[72px] sm:gap-6 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
           <Logo />
           <div className="flex items-baseline gap-2.5 whitespace-nowrap">

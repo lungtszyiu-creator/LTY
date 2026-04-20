@@ -12,7 +12,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     title: 'LTY 旭珑',
     capable: true,
-    statusBarStyle: 'black-translucent',
+    // 'default' lets iOS reserve space for the status bar instead of rendering
+    // the page under it. 'black-translucent' caused the nav to sit under the
+    // time/battery and be untappable in PWA mode.
+    statusBarStyle: 'default',
   },
 };
 
