@@ -4,11 +4,13 @@ import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from './db';
 
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MEMBER';
+
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string;
-      role: 'ADMIN' | 'MEMBER';
+      role: Role;
       active: boolean;
     } & DefaultSession['user'];
   }
@@ -43,21 +45,35 @@ export const authOptions: AuthOptions = {
       const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
       if (!dbUser) return session;
       session.user.id = dbUser.id;
-      session.user.role = (dbUser.role as 'ADMIN' | 'MEMBER') ?? 'MEMBER';
+      const role = (dbUser.role as Role) ?? 'MEMBER';
+      session.user.role = role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MEMBER' ? role : 'MEMBER';
       session.user.active = dbUser.active;
       return session;
     },
   },
   events: {
+    // ADMIN_EMAILS in .env.local seeds SUPER_ADMIN on first sign-in. There should
+    // only be one super admin (the founder); everyone else is managed in-app.
     async createUser({ user }) {
       if (user.email && adminEmails.has(user.email.toLowerCase())) {
         await prisma.user.update({
           where: { id: user.id },
-          data: { role: 'ADMIN', active: true },
+          data: { role: 'SUPER_ADMIN', active: true },
         });
       }
     },
   },
 };
+
+export function roleRank(role: Role): number {
+  if (role === 'SUPER_ADMIN') return 2;
+  if (role === 'ADMIN') return 1;
+  return 0;
+}
+
+export function hasMinRole(role: Role | undefined | null, min: Role): boolean {
+  if (!role) return false;
+  return roleRank(role) >= roleRank(min);
+}
 
 export const getSession = () => getServerSession(authOptions);

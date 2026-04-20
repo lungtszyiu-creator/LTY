@@ -23,14 +23,19 @@ export async function GET() {
 const createSchema = z.object({
   email: z.string().email(),
   name: z.string().optional(),
-  role: z.enum(['ADMIN', 'MEMBER']).default('MEMBER'),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MEMBER']).default('MEMBER'),
 });
 
 // Pre-register a user by email so they can sign in with Google.
 // (They'll still need to complete Google OAuth; this just sets role/active in advance.)
 export async function POST(req: NextRequest) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const data = createSchema.parse(await req.json());
+
+  // Only SUPER_ADMIN can seed admins. Regular admins can only create MEMBER users.
+  if ((data.role === 'ADMIN' || data.role === 'SUPER_ADMIN') && admin.role !== 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'FORBIDDEN_CANNOT_PROMOTE' }, { status: 403 });
+  }
   const user = await prisma.user.upsert({
     where: { email: data.email },
     update: { role: data.role, active: true, name: data.name ?? undefined },

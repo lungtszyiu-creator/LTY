@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function PositionsPage() {
   const session = await getSession();
   if (!session?.user) redirect('/login');
-  const isAdmin = session.user.role === 'ADMIN';
+  const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN';
 
   const positions = await prisma.position.findMany({
     where: { active: true },

@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { hasMinRole, type Role } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import StatusBadge from '@/components/StatusBadge';
 import PriorityBadge from '@/components/PriorityBadge';
 import ContributionBadge from '@/components/ContributionBadge';
 import Countdown from '@/components/Countdown';
 import MyStats from '@/components/MyStats';
+import ReleaseButton from './ReleaseButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +29,17 @@ export default async function DashboardPage({
   const session = await getSession();
   if (!session?.user) redirect('/login');
 
+  const isAdmin = hasMinRole(session.user.role as Role, 'ADMIN');
+
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;
-  if (searchParams.mine === 'claimed') where.claimantId = session.user.id;
+  if (searchParams.mine === 'claimed') {
+    // "my claims" covers single-claim (claimantId) AND multi-claim (active TaskClaim).
+    where.OR = [
+      { claimantId: session.user.id },
+      { claims: { some: { userId: session.user.id, releasedAt: null } } },
+    ];
+  }
   if (searchParams.mine === 'created') where.creatorId = session.user.id;
 
   const tasks = await prisma.task.findMany({
@@ -37,7 +47,11 @@ export default async function DashboardPage({
     include: {
       creator: { select: { name: true, email: true } },
       claimant: { select: { name: true, email: true } },
-      _count: { select: { submissions: true } },
+      _count: { select: { submissions: true, claims: true } },
+      claims: {
+        where: { releasedAt: null, userId: session.user.id },
+        select: { id: true },
+      },
     },
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
   });
@@ -62,7 +76,7 @@ export default async function DashboardPage({
             {counters.reduce((a, c) => a + c.value, 0)} 个任务 · 实时同步
           </p>
         </div>
-        {session.user.role === 'ADMIN' && (
+        {isAdmin && (
           <Link href="/admin/tasks/new" className="btn btn-primary rise rise-delay-1">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" /></svg>
             发布任务
@@ -116,7 +130,7 @@ export default async function DashboardPage({
             <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
           </div>
           <p className="text-sm text-slate-500">当前筛选下没有任务</p>
-          {session.user.role === 'ADMIN' && (
+          {isAdmin && (
             <Link href="/admin/tasks/new" className="btn btn-primary text-sm">
               发布第一条任务
             </Link>
@@ -124,61 +138,74 @@ export default async function DashboardPage({
         </div>
       ) : (
         <ul className="rise rise-delay-3 grid gap-3 sm:grid-cols-2">
-          {tasks.map((t) => (
-            <li key={t.id}>
-              <Link href={`/tasks/${t.id}`} className="card lift relative block h-full overflow-hidden p-5">
-                <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-60" />
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={t.status} />
-                    <PriorityBadge priority={t.priority} />
-                    <ContributionBadge contribution={t.contribution} size="sm" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {t.points > 0 && (
-                      <span className="inline-flex items-baseline gap-0.5 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
-                        {t.points}<span className="text-[10px] font-normal opacity-60">分</span>
-                      </span>
-                    )}
-                    {t.reward && (
-                      <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
-                        {t.reward}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight">{t.title}</h3>
-                <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">{t.description}</p>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 to-rose-200 text-[9px] font-semibold text-amber-900">
-                      {(t.creator.name ?? t.creator.email ?? '?').slice(0, 1).toUpperCase()}
-                    </span>
-                    {t.creator.name ?? t.creator.email}
-                  </span>
-                  {t.claimant && (
-                    <>
-                      <span className="text-slate-300">→</span>
-                      <span className="inline-flex items-center gap-1">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
-                          {(t.claimant.name ?? t.claimant.email ?? '?').slice(0, 1).toUpperCase()}
+          {tasks.map((t) => {
+            const myClaim = t.claims.length > 0 || t.claimantId === session.user.id;
+            return (
+              <li key={t.id} className="relative">
+                <Link href={`/tasks/${t.id}`} className="card lift relative block h-full overflow-hidden p-5">
+                  <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-60" />
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={t.status} />
+                      <PriorityBadge priority={t.priority} />
+                      <ContributionBadge contribution={t.contribution} size="sm" />
+                      {t.allowMultiClaim && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700 ring-1 ring-indigo-200">
+                          👥 {t._count.claims}
                         </span>
-                        {t.claimant.name ?? t.claimant.email}
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {t.points > 0 && (
+                        <span className="inline-flex items-baseline gap-0.5 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                          {t.points}<span className="text-[10px] font-normal opacity-60">分</span>
+                        </span>
+                      )}
+                      {t.reward && (
+                        <div className="reward-chip rounded-lg px-2.5 py-1 text-xs">
+                          {t.reward}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight">{t.title}</h3>
+                  <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">{t.description}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 to-rose-200 text-[9px] font-semibold text-amber-900">
+                        {(t.creator.name ?? t.creator.email ?? '?').slice(0, 1).toUpperCase()}
                       </span>
-                    </>
-                  )}
-                  <span className="ml-auto flex items-center gap-2">
-                    {t.status === 'CLAIMED' && t.claimedAt && (
-                      <Countdown since={serialize(t.claimedAt)} />
+                      {t.creator.name ?? t.creator.email}
+                    </span>
+                    {t.claimant && !t.allowMultiClaim && (
+                      <>
+                        <span className="text-slate-300">→</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
+                            {(t.claimant.name ?? t.claimant.email ?? '?').slice(0, 1).toUpperCase()}
+                          </span>
+                          {t.claimant.name ?? t.claimant.email}
+                        </span>
+                      </>
                     )}
-                    {t.deadline && (t.status === 'OPEN' || t.status === 'CLAIMED' || t.status === 'REJECTED') && (
-                      <Countdown deadline={serialize(t.deadline)} compact size="sm" />
-                    )}
-                  </span>
-                </div>
-              </Link>
-            </li>
-          ))}
+                    <span className="ml-auto flex items-center gap-2">
+                      {t.status === 'CLAIMED' && t.claimedAt && (
+                        <Countdown since={serialize(t.claimedAt)} />
+                      )}
+                      {t.deadline && (t.status === 'OPEN' || t.status === 'CLAIMED' || t.status === 'SUBMITTED' || t.status === 'REJECTED') && (
+                        <Countdown deadline={serialize(t.deadline)} compact size="sm" />
+                      )}
+                    </span>
+                  </div>
+                </Link>
+                {myClaim && t.status !== 'APPROVED' && t.status !== 'ARCHIVED' && (
+                  <div className="absolute bottom-3 right-3 z-10">
+                    <ReleaseButton taskId={t.id} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

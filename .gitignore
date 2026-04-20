@@ -24,3 +24,4 @@ prisma/dev.db-journal
 .vscode
 .idea
 .claude
+tsconfig.tsbuildinfo

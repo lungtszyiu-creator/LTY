@@ -11,7 +11,7 @@ const CATEGORY_ORDER: FAQCategory[] = ['TASK_POOL', 'COMP', 'PROCESS', 'OTHER'];
 export default async function FAQPage() {
   const session = await getSession();
   if (!session?.user) redirect('/login');
-  const isAdmin = session.user.role === 'ADMIN';
+  const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN';
 
   const items = await prisma.fAQ.findMany({
     where: { active: true },

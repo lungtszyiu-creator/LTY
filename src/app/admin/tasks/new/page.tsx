@@ -6,7 +6,7 @@ import NewTaskForm from './NewTaskForm';
 export default async function NewTaskPage() {
   const session = await getSession();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN') redirect('/dashboard');
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') redirect('/dashboard');
 
   return (
     <div className="pt-8">

@@ -15,7 +15,9 @@ export default function Nav() {
 
   if (!user) return null;
 
-  const isAdmin = user.role === 'ADMIN';
+  const isSuper = user.role === 'SUPER_ADMIN';
+  const isAdmin = isSuper || user.role === 'ADMIN';
+  const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
   const links = [
     { href: '/dashboard', label: '看板' },
     { href: '/leaderboard', label: '战功榜' },
@@ -23,6 +25,7 @@ export default function Nav() {
     { href: '/faq', label: 'Q&A' },
     ...(isAdmin ? [{ href: '/admin/tasks/new', label: '发布任务' }] : []),
     ...(isAdmin ? [{ href: '/admin/users', label: '用户管理' }] : []),
+    ...(isAdmin ? [{ href: '/admin/notifications', label: '通知日志' }] : []),
   ];
 
   const activeHref = links.find((l) => pathname === l.href || (l.href !== '/dashboard' && pathname?.startsWith(l.href)))?.href;
@@ -55,7 +58,7 @@ export default function Nav() {
             <div className="flex items-baseline gap-2 whitespace-nowrap text-sm">
               <span className="font-medium text-slate-800">{user.name || user.email}</span>
               <span className="rounded-full bg-amber-100/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-amber-800 ring-1 ring-amber-200/60">
-                {isAdmin ? 'Admin' : 'Member'}
+                {roleLabel}
               </span>
             </div>
           </div>
@@ -110,7 +113,7 @@ export default function Nav() {
                 <div className="flex min-w-0 flex-col leading-tight">
                   <span className="truncate text-sm font-medium text-slate-800">{user.name || user.email}</span>
                   <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                    {isAdmin ? 'Admin' : 'Member'}
+                    {roleLabel}
                   </span>
                 </div>
               </div>

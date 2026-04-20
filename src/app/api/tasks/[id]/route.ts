@@ -34,6 +34,7 @@ const patchSchema = z.object({
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
   contribution: z.enum(['CROSS_TEAM', 'PROCESS', 'KNOWLEDGE', 'FIREFIGHT', 'EXTERNAL', 'GROWTH', 'OTHER']).optional(),
   status: z.enum(['OPEN', 'CLAIMED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'ARCHIVED']).optional(),
+  allowMultiClaim: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

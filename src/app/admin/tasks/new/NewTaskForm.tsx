@@ -21,6 +21,7 @@ export default function NewTaskForm() {
   const [priority, setPriority] = useState<Priority>('NORMAL');
   const [points, setPoints] = useState<number>(10);
   const [contribution, setContribution] = useState<Contribution | ''>('');
+  const [allowMultiClaim, setAllowMultiClaim] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export default function NewTaskForm() {
     try {
       const body: any = {
         title, description, priority, points, contribution,
+        allowMultiClaim,
         reward: reward || null,
         deadline: deadline ? new Date(deadline).toISOString() : null,
         attachmentIds: files.map((f) => f.id),
@@ -128,6 +130,40 @@ export default function NewTaskForm() {
           {contribution && (
             <p className="mt-1.5 text-xs text-slate-500">{CONTRIBUTION_META[contribution as Contribution].desc}</p>
           )}
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-800">领取方式</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setAllowMultiClaim(false)}
+              className={`rounded-xl px-3 py-2.5 text-left text-xs transition ${
+                !allowMultiClaim
+                  ? 'bg-slate-900 text-white ring-2 ring-slate-900'
+                  : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-sm font-medium">🔒 独占</div>
+              <div className={`mt-0.5 text-[11px] ${!allowMultiClaim ? 'text-slate-300' : 'text-slate-500'}`}>
+                先到先得 · 一人负责 · 别人不能再领
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllowMultiClaim(true)}
+              className={`rounded-xl px-3 py-2.5 text-left text-xs transition ${
+                allowMultiClaim
+                  ? 'bg-indigo-600 text-white ring-2 ring-indigo-600'
+                  : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-sm font-medium">👥 多人共享</div>
+              <div className={`mt-0.5 text-[11px] ${allowMultiClaim ? 'text-indigo-100' : 'text-slate-500'}`}>
+                多人可同时领取 · 按提交方案择优给分
+              </div>
+            </button>
+          </div>
         </div>
 
         <div>
@@ -224,6 +260,9 @@ export default function NewTaskForm() {
                 {CONTRIBUTION_META[contribution as Contribution].icon} {CONTRIBUTION_META[contribution as Contribution].label}
               </span>
             )}
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ${allowMultiClaim ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
+              {allowMultiClaim ? '👥 多人共享' : '🔒 独占'}
+            </span>
             <div className="ml-auto flex items-center gap-2">
               <span className="inline-flex items-baseline gap-0.5 rounded-md bg-slate-900/5 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
                 {points}<span className="text-[10px] font-normal opacity-60">分</span>

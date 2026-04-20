@@ -30,11 +30,48 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         reviewedAt: new Date(),
       },
     });
-    const nextTaskStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
-    await tx.task.update({
-      where: { id: submission.taskId },
-      data: { status: nextTaskStatus },
-    });
+
+    if (submission.task.allowMultiClaim) {
+      if (decision === 'APPROVED') {
+        // Winner chosen: auto-reject every other pending submission with a
+        // standard note; set claimantId to the winner so leaderboard/stats
+        // (which key off claimantId) credit the right user.
+        await tx.submission.updateMany({
+          where: { taskId: submission.taskId, status: 'PENDING', id: { not: submission.id } },
+          data: {
+            status: 'REJECTED',
+            reviewerId: admin.id,
+            reviewNote: note ? `未被选为优胜方案。审核备注：${note}` : '未被选为优胜方案',
+            reviewedAt: new Date(),
+          },
+        });
+        await tx.task.update({
+          where: { id: submission.taskId },
+          data: {
+            status: 'APPROVED',
+            claimantId: submission.userId,
+            claimedAt: submission.createdAt,
+          },
+        });
+      } else {
+        // Rejecting one submission out of many does NOT finalise the task;
+        // keep it open/submitted so others can still submit or new claimants
+        // can pick it up. If no pending submissions remain, flip to OPEN.
+        const remaining = await tx.submission.count({
+          where: { taskId: submission.taskId, status: 'PENDING' },
+        });
+        await tx.task.update({
+          where: { id: submission.taskId },
+          data: { status: remaining > 0 ? 'SUBMITTED' : 'OPEN' },
+        });
+      }
+    } else {
+      const nextTaskStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+      await tx.task.update({
+        where: { id: submission.taskId },
+        data: { status: nextTaskStatus },
+      });
+    }
     return updatedSub;
   });
 

@@ -38,12 +38,18 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         },
         orderBy: { createdAt: 'desc' },
       },
+      claims: {
+        where: { releasedAt: null },
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { claimedAt: 'asc' },
+      },
     },
   });
   if (!task) notFound();
 
   const me = session.user;
-  const isAdmin = me.role === 'ADMIN';
+  const isAdmin = me.role === 'ADMIN' || me.role === 'SUPER_ADMIN';
+  const myClaimActive = task.claims.some((c) => c.userId === me.id);
 
   return (
     <div className="space-y-6 pt-8">
@@ -61,6 +67,15 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               <StatusBadge status={task.status} />
               <PriorityBadge priority={task.priority} />
               <ContributionBadge contribution={task.contribution} />
+              {task.allowMultiClaim ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
+                  👥 多人共享 · 验收选优
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200">
+                  🔒 独占 · 先到先得
+                </span>
+              )}
               <span className="text-xs text-slate-400">·</span>
               <span className="text-xs text-slate-500">创建于 {fmt(task.createdAt)}</span>
             </div>
@@ -86,8 +101,30 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         <div className="mt-6 grid gap-4 border-y border-slate-100 py-4 text-sm sm:grid-cols-3">
           <Meta label="发布人" user={task.creator} />
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">领取人</div>
-            {task.claimant ? (
+            <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">
+              {task.allowMultiClaim ? `领取人（${task.claims.length}）` : '领取人'}
+            </div>
+            {task.allowMultiClaim ? (
+              task.claims.length === 0 ? (
+                <span className="text-slate-400">还没有人领取</span>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {task.claims.map((c) => (
+                    <span
+                      key={c.id}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs ring-1 ${c.userId === me.id ? 'bg-amber-50 text-amber-900 ring-amber-300' : 'bg-slate-100 text-slate-700 ring-slate-200'}`}
+                      title={c.user.email ?? ''}
+                    >
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
+                        {initial(c.user.name ?? c.user.email)}
+                      </span>
+                      {c.user.name ?? c.user.email}
+                      {c.userId === me.id && <span className="text-[10px] opacity-70">（你）</span>}
+                    </span>
+                  ))}
+                </div>
+              )
+            ) : task.claimant ? (
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[10px] font-semibold text-white">
@@ -146,7 +183,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       </article>
 
       <TaskActions
-        task={{ id: task.id, title: task.title, status: task.status, claimantId: task.claimantId }}
+        task={{
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          claimantId: task.claimantId,
+          allowMultiClaim: task.allowMultiClaim,
+          myClaimActive,
+        }}
         me={{ id: me.id, role: me.role }}
       />
 

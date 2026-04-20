@@ -47,12 +47,14 @@ model VerificationToken {
 
 // ---- Application tables ----
 // Status values (stored as String for portability):
-//   Role:             "ADMIN" | "MEMBER"
+//   Role:             "SUPER_ADMIN" | "ADMIN" | "MEMBER"
 //   TaskStatus:       "OPEN" | "CLAIMED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "ARCHIVED"
 //   SubmissionStatus: "PENDING" | "APPROVED" | "REJECTED"
 //   Contribution:     "CROSS_TEAM" | "PROCESS" | "KNOWLEDGE" | "FIREFIGHT" | "EXTERNAL" | "GROWTH" | "OTHER"
 //   PositionLevel:    "EXECUTIVE" | "MANAGER" | "STAFF"
 //   FAQCategory:      "TASK_POOL" | "COMP" | "PROCESS" | "OTHER"
+//   NotificationKind: "TASK_PUBLISHED" | "SUBMISSION"
+//   NotificationStatus:"SENT" | "FAILED" | "NOT_CONFIGURED"
 
 model User {
   id            String    @id @default(cuid())
@@ -60,7 +62,7 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-  role          String    @default("MEMBER") // "ADMIN" | "MEMBER"
+  role          String    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "MEMBER"
   active        Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -71,6 +73,7 @@ model User {
   tasksClaimed  Task[]        @relation("TaskClaimant")
   submissions   Submission[]
   reviewed      Submission[]  @relation("SubmissionReviewer")
+  taskClaims    TaskClaim[]
 }
 
 model Task {
@@ -86,6 +89,11 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  // Single-claim (default) uses claimantId. Multi-claim uses TaskClaim rows;
+  // when a winning submission is approved, claimantId is set to the winner so
+  // leaderboard/stats continue to work unchanged.
+  allowMultiClaim Boolean @default(false)
+
   creatorId   String
   creator     User       @relation("TaskCreator", fields: [creatorId], references: [id])
 
@@ -95,6 +103,39 @@ model Task {
 
   submissions Submission[]
   attachments Attachment[] @relation("TaskAttachments")
+  claims      TaskClaim[]
+}
+
+// Junction for multi-claim tasks — each row is one member who has committed to
+// work on the task. Released rows have releasedAt set (kept for audit).
+model TaskClaim {
+  id         String    @id @default(cuid())
+  taskId     String
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  claimedAt  DateTime  @default(now())
+  releasedAt DateTime?
+
+  @@unique([taskId, userId])
+  @@index([userId])
+}
+
+// Audit log for outbound notifications — every attempt (success or failure)
+// is recorded so we never silently drop a publish email. Admin can resend.
+model NotificationLog {
+  id         String   @id @default(cuid())
+  kind       String   // "TASK_PUBLISHED" | "SUBMISSION"
+  taskId     String?
+  subject    String
+  recipients Int
+  status     String   // "SENT" | "FAILED" | "NOT_CONFIGURED"
+  attempts   Int      @default(1)
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([taskId])
 }
 
 model Submission {

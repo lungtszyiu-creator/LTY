@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminUsersPage() {
   const session = await getSession();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN') redirect('/dashboard');
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') redirect('/dashboard');
 
   const users = await prisma.user.findMany({
     orderBy: { createdAt: 'desc' },
@@ -29,6 +29,7 @@ export default async function AdminUsersPage() {
       <UsersTable
         initial={users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }))}
         meId={session.user.id}
+        meRole={session.user.role as any}
       />
     </div>
   );

@@ -5,14 +5,19 @@ import { requireUser, requireAdmin } from '@/lib/permissions';
 import { notifyTaskPublished } from '@/lib/email';
 
 export async function GET(req: NextRequest) {
-  await requireUser();
+  const session = await requireUser();
   const status = req.nextUrl.searchParams.get('status');
   const mine = req.nextUrl.searchParams.get('mine');
-  const session = await requireUser();
 
   const where: any = {};
   if (status) where.status = status;
-  if (mine === 'claimed') where.claimantId = session.id;
+  if (mine === 'claimed') {
+    // "mine" across both modes: single-claim (claimantId) OR multi-claim (TaskClaim row, not released)
+    where.OR = [
+      { claimantId: session.id },
+      { claims: { some: { userId: session.id, releasedAt: null } } },
+    ];
+  }
   if (mine === 'created') where.creatorId = session.id;
 
   const tasks = await prisma.task.findMany({
@@ -20,7 +25,7 @@ export async function GET(req: NextRequest) {
     include: {
       creator: { select: { id: true, name: true, email: true, image: true } },
       claimant: { select: { id: true, name: true, email: true, image: true } },
-      _count: { select: { submissions: true, attachments: true } },
+      _count: { select: { submissions: true, attachments: true, claims: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -36,6 +41,7 @@ const createSchema = z.object({
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional(),
   contribution: z.enum(['CROSS_TEAM', 'PROCESS', 'KNOWLEDGE', 'FIREFIGHT', 'EXTERNAL', 'GROWTH', 'OTHER']),
   attachmentIds: z.array(z.string()).optional(),
+  allowMultiClaim: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -54,6 +60,7 @@ export async function POST(req: NextRequest) {
       contribution: data.contribution,
       creatorId: admin.id,
       status: 'OPEN',
+      allowMultiClaim: data.allowMultiClaim ?? false,
     },
   });
 
@@ -64,7 +71,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await notifyTaskPublished(task);
-
-  return NextResponse.json(task, { status: 201 });
+  // Notification is audited via NotificationLog; failures do NOT block task
+  // creation (task still exists and admin can resend from the log page).
+  const mail = await notifyTaskPublished(task);
+  return NextResponse.json({ ...task, _notification: mail }, { status: 201 });
 }
