@@ -7,12 +7,12 @@ export default async function MyStats({ userId }: { userId: string }) {
   const nearLimit = s.inProgress >= MAX_CONCURRENT_CLAIMS;
 
   return (
-    <section className="card rise rise-delay-1 relative overflow-hidden p-5 sm:p-6">
+    <section className="card rise rise-delay-1 relative overflow-hidden p-4 sm:p-6">
       <div className="accent-bar absolute inset-x-0 top-0 h-0.5 opacity-60" />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-end gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">我的积分</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:text-xs">我的积分</div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-3xl font-semibold tabular-nums tracking-tight">{s.points}</span>
               <span className="text-xs text-slate-500">分</span>
@@ -20,7 +20,7 @@ export default async function MyStats({ userId }: { userId: string }) {
           </div>
           {s.rank !== null && (
             <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">战功榜</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:text-xs">战功榜</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-lg font-semibold tabular-nums">#{s.rank}</span>
                 <span className="text-xs text-slate-500">/ {s.total}</span>

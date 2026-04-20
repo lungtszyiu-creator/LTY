@@ -67,8 +67,8 @@ export default function NotificationsList({ initial }: { initial: Log[] }) {
           {toast.msg}
         </div>
       )}
-      <div className="card rise overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card rise overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-slate-50/70 text-xs uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-5 py-3 text-left font-medium">时间</th>

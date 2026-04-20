@@ -28,14 +28,22 @@
   --accent-soft: rgba(139, 30, 42, 0.08);
 }
 
-html, body { height: 100%; }
+/* NB: don't set html/body to height:100% — that kills natural document scroll
+   on iOS Safari when content exceeds the viewport, producing "can't scroll"
+   bug reports. Use min-height so content can grow past the fold normally. */
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 body {
+  min-height: 100vh;
   background: var(--bg-0);
   color: var(--fg-0);
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-feature-settings: "ss01", "cv11", "cv02";
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  /* Prevent any child from triggering horizontal scroll that'd lock vertical
+     swipe on mobile. Vertical scroll is unaffected. */
+  overflow-x: hidden;
 }
 
 /* Warm ambient gradient underneath all authenticated pages */

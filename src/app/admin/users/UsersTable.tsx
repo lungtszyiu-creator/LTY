@@ -114,8 +114,8 @@ export default function UsersTable({
         {err && <p className="w-full text-sm text-rose-600">{err}</p>}
       </form>
 
-      <div className="card rise rise-delay-1 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card rise rise-delay-1 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50/70 text-xs uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-5 py-3 text-left font-medium">用户</th>

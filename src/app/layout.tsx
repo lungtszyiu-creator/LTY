@@ -18,6 +18,12 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#3a0a14',
+  // Explicit viewport so iOS Safari doesn't apply its own scaling (which can
+  // make the dashboard appear "cut off" and unscrollable on smaller phones).
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen">
         <Providers>
           <Nav />
-          <main className="mx-auto max-w-6xl px-6 pb-20">{children}</main>
+          <main
+            className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-6"
+            style={{ paddingBottom: 'max(6rem, env(safe-area-inset-bottom))' }}
+          >
+            {children}
+          </main>
         </Providers>
       </body>
     </html>

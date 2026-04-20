@@ -58,7 +58,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         返回看板
       </Link>
 
-      <article className="card rise relative overflow-hidden p-7">
+      <article className="card rise relative overflow-hidden p-5 sm:p-7">
         <div className="accent-bar absolute inset-x-0 top-0 h-1 opacity-80" />
 
         <div className="flex flex-wrap items-start justify-between gap-4">

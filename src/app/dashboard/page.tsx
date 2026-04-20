@@ -68,16 +68,16 @@ export default async function DashboardPage({
   ];
 
   return (
-    <div className="pt-8">
-      <div className="mb-6 flex items-end justify-between">
-        <div className="rise">
-          <h1 className="text-3xl font-semibold tracking-tight">任务看板</h1>
+    <div className="pt-6 sm:pt-8">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
+        <div className="rise min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">任务看板</h1>
           <p className="mt-1 text-sm text-slate-500">
             {counters.reduce((a, c) => a + c.value, 0)} 个任务 · 实时同步
           </p>
         </div>
         {isAdmin && (
-          <Link href="/admin/tasks/new" className="btn btn-primary rise rise-delay-1">
+          <Link href="/admin/tasks/new" className="btn btn-primary rise rise-delay-1 shrink-0">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" /></svg>
             发布任务
           </Link>
