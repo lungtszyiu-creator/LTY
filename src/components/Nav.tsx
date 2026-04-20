@@ -60,7 +60,7 @@ export default function Nav() {
       // the iOS-supplied value for the notch/status-bar height.
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="mx-auto flex h-[60px] max-w-6xl items-center justify-between gap-4 px-4 sm:h-[72px] sm:gap-6 sm:px-6">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:gap-6 sm:px-6">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-3">
           <Logo />
           <div className="flex items-baseline gap-2.5 whitespace-nowrap">
@@ -228,7 +228,7 @@ function MobileLink({ href, children, active }: { href: string; children: React.
 
 function Logo() {
   return (
-    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center sm:h-14 sm:w-14">
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
       <div className="absolute inset-[-4px] rounded-full bg-[radial-gradient(closest-side,rgba(212,165,116,0.38),transparent_72%)] blur-[3px]" aria-hidden />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="LTY 旭珑" className="relative h-full w-full object-contain drop-shadow-[0_3px_8px_rgba(139,30,42,0.2)]" />
