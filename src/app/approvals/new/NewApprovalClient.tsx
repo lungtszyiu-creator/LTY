@@ -510,31 +510,49 @@ function MoneyInput({
   const sym = CURRENCY_META[currency].symbol;
 
   return (
-    <div className="flex items-stretch gap-2">
-      <div className="relative flex-1">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">{sym}</span>
+    <div className="space-y-2">
+      {/* Primary amount input — big, prominent, full width, currency symbol
+          as a leading glyph so there's no chance the input collapses on a
+          narrow phone layout. */}
+      <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2.5 ring-2 ring-indigo-300 focus-within:ring-indigo-500">
+        <span className="text-lg font-semibold text-slate-600">{sym}</span>
         <input
-          type="number" step="0.01"
+          type="number"
+          step="0.01"
+          inputMode="decimal"
           value={parsed.amount ?? ''}
           onChange={(e) => update({ amount: e.target.value === '' ? '' : Number(e.target.value), currency })}
-          className="input pl-10"
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-lg font-bold text-slate-900 outline-none placeholder:text-slate-300"
           placeholder="0.00"
         />
       </div>
+
+      {/* Currency selector as chip row — always visible, tappable, matches
+          the rest of the form's chip-style choices. */}
       {allowSwitch ? (
-        <select
-          value={currency}
-          onChange={(e) => update({ amount: parsed.amount ?? '', currency: e.target.value as Currency })}
-          className="select w-32 shrink-0"
-        >
-          {Object.entries(CURRENCY_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.icon} {v.label}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-500">币种：</span>
+          {(Object.keys(CURRENCY_META) as Currency[]).map((c) => {
+            const on = currency === c;
+            const short = c === 'CNY' ? 'RMB' : c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => update({ amount: parsed.amount ?? '', currency: c })}
+                className={`rounded-full px-3 py-1 text-xs transition ${
+                  on ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {CURRENCY_META[c].icon} {short}
+              </button>
+            );
+          })}
+        </div>
       ) : (
-        <span className="inline-flex shrink-0 items-center rounded-lg bg-slate-100 px-3 text-sm text-slate-700 ring-1 ring-slate-200">
-          {CURRENCY_META[currency].icon} {CURRENCY_META[currency].label}
-        </span>
+        <div className="text-xs text-slate-500">
+          币种：{CURRENCY_META[currency].icon} {CURRENCY_META[currency].label}
+        </div>
       )}
     </div>
   );
