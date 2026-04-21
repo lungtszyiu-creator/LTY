@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { currentPeriodStart, currentPeriodEnd, currentDueAt, formatPeriod } from '@/lib/periods';
+import { fmtDateTime } from '@/lib/datetime';
 import ReportEditor from './ReportEditor';
 
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export default async function MyReportsPage({
           <div>
             <div className="text-xs uppercase tracking-widest text-slate-500">当前 {type === 'WEEKLY' ? '周' : '月'}度</div>
             <div className="text-lg font-semibold">{periodLabel}</div>
-            <div className="mt-0.5 text-xs text-slate-500">截止 {dueAt.toLocaleString('zh-CN')}</div>
+            <div className="mt-0.5 text-xs text-slate-500">截止 {fmtDateTime(dueAt)}</div>
           </div>
           {current?.status === 'LATE' && (
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700 ring-1 ring-rose-200">⏰ 逾期提交</span>
@@ -79,6 +80,8 @@ export default async function MyReportsPage({
             contentBlockers: current.contentBlockers ?? '',
             contentAsks: current.contentAsks ?? '',
             submitted: !!current.submittedAt,
+            submittedAt: current.submittedAt?.toISOString() ?? null,
+            status: current.status as any,
           } : { contentDone: '', contentPlan: '', contentBlockers: '', contentAsks: '', submitted: false }}
         />
       </section>

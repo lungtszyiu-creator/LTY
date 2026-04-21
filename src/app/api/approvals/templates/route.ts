@@ -29,6 +29,21 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const admin = await requireAdmin();
   const data = createSchema.parse(await req.json());
+
+  // Seed a sensible default field so a blank template isn't unusable —
+  // before this, creating a template and clicking 发起审批 showed an empty
+  // form and the initiator had nowhere to describe their request.
+  const defaultFields = [
+    {
+      id: `f_${Math.random().toString(36).slice(2, 8)}`,
+      type: 'textarea',
+      label: '申请说明',
+      placeholder: '请简述申请事由、背景、需要什么',
+      required: true,
+      titleField: true,
+    },
+  ];
+
   const t = await prisma.approvalTemplate.create({
     data: {
       name: data.name,
@@ -37,7 +52,7 @@ export async function POST(req: NextRequest) {
       icon: data.icon ?? null,
       description: data.description ?? null,
       flowJson: JSON.stringify(blankFlow()),
-      fieldsJson: JSON.stringify([]),
+      fieldsJson: JSON.stringify(defaultFields),
       createdById: admin.id,
     },
   });

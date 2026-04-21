@@ -305,42 +305,104 @@ function EditorInner({
     setNodes((prev) => autoLayout(prev, edges));
   }
 
-  // Drop-in presets — each seeds nodes/edges and laid out automatically.
-  function applyPreset(preset: 'SINGLE' | 'DEPT_LEAD' | 'WITH_CC' | 'CONDITION_MONEY') {
-    if (nodes.length > 3 && !confirm('当前已有节点，应用预设会覆盖现有流程，确定继续？')) return;
+  // Drop-in presets — each seeds nodes/edges AND form fields so the submit
+  // page actually has something to fill in. Previously blank templates had
+  // no fields other than what the author manually added.
+  function applyPreset(preset: 'LEAVE' | 'EXPENSE' | 'TRAVEL' | 'PROCUREMENT' | 'STAMP') {
+    if ((nodes.length > 3 || fields.length > 0) && !confirm('当前已有节点或字段，应用预设会覆盖现有内容，确定继续？')) return;
     const start: Node = { id: 'start', type: 'start', position: { x: 240, y: 60 }, data: { label: '发起人' } };
-    const end: Node = { id: 'end', type: 'end', position: { x: 240, y: 900 }, data: { label: '结束' } };
+    const end: Node = { id: 'end', type: 'end', position: { x: 240, y: 800 }, data: { label: '结束' } };
     let newNodes: Node[] = [start];
     let newEdges: Edge[] = [];
+    let newFields: FormFieldSpec[] = [];
     const connect = (a: string, b: string) => newEdges.push({ id: `e-${a}-${b}`, source: a, target: b, markerEnd: { type: MarkerType.ArrowClosed } });
+    const fid = () => `f_${Math.random().toString(36).slice(2, 8)}`;
 
-    if (preset === 'SINGLE') {
-      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属审批', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
-      newNodes.push(a1, end);
-      connect('start', 'a1'); connect('a1', 'end');
-    } else if (preset === 'DEPT_LEAD') {
-      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
-      const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
-      newNodes.push(a1, a2, end);
-      connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'end');
-    } else if (preset === 'WITH_CC') {
-      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+    if (preset === 'LEAVE') {
+      setName((n) => n || '请假申请');
+      setCategory('LEAVE');
+      newFields = [
+        { id: fid(), type: 'select', label: '请假类型', required: true, options: ['年假', '病假', '事假', '婚假', '产假', '陪产假', '丧假'], titleField: true },
+        { id: fid(), type: 'daterange', label: '请假起止日期', required: true },
+        { id: fid(), type: 'number', label: '请假天数', required: true },
+        { id: fid(), type: 'textarea', label: '请假事由', required: true, placeholder: '请简述原因' },
+        { id: fid(), type: 'textarea', label: '工作交接', required: false, placeholder: '由谁代替完成哪些工作' },
+        { id: fid(), type: 'attachment', label: '证明材料（如需）' },
+      ];
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属上级', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
       const cc: Node = { id: 'c1', type: 'cc', position: { x: 240, y: 380 }, data: { label: '抄送 HR', ccUsers: [] } };
       newNodes.push(a1, cc, end);
       connect('start', 'a1'); connect('a1', 'c1'); connect('c1', 'end');
-    } else if (preset === 'CONDITION_MONEY') {
-      const cond: Node = { id: 'cond', type: 'condition', position: { x: 240, y: 220 }, data: { label: '金额判断', field: '', op: '>', value: '5000', trueTargetId: 'a_big', falseTargetId: 'a_small' } };
+    } else if (preset === 'EXPENSE') {
+      setName((n) => n || '报销申请');
+      setCategory('EXPENSE');
+      newFields = [
+        { id: fid(), type: 'select', label: '费用类别', required: true, options: ['差旅', '餐饮', '交通', '办公用品', '通讯', '培训', '其他'], titleField: true },
+        { id: fid(), type: 'money', label: '报销金额', required: true },
+        { id: fid(), type: 'date', label: '发生日期', required: true },
+        { id: fid(), type: 'textarea', label: '费用说明', required: true, placeholder: '具体用途、参与人、事由' },
+        { id: fid(), type: 'attachment', label: '发票 / 凭证', required: true },
+      ];
+      // Condition: 金额 > 5000 走 CEO
+      const amtField = newFields.find((f) => f.type === 'money')!.id;
+      const cond: Node = { id: 'cond', type: 'condition', position: { x: 240, y: 220 }, data: { label: '金额判断', field: amtField, op: '>', value: '5000', trueTargetId: 'a_big', falseTargetId: 'a_small' } };
       const aSmall: Node = { id: 'a_small', type: 'approval', position: { x: 80, y: 400 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
-      const aBig: Node = { id: 'a_big', type: 'approval', position: { x: 420, y: 400 }, data: { label: 'CEO 审批', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
-      newNodes.push(cond, aSmall, aBig, end);
+      const aBig: Node = { id: 'a_big', type: 'approval', position: { x: 420, y: 400 }, data: { label: '部门负责人 + 总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      const cc: Node = { id: 'c1', type: 'cc', position: { x: 240, y: 560 }, data: { label: '抄送财务', ccUsers: [] } };
+      newNodes.push(cond, aSmall, aBig, cc, end);
       connect('start', 'cond');
-      // Visual edges; runtime uses explicit targets on condition node.
       newEdges.push({ id: 'e-cond-small', source: 'cond', target: 'a_small', label: '≤ 5000', markerEnd: { type: MarkerType.ArrowClosed } });
       newEdges.push({ id: 'e-cond-big',   source: 'cond', target: 'a_big',   label: '> 5000', markerEnd: { type: MarkerType.ArrowClosed } });
-      connect('a_small', 'end'); connect('a_big', 'end');
+      connect('a_small', 'c1'); connect('a_big', 'c1'); connect('c1', 'end');
+    } else if (preset === 'TRAVEL') {
+      setName((n) => n || '出差申请');
+      setCategory('TRAVEL');
+      newFields = [
+        { id: fid(), type: 'text', label: '目的地', required: true, titleField: true },
+        { id: fid(), type: 'daterange', label: '出差起止日期', required: true },
+        { id: fid(), type: 'textarea', label: '出差目的', required: true },
+        { id: fid(), type: 'money', label: '预算金额', required: true },
+        { id: fid(), type: 'select', label: '交通方式', options: ['飞机', '高铁', '汽车', '其他'], required: false },
+        { id: fid(), type: 'attachment', label: '行程附件（如需）' },
+      ];
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属上级', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      const cc: Node = { id: 'c1', type: 'cc', position: { x: 240, y: 540 }, data: { label: '抄送财务', ccUsers: [] } };
+      newNodes.push(a1, a2, cc, end);
+      connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'c1'); connect('c1', 'end');
+    } else if (preset === 'PROCUREMENT') {
+      setName((n) => n || '采购申请');
+      setCategory('PROCUREMENT');
+      newFields = [
+        { id: fid(), type: 'text', label: '物品名称', required: true, titleField: true },
+        { id: fid(), type: 'number', label: '数量', required: true },
+        { id: fid(), type: 'money', label: '预算金额', required: true },
+        { id: fid(), type: 'text', label: '供应商', required: false },
+        { id: fid(), type: 'textarea', label: '用途说明', required: true },
+        { id: fid(), type: 'attachment', label: '报价单 / 参考链接' },
+      ];
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属上级', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '财务审批', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      newNodes.push(a1, a2, end);
+      connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'end');
+    } else if (preset === 'STAMP') {
+      setName((n) => n || '用章申请');
+      setCategory('STAMP');
+      newFields = [
+        { id: fid(), type: 'select', label: '印章类型', required: true, options: ['公章', '财务章', '合同章', '法人章', '其他'], titleField: true },
+        { id: fid(), type: 'textarea', label: '用章事由', required: true },
+        { id: fid(), type: 'select', label: '紧急程度', options: ['普通', '紧急', '特急'], required: true },
+        { id: fid(), type: 'attachment', label: '待盖章文件', required: true },
+      ];
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '法务', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      newNodes.push(a1, a2, end);
+      connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'end');
     }
+
     setNodes(newNodes);
     setEdges(newEdges);
+    setFields(newFields);
     setSelectedId(null);
   }
 
@@ -474,13 +536,17 @@ function EditorInner({
         </div>
       </div>
 
-      {/* Preset dropdown for non-designers */}
+      {/* Preset dropdown for non-designers — each preset bundles the typical
+          form fields AND the flow so admin only picks approvers. */}
       <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
-        <span className="font-medium">🎨 一键开始：</span>
-        <button onClick={() => applyPreset('SINGLE')} className="ml-2 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">单级审批（部门负责人）</button>
-        <button onClick={() => applyPreset('DEPT_LEAD')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">两级：负责人 → 总经理</button>
-        <button onClick={() => applyPreset('WITH_CC')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">含抄送 HR</button>
-        <button onClick={() => applyPreset('CONDITION_MONEY')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">金额分支（&gt; 5000 走 CEO）</button>
+        <div className="mb-1.5"><span className="font-medium">🎨 从常用模板开始</span>（含表单字段 + 流程，应用后改审批人即可）：</div>
+        <div className="flex flex-wrap gap-1.5">
+          <button onClick={() => applyPreset('LEAVE')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">🌴 请假</button>
+          <button onClick={() => applyPreset('EXPENSE')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">💰 报销（金额分支）</button>
+          <button onClick={() => applyPreset('TRAVEL')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">✈️ 出差</button>
+          <button onClick={() => applyPreset('PROCUREMENT')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">📦 采购</button>
+          <button onClick={() => applyPreset('STAMP')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">🔖 用章</button>
+        </div>
       </div>
 
       {msg && <div className={`rounded-xl px-3 py-2 text-sm ${msg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'}`}>{msg}</div>}

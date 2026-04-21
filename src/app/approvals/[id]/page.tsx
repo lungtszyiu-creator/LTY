@@ -4,12 +4,13 @@ import { getSession } from '@/lib/auth';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { parseFields, parseFlow, APPROVAL_CATEGORY_META, FIELD_TYPE_META } from '@/lib/approvalFlow';
+import { fmtDateTime } from '@/lib/datetime';
 import InstanceActions from './InstanceActions';
 
 export const dynamic = 'force-dynamic';
 
 function fmt(d: Date | null | undefined) {
-  return d ? new Date(d).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  return fmtDateTime(d);
 }
 
 function initial(s: string | null | undefined) {
@@ -108,32 +109,48 @@ export default async function ApprovalInstancePage({
         </div>
       </article>
 
-      {/* Form data */}
-      {fields.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">📝 表单内容</h2>
-          <div className="card divide-y divide-slate-100">
-            {fields.map((f) => {
-              const v = form[f.id];
-              let display: any = <span className="text-slate-400">—</span>;
-              if (v !== undefined && v !== null && v !== '') {
-                if (f.type === 'daterange' && Array.isArray(v)) display = `${v[0]} 至 ${v[1]}`;
-                else if (f.type === 'multiselect' && Array.isArray(v)) display = v.join('、');
-                else if (f.type === 'money') display = `¥ ${v}`;
-                else display = String(v);
-              }
-              return (
-                <div key={f.id} className="flex items-start gap-4 px-4 py-3 text-sm sm:px-5">
-                  <div className="w-28 shrink-0 text-xs text-slate-500">
-                    {FIELD_TYPE_META[f.type]?.icon} {f.label}
-                  </div>
-                  <div className="min-w-0 flex-1 whitespace-pre-wrap text-slate-800">{display}</div>
+      {/* Form data — render from fieldsSnapshot; if any raw form values don't
+          map to a known field (e.g. template edited after submit), still show
+          them below so nothing silently disappears. */}
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">📝 表单内容</h2>
+        <div className="card divide-y divide-slate-100">
+          {fields.length === 0 && Object.keys(form).length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-slate-500">
+              此模板没有表单字段
+            </div>
+          )}
+          {fields.map((f) => {
+            const v = form[f.id];
+            let display: any = <span className="text-slate-400">未填写</span>;
+            if (v !== undefined && v !== null && v !== '') {
+              if (f.type === 'daterange' && Array.isArray(v)) display = `${v[0]} 至 ${v[1]}`;
+              else if (f.type === 'multiselect' && Array.isArray(v)) display = v.join('、');
+              else if (f.type === 'money') display = `¥ ${v}`;
+              else display = String(v);
+            }
+            return (
+              <div key={f.id} className="flex items-start gap-4 px-4 py-3 text-sm sm:px-5">
+                <div className="w-28 shrink-0 text-xs font-medium text-slate-500">
+                  {FIELD_TYPE_META[f.type]?.icon} {f.label}
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+                <div className="min-w-0 flex-1 whitespace-pre-wrap text-slate-800">{display}</div>
+              </div>
+            );
+          })}
+          {/* Orphan values: keys in form that aren't described by fields */}
+          {Object.keys(form).filter((k) => !fields.some((f) => f.id === k)).map((k) => (
+            <div key={`orphan-${k}`} className="flex items-start gap-4 px-4 py-3 text-sm sm:px-5 opacity-70">
+              <div className="w-28 shrink-0 text-xs text-slate-400">
+                附加
+              </div>
+              <div className="min-w-0 flex-1 whitespace-pre-wrap text-slate-800">
+                {typeof form[k] === 'object' ? JSON.stringify(form[k]) : String(form[k])}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Timeline by node */}
       <section>

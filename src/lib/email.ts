@@ -10,9 +10,20 @@ let cached: Transporter | null = null;
 function getTransporter() {
   if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
   if (cached) return cached;
+  // Pooled TLS keeps the SMTP socket alive across invocations inside the
+  // same Node process, removing ~1–2s of TCP + TLS + auth latency that was
+  // making notifications feel "always late". Serverless instances still
+  // pay the handshake on cold start, but in-instance sends are instant.
   cached = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    pool: true,
+    maxConnections: 2,
+    maxMessages: 100,
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    connectionTimeout: 10_000,
+    socketTimeout: 20_000,
   });
   return cached;
 }
@@ -34,7 +45,10 @@ async function sendWithRetry({ to, subject, html }: SendArgs): Promise<{ ok: boo
   const unique = Array.from(new Set(to.filter(Boolean)));
   if (unique.length === 0) return { ok: true, attempts: 0, reason: 'NO_RECIPIENTS' };
 
-  const backoffMs = [1000, 5000, 30000];
+  // Faster first retry; the previous 1/5/30s schedule made the "wait
+  // 30 seconds" case visibly sluggish. Most failures are transient and
+  // succeed on attempt 2.
+  const backoffMs = [0, 1500, 6000];
   let lastErr: unknown = null;
   for (let i = 0; i < backoffMs.length; i++) {
     try {
@@ -49,8 +63,8 @@ async function sendWithRetry({ to, subject, html }: SendArgs): Promise<{ ok: boo
     } catch (e) {
       lastErr = e;
       console.error(`[email] attempt ${i + 1}/${backoffMs.length} failed:`, (e as Error)?.message ?? e);
-      if (i < backoffMs.length - 1) {
-        await new Promise((r) => setTimeout(r, backoffMs[i]));
+      if (i < backoffMs.length - 1 && backoffMs[i + 1] > 0) {
+        await new Promise((r) => setTimeout(r, backoffMs[i + 1]));
       }
     }
   }

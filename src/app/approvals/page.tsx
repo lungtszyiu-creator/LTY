@@ -4,14 +4,16 @@ import { getSession } from '@/lib/auth';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { APPROVAL_CATEGORY_META } from '@/lib/approvalFlow';
+import { fmtDateTime } from '@/lib/datetime';
 
 export const dynamic = 'force-dynamic';
 
 const TABS = [
-  { key: 'pending', label: '待我审批' },
-  { key: 'mine',    label: '我发起的' },
-  { key: 'cc',      label: '抄送给我' },
-  { key: 'all',     label: '全部' },
+  { key: 'pending',  label: '待我审批' },
+  { key: 'handled',  label: '我处理过的' },
+  { key: 'mine',     label: '我发起的' },
+  { key: 'cc',       label: '抄送给我' },
+  { key: 'all',      label: '全部' },
 ] as const;
 
 type TabKey = typeof TABS[number]['key'];
@@ -29,13 +31,26 @@ export default async function ApprovalsPage({
   const isAdmin = hasMinRole(me.role as Role, 'ADMIN');
 
   const where: any = {};
-  if (tab === 'mine') where.initiatorId = me.id;
-  else if (tab === 'pending') {
+  if (tab === 'mine') {
+    where.initiatorId = me.id;
+  } else if (tab === 'pending') {
     where.status = 'IN_PROGRESS';
     where.steps = { some: { approverId: me.id, decision: null, kind: 'APPROVAL', superseded: false } };
+  } else if (tab === 'handled') {
+    // Instances where I made an APPROVAL decision (通过 or 驳回), regardless
+    // of the instance's final status. Lets each approver see their own action
+    // history instead of it disappearing the moment they decide.
+    where.steps = {
+      some: {
+        approverId: me.id,
+        kind: 'APPROVAL',
+        decision: { in: ['APPROVED', 'REJECTED'] },
+      },
+    };
   } else if (tab === 'cc') {
     where.steps = { some: { approverId: me.id, kind: 'CC' } };
   } else if (tab === 'all') {
+    // Admins see every instance; members see anything that involves them.
     if (!isAdmin) {
       where.OR = [{ initiatorId: me.id }, { steps: { some: { approverId: me.id } } }];
     }
@@ -141,7 +156,7 @@ export default async function ApprovalsPage({
                       <h3 className="line-clamp-1 text-base font-semibold">{i.title}</h3>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
                         <span>发起人：{i.initiator.name ?? i.initiator.email}</span>
-                        <span>· {new Date(i.submittedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>· {fmtDateTime(i.submittedAt)}</span>
                       </div>
                     </div>
                   </div>

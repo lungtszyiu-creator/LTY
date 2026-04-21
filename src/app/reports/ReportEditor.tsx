@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { fmtDateTime } from '@/lib/datetime';
 
 type Initial = {
   contentDone: string;
@@ -9,6 +10,8 @@ type Initial = {
   contentBlockers: string;
   contentAsks: string;
   submitted: boolean;
+  submittedAt?: string | null;
+  status?: 'PENDING' | 'SUBMITTED' | 'LATE' | null;
 };
 
 const SECTIONS = [
@@ -30,6 +33,9 @@ export default function ReportEditor({
   const [busy, setBusy] = useState<'save' | 'submit' | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(initial.submitted);
+  // Submitted reports render as read-only by default — cuts the "为什么还在
+  // 显示旧内容" confusion. User clicks 修改 to re-enter edit mode.
+  const [editMode, setEditMode] = useState(!initial.submitted);
 
   async function save(submit: boolean) {
     if (submit && !fields.contentDone.trim()) {
@@ -52,13 +58,86 @@ export default function ReportEditor({
       });
       if (!res.ok) throw new Error((await res.json()).error ?? '保存失败');
       const r = await res.json();
-      if (r.submittedAt) setSubmitted(true);
+      if (r.submittedAt) {
+        setSubmitted(true);
+        setEditMode(false);
+      }
       router.refresh();
     } catch (e: any) { setErr(e.message); } finally { setBusy(null); }
   }
 
+  function resetAndEdit() {
+    // Put the editor into "clean start" mode: empty fields, no status. The
+    // user explicitly wants to write a new version.
+    setFields({
+      contentDone: '',
+      contentPlan: '',
+      contentBlockers: '',
+      contentAsks: '',
+      submitted: false,
+    });
+    setSubmitted(false);
+    setEditMode(true);
+  }
+
+  // Read-only display for a submitted report.
+  if (submitted && !editMode) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="font-semibold text-emerald-800">
+                {fields.status === 'LATE' ? '⏰ 已逾期提交' : '✓ 已提交'}
+              </span>
+              {fields.submittedAt && (
+                <span className="ml-2 text-xs text-emerald-700">
+                  {fmtDateTime(fields.submittedAt)}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditMode(true)} className="btn btn-ghost text-xs">
+                ✏️ 修改本期汇报
+              </button>
+              <button onClick={resetAndEdit} className="btn btn-ghost text-xs text-slate-500">
+                🗑 清空重写
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {SECTIONS.map((s) => {
+          const val = (fields as any)[s.key] as string;
+          if (!val || !val.trim()) {
+            return (
+              <div key={s.key} className="rounded-xl bg-slate-50 p-4">
+                <div className="text-xs font-medium text-slate-500">{s.label}</div>
+                <div className="mt-1 text-xs text-slate-400">（未填写）</div>
+              </div>
+            );
+          }
+          return (
+            <div key={s.key} className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
+              <div className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
+                {s.label}
+              </div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{val}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Editable form.
   return (
     <div className="space-y-4">
+      {submitted && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          ⚠️ 你正在修改已提交的 {type === 'WEEKLY' ? '周报' : '月报'}。保存后将覆盖原版本。
+        </div>
+      )}
       {SECTIONS.map((s) => (
         <div key={s.key}>
           <label className="mb-1 flex items-center justify-between">
@@ -78,12 +157,16 @@ export default function ReportEditor({
       {err && <p className="text-sm text-rose-600">{err}</p>}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {submitted && <span className="mr-auto text-xs text-emerald-700">✓ 已提交，后续修改会保留但状态不变</span>}
+        {submitted && (
+          <button onClick={() => setEditMode(false)} className="mr-auto btn btn-ghost text-xs text-slate-500">
+            取消修改
+          </button>
+        )}
         <button onClick={() => save(false)} disabled={busy !== null} className="btn btn-ghost">
           {busy === 'save' ? '保存中…' : '保存草稿'}
         </button>
         <button onClick={() => save(true)} disabled={busy !== null} className="btn btn-primary">
-          {busy === 'submit' ? '提交中…' : (submitted ? '重新提交' : '提交')}
+          {busy === 'submit' ? '提交中…' : (submitted ? '确认修改并提交' : '提交')}
         </button>
       </div>
     </div>

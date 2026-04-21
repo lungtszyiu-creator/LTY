@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { currentPeriodStart, currentPeriodEnd, currentDueAt, formatPeriod } from '@/lib/periods';
+import { fmtDateTime } from '@/lib/datetime';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export default async function AdminReportsPage({
 
       <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 rise rise-delay-1">
         <StatCard label="周期" value={formatPeriod(type, periodStart, periodEnd)} tone="slate" small />
-        <StatCard label="截止" value={dueAt.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} tone={isPastDue ? 'rose' : 'slate'} small />
+        <StatCard label="截止" value={fmtDateTime(dueAt)} tone={isPastDue ? 'rose' : 'slate'} small />
         <StatCard label="已提交" value={`${submitted}`} tone="emerald" />
         <StatCard label="未提交" value={`${pending}`} tone={pending > 0 && isPastDue ? 'rose' : 'amber'} />
       </section>
@@ -123,7 +124,7 @@ export default async function AdminReportsPage({
                     </div>
                   </td>
                   <td className="px-5 py-3 text-right text-xs text-slate-500">
-                    {r?.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    {r?.submittedAt ? fmtDateTime(r.submittedAt) : '—'}
                   </td>
                 </tr>
               );

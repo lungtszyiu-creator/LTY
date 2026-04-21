@@ -14,6 +14,11 @@ export async function resolveRoleApprovers(
 ): Promise<{ flow: FlowGraph; warnings: string[] }> {
   const warnings: string[] = [];
   // Cache: which dept leads does the initiator inherit?
+  // Exclude the initiator by default to avoid self-approval — but only if
+  // there's at least one other lead. For a one-person department (or when
+  // the lead IS the initiator), fall back to surfacing the initiator, which
+  // the downstream submit guard then blocks with a clear "need another admin"
+  // message rather than silently hanging the flow.
   let initiatorDeptLeadIds: string[] | null = null;
   async function getInitiatorDeptLeads() {
     if (initiatorDeptLeadIds !== null) return initiatorDeptLeadIds;
@@ -21,10 +26,11 @@ export async function resolveRoleApprovers(
       where: { userId: initiatorId },
       include: { department: { select: { leadUserId: true, name: true } } },
     });
-    const ids = memberships
+    const allLeads = memberships
       .map((m) => m.department.leadUserId)
-      .filter((x): x is string => !!x && x !== initiatorId);
-    initiatorDeptLeadIds = Array.from(new Set(ids));
+      .filter((x): x is string => !!x);
+    const withoutSelf = allLeads.filter((x) => x !== initiatorId);
+    initiatorDeptLeadIds = Array.from(new Set(withoutSelf.length > 0 ? withoutSelf : allLeads));
     return initiatorDeptLeadIds;
   }
 
