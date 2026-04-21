@@ -260,7 +260,13 @@ model FAQ {
 model Attachment {
   id           String      @id @default(cuid())
   filename     String      // original filename
-  storedPath   String      // relative path under UPLOAD_DIR
+  // storedPath: Vercel Blob URL (legacy / large files). Empty string for
+  // DB-inline records — we store the bytes in `content` instead so admins
+  // don't have to configure cloud storage for the basic flow.
+  storedPath   String
+  // Inline blob (nullable). Set for records where content lives in the DB.
+  // Postgres bytea; Prisma returns a Buffer / Uint8Array at runtime.
+  content      Bytes?
   mimeType     String
   size         Int
   createdAt    DateTime    @default(now())

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
-import { saveUploadedFile } from '@/lib/storage';
+import { saveUploadedFile, hasBlobConfigured } from '@/lib/storage';
 import { resolveFolderAccess } from '@/lib/folderAccess';
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -31,26 +31,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Surface the most common real-world failure modes — Vercel Blob token
-  // missing/invalid — with explicit messages so the client shows something
-  // actionable instead of a generic 500.
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return NextResponse.json({
-      error: 'BLOB_TOKEN_MISSING',
-      message: '文件存储未配置：Vercel 环境变量缺少 BLOB_READ_WRITE_TOKEN。请在 Vercel → Settings → Environment Variables 加上，并重新部署。',
-    }, { status: 500 });
-  }
-
+  // Storage is auto-selected inside saveUploadedFile: Vercel Blob when
+  // BLOB_READ_WRITE_TOKEN is set, otherwise bytes go inline into Postgres
+  // (5 MB per file cap) so the app works with zero extra config.
   let saved;
   try {
     saved = await Promise.all(files.map((f) => saveUploadedFile(f)));
   } catch (e: any) {
     const raw = e?.message ?? String(e);
-    console.error('[upload] blob put failed', e);
+    console.error('[upload] save failed', e);
     return NextResponse.json({
       error: 'UPLOAD_FAILED',
-      message: `上传到云存储失败：${raw}`,
-    }, { status: 500 });
+      message: raw,
+    }, { status: raw.startsWith('FILE_TOO_LARGE_FOR_DB_STORAGE') ? 413 : 500 });
   }
 
   const records = await prisma.$transaction(
@@ -59,13 +52,20 @@ export async function POST(req: NextRequest) {
         data: {
           filename: s.filename,
           storedPath: s.storedPath,
+          content: s.content ?? undefined,
           mimeType: s.mimeType,
           size: s.size,
           folderId: folderId || null,
           uploadedById: user.id,
         },
+        // Don't echo the blob back to the client (bandwidth).
+        select: {
+          id: true, filename: true, mimeType: true, size: true,
+          storedPath: true, createdAt: true,
+        },
       })
     )
   );
-  return NextResponse.json(records, { status: 201 });
+  const storageMode = hasBlobConfigured() ? 'blob' : 'db-inline';
+  return NextResponse.json(records.map((r) => ({ ...r, storageMode })), { status: 201 });
 }

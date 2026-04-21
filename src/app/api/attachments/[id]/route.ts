@@ -3,13 +3,30 @@ import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
 import { resolveFolderAccess } from '@/lib/folderAccess';
 
-// Attachments live in Vercel Blob (public bucket with unguessable URLs).
-// We gate access here: only authenticated users get the redirect.
+// Attachments live either inline in Postgres (zero-config default) or in
+// Vercel Blob (when BLOB_READ_WRITE_TOKEN is set). Either way access is
+// gated behind an authenticated session.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   await requireUser();
   const att = await prisma.attachment.findUnique({ where: { id: params.id } });
   if (!att) return new Response('not found', { status: 404 });
-  return NextResponse.redirect(att.storedPath, 302);
+
+  // Inline content → stream it back with correct headers so browsers
+  // preview images/PDFs natively and download binaries correctly.
+  if (att.content) {
+    const headers = new Headers();
+    headers.set('Content-Type', att.mimeType || 'application/octet-stream');
+    headers.set('Content-Length', String(att.size));
+    // RFC 5987 encoding so non-ASCII filenames survive.
+    headers.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(att.filename)}`);
+    headers.set('Cache-Control', 'private, max-age=3600');
+    const buf = att.content as unknown as Buffer;
+    return new Response(new Uint8Array(buf), { status: 200, headers });
+  }
+
+  // Legacy Blob-hosted file: redirect to the CDN URL.
+  if (att.storedPath) return NextResponse.redirect(att.storedPath, 302);
+  return new Response('no content', { status: 404 });
 }
 
 // Delete a file. Admin or the uploader can always delete. Otherwise, for
