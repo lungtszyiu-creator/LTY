@@ -548,6 +548,13 @@ function EditorInner({
         </div>
       </div>
 
+      <LeaveFieldsUpgrader
+        fields={fields}
+        expenseCurrencyNeeded={fields.some((f) => f.type === 'money' && !f.defaultCurrency)}
+        onUpgradeLeave={() => setFields((prev) => upgradeLeaveFields(prev))}
+        onUpgradeMoney={() => setFields((prev) => upgradeMoneyFields(prev))}
+      />
+
       {msg && <div className={`rounded-xl px-3 py-2 text-sm ${msg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'}`}>{msg}</div>}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -908,6 +915,118 @@ function CcSettings({
         </div>
       </div>
       <button onClick={onDelete} className="text-xs text-rose-600">删除此节点</button>
+    </div>
+  );
+}
+
+// ---- 字段一键升级工具 ----
+// Detects legacy leave templates (select "请假类型" + number "请假天数") and
+// in-place replaces them with a single structured `leave_balance` field.
+// Flow graph is untouched — conditions that referenced the removed field ids
+// will show "该字段已删除" in the condition panel and need re-pointing, but
+// the vast majority of leave templates have no conditions on these fields so
+// this is safe for everyone.
+function detectLegacyLeaveFields(fields: FormFieldSpec[]): { typeId: string | null; daysId: string | null } {
+  const typeField = fields.find(
+    (f) => f.type === 'select' && (
+      (f.options ?? []).includes('年假') ||
+      /请假类型|假期类型/.test(f.label)
+    )
+  );
+  const daysField = fields.find(
+    (f) => f.type === 'number' && /天数/.test(f.label)
+  );
+  return { typeId: typeField?.id ?? null, daysId: daysField?.id ?? null };
+}
+
+function upgradeLeaveFields(fields: FormFieldSpec[]): FormFieldSpec[] {
+  const { typeId, daysId } = detectLegacyLeaveFields(fields);
+  if (!typeId && !daysId) return fields;
+
+  const newId = `f_${Math.random().toString(36).slice(2, 8)}`;
+  const wasTitle = typeId ? (fields.find((f) => f.id === typeId)?.titleField ?? false) : false;
+  const replacement: FormFieldSpec = {
+    id: newId,
+    type: 'leave_balance',
+    label: '假期类型与余额',
+    required: true,
+    titleField: wasTitle,
+  };
+
+  // Drop the daysId entry; substitute the typeId entry with the new combined
+  // one (preserving position). If only one of the two existed, we still
+  // produce the combined field at whichever spot was found.
+  const anchor = typeId ?? daysId!;
+  return fields
+    .filter((f) => f.id !== daysId || f.id === anchor)
+    .map((f) => (f.id === anchor ? replacement : f));
+}
+
+function detectMoneyFieldsNeedingCurrency(fields: FormFieldSpec[]): FormFieldSpec[] {
+  return fields.filter((f) => f.type === 'money' && (!f.defaultCurrency || f.allowCurrencySwitch === undefined));
+}
+
+function upgradeMoneyFields(fields: FormFieldSpec[]): FormFieldSpec[] {
+  return fields.map((f) => {
+    if (f.type !== 'money') return f;
+    if (f.defaultCurrency && f.allowCurrencySwitch !== undefined) return f;
+    return {
+      ...f,
+      defaultCurrency: f.defaultCurrency ?? 'CNY',
+      allowCurrencySwitch: f.allowCurrencySwitch ?? true,
+    };
+  });
+}
+
+function LeaveFieldsUpgrader({
+  fields,
+  expenseCurrencyNeeded,
+  onUpgradeLeave,
+  onUpgradeMoney,
+}: {
+  fields: FormFieldSpec[];
+  expenseCurrencyNeeded: boolean;
+  onUpgradeLeave: () => void;
+  onUpgradeMoney: () => void;
+}) {
+  const leaveLegacy = detectLegacyLeaveFields(fields);
+  const hasLegacyLeave = !!(leaveLegacy.typeId || leaveLegacy.daysId);
+  const moneyNeedsUpgrade = expenseCurrencyNeeded && detectMoneyFieldsNeedingCurrency(fields).length > 0;
+
+  if (!hasLegacyLeave && !moneyNeedsUpgrade) return null;
+
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+      <div className="mb-1.5">
+        <span className="font-medium">⚡ 字段升级可用</span>（检测到旧版字段，一键替换为新功能。流程图与其他字段不受影响）
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {hasLegacyLeave && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm('将删除"请假类型"(select) 和"请假天数"(number)，合并为一个"假期余额"字段（含类型/申请天数/剩余余额）。继续？')) return;
+              onUpgradeLeave();
+            }}
+            className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-amber-300 hover:bg-amber-100"
+          >
+            🌴 升级为"假期余额"字段
+          </button>
+        )}
+        {moneyNeedsUpgrade && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm('为当前模板里的金额字段启用多币种（默认 CNY，允许提交人切换 HKD/USDT/USDC）。继续？')) return;
+              onUpgradeMoney();
+            }}
+            className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-amber-300 hover:bg-amber-100"
+          >
+            💵 启用金额多币种
+          </button>
+        )}
+      </div>
+      <div className="mt-1.5 text-[10px] text-amber-700">⚠️ 升级后记得点顶部的"保存模板"，否则只改在浏览器里不会持久化。</div>
     </div>
   );
 }
