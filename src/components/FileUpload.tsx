@@ -33,7 +33,9 @@ export default function FileUpload({
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `上传失败 (${res.status})`);
+        // Prefer the human-readable `message` server returns; fall back to
+        // the code, then the bare status. Users saw silent fails before.
+        throw new Error(body.message || body.error || `上传失败 (HTTP ${res.status})`);
       }
       const uploaded: UploadedFile[] = await res.json();
       setFiles((prev) => {
@@ -91,7 +93,11 @@ export default function FileUpload({
         <input ref={inputRef} type="file" multiple accept={accept} onChange={onPick} className="hidden" />
       </div>
 
-      {err && <p className="text-xs text-rose-600">{err}</p>}
+      {err && (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          ⚠️ {err}
+        </div>
+      )}
 
       {files.length > 0 && (
         <ul className="space-y-2">
