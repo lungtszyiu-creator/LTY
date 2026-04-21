@@ -30,10 +30,12 @@ export default function AnnouncementsAdminClient({ initial, totalActive }: { ini
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [ok, setOk] = useState<string | null>(null);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) { setErr('标题和正文必填'); return; }
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setOk(null);
     try {
       const res = await fetch('/api/announcements', {
         method: 'POST',
@@ -45,12 +47,19 @@ export default function AnnouncementsAdminClient({ initial, totalActive }: { ini
           expiresAt: expires ? new Date(expires).toISOString() : null,
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? '发布失败');
-      const a = await res.json();
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload.error ?? payload.message ?? `发布失败 (HTTP ${res.status})`);
+      }
+      const a = payload;
+      if (!a || !a.id) {
+        throw new Error('服务器未返回公告 ID，可能未成功写入，请刷新页面确认');
+      }
       setItems((prev) => [{ ...a, createdBy: { id: '', name: '你', email: '' }, readingsCount: 0, publishedAt: a.publishedAt, expiresAt: a.expiresAt, createdAt: a.createdAt, updatedAt: a.updatedAt }, ...prev]);
       setTitle(''); setBody(''); setPinned(false); setExpires('');
+      setOk(`发布成功，公告已上墙。成员会收到邮件通知。`);
       router.refresh();
-    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e: any) { setErr(e.message || '发布失败（未知错误）'); } finally { setBusy(false); }
   }
 
   async function togglePin(a: Ann) {
@@ -98,7 +107,19 @@ export default function AnnouncementsAdminClient({ initial, totalActive }: { ini
             <input type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} className="input" />
           </div>
         </div>
-        {err && <p className="text-sm text-rose-600">{err}</p>}
+        {err && (
+          <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            ⚠️ {err}
+          </div>
+        )}
+        {ok && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <span>✓ {ok}</span>
+            <a href="/announcements" className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs text-white hover:bg-emerald-800">
+              前往公告页确认 →
+            </a>
+          </div>
+        )}
         <div className="flex justify-end">
           <button type="submit" disabled={busy} className="btn btn-primary">{busy ? '发布中…' : '发布'}</button>
         </div>

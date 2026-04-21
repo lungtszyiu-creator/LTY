@@ -15,13 +15,18 @@ const patchSchema = z.object({
   // list are removed, anything new is added. Optional: if omitted we leave
   // memberships alone.
   memberIds: z.array(z.string()).optional(),
+  // Per-member role override. Any id listed here becomes ADMIN of the
+  // department (= lets them approve reimbursements etc. through the
+  // INITIATOR_DEPT_LEAD / role-escalation pipeline). Members not in this
+  // array default to role=MEMBER.
+  memberAdminIds: z.array(z.string()).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   await requireAdmin();
   const data = patchSchema.parse(await req.json());
 
-  const { memberIds, ...rest } = data;
+  const { memberIds, memberAdminIds, ...rest } = data;
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.department.update({ where: { id: params.id }, data: rest });
@@ -29,10 +34,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       // Sync memberships: remove stale, add missing.
       const existing = await tx.departmentMembership.findMany({
         where: { departmentId: params.id },
-        select: { id: true, userId: true },
+        select: { id: true, userId: true, role: true },
       });
       const existingIds = new Set(existing.map((m) => m.userId));
       const targetIds = new Set(memberIds);
+      const adminSet = new Set(memberAdminIds ?? []);
       const toRemove = existing.filter((m) => !targetIds.has(m.userId)).map((m) => m.id);
       const toAdd = memberIds.filter((u) => !existingIds.has(u));
       if (toRemove.length) {
@@ -40,8 +46,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
       if (toAdd.length) {
         await tx.departmentMembership.createMany({
-          data: toAdd.map((userId) => ({ departmentId: params.id, userId })),
+          data: toAdd.map((userId) => ({
+            departmentId: params.id,
+            userId,
+            role: adminSet.has(userId) ? 'ADMIN' : 'MEMBER',
+          })),
           skipDuplicates: true,
+        });
+      }
+      // Flip role on existing rows so admin state matches the submitted list.
+      if (memberAdminIds) {
+        await tx.departmentMembership.updateMany({
+          where: { departmentId: params.id, userId: { in: memberIds.filter((u) => adminSet.has(u)) } },
+          data: { role: 'ADMIN' },
+        });
+        await tx.departmentMembership.updateMany({
+          where: {
+            departmentId: params.id,
+            userId: { in: memberIds.filter((u) => !adminSet.has(u)) },
+            role: 'ADMIN',
+          },
+          data: { role: 'MEMBER' },
         });
       }
     }

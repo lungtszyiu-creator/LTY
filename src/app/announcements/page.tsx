@@ -12,9 +12,10 @@ export default async function AnnouncementsPage() {
   if (!session?.user) redirect('/login');
 
   const isAdmin = hasMinRole(session.user.role as Role, 'ADMIN');
-  const now = new Date();
+  // Show every announcement — previously we filtered by expiresAt which hid
+  // freshly-posted announcements when timezone math went wrong. Expired ones
+  // now render with a "已过期" chip so nothing quietly disappears.
   const items = await prisma.announcement.findMany({
-    where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
     orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }],
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -44,6 +45,7 @@ export default async function AnnouncementsPage() {
       <AnnouncementsClient
         totalActive={totalActive}
         meId={session.user.id}
+        meRole={session.user.role}
         initial={items.map((a) => ({
           ...a,
           publishedAt: a.publishedAt.toISOString(),

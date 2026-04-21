@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
   // without having to poll /announcements.
   notifyAnnouncementPublished({
     announcementId: created.id,
+    authorId: admin.id,
     title: created.title,
     body: created.body,
     authorName: admin.name ?? admin.email ?? '管理员',

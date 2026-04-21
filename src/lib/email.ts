@@ -253,13 +253,17 @@ export async function notifyRewardStatusChanged(args: {
 
 export async function notifyAnnouncementPublished(args: {
   announcementId: string;
+  authorId?: string;
   title: string;
   body: string;
   authorName: string;
   pinned: boolean;
 }) {
+  // Only notify MEMBERs — authors and other admins already know the
+  // announcement is up, and flooding their inbox causes them to mute the
+  // channel. Extras configured in notification settings still get added.
   const members = await prisma.user.findMany({
-    where: { active: true },
+    where: { active: true, role: 'MEMBER', id: args.authorId ? { not: args.authorId } : undefined },
     select: { email: true },
   });
   const baseEmails = members.map((m) => m.email).filter((e): e is string => !!e);

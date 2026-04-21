@@ -143,9 +143,19 @@ function DeptCard({
   const [description, setDescription] = useState(dept.description ?? '');
   const [leadUserId, setLeadUserId] = useState(dept.leadUserId ?? '');
   const [memberIds, setMemberIds] = useState<string[]>(dept.memberships.map((m) => m.userId));
+  const [adminIds, setAdminIds] = useState<string[]>(
+    dept.memberships.filter((m) => m.role === 'ADMIN').map((m) => m.userId)
+  );
 
   function toggleMember(id: string) {
     setMemberIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    // If a user is removed from the dept, they also lose the admin flag.
+    if (memberIds.includes(id)) setAdminIds((prev) => prev.filter((x) => x !== id));
+  }
+
+  function toggleAdmin(id: string) {
+    if (!memberIds.includes(id)) return;
+    setAdminIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function save() {
@@ -154,6 +164,7 @@ function DeptCard({
       description: description || null,
       leadUserId: leadUserId || null,
       memberIds,
+      memberAdminIds: adminIds.filter((id) => memberIds.includes(id)),
     });
     setEditing(false);
   }
@@ -191,14 +202,18 @@ function DeptCard({
             <div className="text-xs text-slate-400">还没有添加成员</div>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
-              {dept.memberships.map((m) => (
-                <li key={m.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
-                    {initialOf(m.user.name ?? m.user.email)}
-                  </span>
-                  {m.user.name ?? m.user.email}
-                </li>
-              ))}
+              {dept.memberships.map((m) => {
+                const isAdmin = m.role === 'ADMIN';
+                return (
+                  <li key={m.id} className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs ${isAdmin ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100'}`}>
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[9px] font-semibold text-white">
+                      {initialOf(m.user.name ?? m.user.email)}
+                    </span>
+                    {m.user.name ?? m.user.email}
+                    {isAdmin && <span className="text-[10px] font-semibold">· {dept.name}管理员</span>}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
@@ -220,24 +235,47 @@ function DeptCard({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">成员（多选）</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
+              成员 · 勾选"管" = 部门管理员（可审批本部门报销等，但无法审批自己的单，且本人发起的审批会自动升级到总管理者）
+            </label>
             <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
               <ul className="space-y-0.5">
-                {users.map((u) => (
-                  <li key={u.id}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
-                      <input
-                        type="checkbox"
-                        checked={memberIds.includes(u.id)}
-                        onChange={() => toggleMember(u.id)}
-                      />
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[10px] font-semibold text-white">
-                        {initialOf(u.name ?? u.email)}
-                      </span>
-                      <span>{u.name ?? u.email}</span>
-                    </label>
-                  </li>
-                ))}
+                {users.map((u) => {
+                  const isMember = memberIds.includes(u.id);
+                  const isAdmin = adminIds.includes(u.id);
+                  return (
+                    <li key={u.id}>
+                      <div className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={isMember}
+                          onChange={() => toggleMember(u.id)}
+                          aria-label="部门成员"
+                        />
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-rose-300 to-red-400 text-[10px] font-semibold text-white">
+                          {initialOf(u.name ?? u.email)}
+                        </span>
+                        <span className="flex-1">{u.name ?? u.email}</span>
+                        <label className={`inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[11px] ring-1 transition ${
+                          isAdmin && isMember
+                            ? 'bg-amber-500 text-white ring-amber-500'
+                            : isMember
+                              ? 'bg-white text-slate-500 ring-slate-200 hover:bg-amber-50'
+                              : 'cursor-not-allowed bg-slate-50 text-slate-300 ring-slate-100'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            disabled={!isMember}
+                            checked={isAdmin}
+                            onChange={() => toggleAdmin(u.id)}
+                          />
+                          管
+                        </label>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>

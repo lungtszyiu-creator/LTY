@@ -3,7 +3,10 @@ import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { parseFields, parseFlow, APPROVAL_CATEGORY_META, FIELD_TYPE_META } from '@/lib/approvalFlow';
+import {
+  parseFields, parseFlow, APPROVAL_CATEGORY_META, FIELD_TYPE_META,
+  CURRENCY_META, parseMoneyValue, parseLeaveBalanceValue,
+} from '@/lib/approvalFlow';
 import { fmtDateTime } from '@/lib/datetime';
 import InstanceActions from './InstanceActions';
 import CancelButton from './CancelButton';
@@ -132,7 +135,23 @@ export default async function ApprovalInstancePage({
             if (v !== undefined && v !== null && v !== '') {
               if (f.type === 'daterange' && Array.isArray(v)) display = `${v[0]} 至 ${v[1]}`;
               else if (f.type === 'multiselect' && Array.isArray(v)) display = v.join('、');
-              else if (f.type === 'money') display = `¥ ${v}`;
+              else if (f.type === 'money') {
+                const m = parseMoneyValue(v, (f.defaultCurrency as any) ?? 'CNY');
+                const meta = CURRENCY_META[m.currency];
+                display = m.amount == null
+                  ? <span className="text-slate-400">未填写</span>
+                  : <span><span className="font-semibold">{meta.symbol} {m.amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> <span className="ml-1 text-xs text-slate-500">{meta.icon} {meta.label}</span></span>;
+              }
+              else if (f.type === 'leave_balance') {
+                const lb = parseLeaveBalanceValue(v);
+                display = !lb.category
+                  ? <span className="text-slate-400">未填写</span>
+                  : <span>
+                      <span className="font-semibold">{lb.category}</span>
+                      {lb.days != null && <span className="ml-1">· 申请 {lb.days} 天</span>}
+                      {lb.balance != null && <span className="ml-1 text-slate-500">· 剩余 {lb.balance} 天</span>}
+                    </span>;
+              }
               else display = String(v);
             }
             return (

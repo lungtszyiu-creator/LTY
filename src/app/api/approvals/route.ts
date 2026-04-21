@@ -76,19 +76,41 @@ export async function POST(req: NextRequest) {
   for (const f of fields) {
     if (f.required) {
       const v = data.form[f.id];
-      const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+      let empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+      if (!empty && f.type === 'money' && v && typeof v === 'object') {
+        empty = v.amount === undefined || v.amount === null || v.amount === '' || Number.isNaN(Number(v.amount));
+      }
+      if (!empty && f.type === 'leave_balance' && v && typeof v === 'object') {
+        empty = !v.category || v.days === undefined || v.days === null || v.days === '';
+      }
       if (empty) {
         return NextResponse.json({ error: 'REQUIRED_FIELD_MISSING', field: f.label }, { status: 400 });
       }
     }
   }
 
-  // Derive title: prefer a field flagged titleField, else template name + date
+  // Derive title: prefer a field flagged titleField, else template name + date.
+  // money / leave_balance fields carry structured objects — summarise them to
+  // a readable slug so titles like "报销申请 · 报销金额" don't show [object].
   let title = tpl.name;
   const titleField = fields.find((f) => f.titleField);
-  if (titleField && data.form[titleField.id]) {
+  if (titleField && data.form[titleField.id] !== undefined && data.form[titleField.id] !== null && data.form[titleField.id] !== '') {
     const v = data.form[titleField.id];
-    title = `${tpl.name} · ${Array.isArray(v) ? v.join('、') : String(v)}`;
+    let slug: string;
+    if (Array.isArray(v)) {
+      slug = v.join('、');
+    } else if (v && typeof v === 'object') {
+      if (titleField.type === 'money' && 'amount' in v) {
+        slug = `${v.amount ?? ''} ${v.currency ?? ''}`.trim();
+      } else if (titleField.type === 'leave_balance' && 'category' in v) {
+        slug = `${v.category ?? ''}${v.days != null ? ` ${v.days} 天` : ''}`.trim();
+      } else {
+        slug = JSON.stringify(v);
+      }
+    } else {
+      slug = String(v);
+    }
+    if (slug) title = `${tpl.name} · ${slug}`;
   }
 
   // Sanity: start node exists

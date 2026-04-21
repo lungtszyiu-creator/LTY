@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { fmtDateTime } from '@/lib/datetime';
 
@@ -16,13 +17,29 @@ type Item = {
 };
 
 export default function ReportHistoryList({
-  items,
+  items: initial,
   emptyMessage = '暂无历史记录',
+  canDelete = false,
 }: {
   items: Item[];
   emptyMessage?: string;
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
+  const [items, setItems] = useState(initial);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  async function remove(id: string) {
+    if (!confirm('⚠️ 永久删除这条汇报记录？此操作不可恢复。')) return;
+    const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error ?? '删除失败');
+      return;
+    }
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    router.refresh();
+  }
 
   if (items.length === 0) {
     return <div className="card py-10 text-center text-sm text-slate-500">{emptyMessage}</div>;
@@ -61,6 +78,16 @@ export default function ReportHistoryList({
                 {r.contentAsks && <Block label="需要支持" value={r.contentAsks} />}
                 {!r.contentDone && !r.contentPlan && !r.contentBlockers && !r.contentAsks && (
                   <div className="text-center text-xs text-slate-400">（未填写内容）</div>
+                )}
+                {canDelete && (
+                  <div className="flex justify-end border-t border-rose-100 pt-3 mt-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); remove(r.id); }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-600 hover:text-white"
+                    >
+                      🗑 永久删除该记录（仅总管理者）
+                    </button>
+                  </div>
                 )}
               </div>
             )}

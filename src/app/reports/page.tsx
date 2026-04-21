@@ -67,6 +67,25 @@ export default async function MyReportsPage({
         </div>
       </div>
 
+      {incomingCount > 0 && tab === 'mine' && (
+        <a
+          href={`/reports?tab=incoming&type=${type}`}
+          className="mb-5 flex items-center gap-3 rounded-xl border border-indigo-300 bg-gradient-to-r from-indigo-50 via-white to-indigo-50 p-4 transition hover:shadow-md rise rise-delay-1"
+        >
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xl text-white">
+            📬
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-xs font-bold text-white">
+              {incomingCount}
+            </span>
+          </div>
+          <div className="flex-1">
+            <div className="font-semibold text-indigo-900">你有 {incomingCount} 份汇报等你查阅</div>
+            <div className="text-xs text-indigo-700">下属已提交工作汇报给你，点此查看 →</div>
+          </div>
+          <span className="text-indigo-600">→</span>
+        </a>
+      )}
+
       <div className="mb-5 flex flex-wrap gap-2 rise rise-delay-1">
         <a href={`/reports?tab=mine&type=${type}`} className={`rounded-full px-4 py-1.5 text-sm transition ${tab === 'mine' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
           我的汇报
@@ -131,6 +150,7 @@ export default async function MyReportsPage({
           <section className="mt-8 rise rise-delay-3">
             <h2 className="mb-3 text-lg font-semibold">历史 {type === 'WEEKLY' ? '周报' : '月报'}</h2>
             <ReportHistoryList
+              canDelete={session.user.role === 'SUPER_ADMIN'}
               items={history.map((r) => ({
                 id: r.id,
                 periodLabel: formatPeriod(r.type as any, r.periodStart, r.periodEnd),

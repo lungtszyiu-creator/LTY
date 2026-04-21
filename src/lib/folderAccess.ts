@@ -2,7 +2,8 @@ import { prisma } from './db';
 
 export type FolderAccessDecision = {
   canView: boolean;
-  canEdit: boolean;
+  canEdit: boolean;   // manage the folder (settings, delete, sub-folder creation)
+  canUpload: boolean; // upload files into the folder — typically wider than canEdit
   effectiveFolderId: string | null;
   effectiveVisibility: 'PUBLIC' | 'DEPARTMENT' | 'PRIVATE' | 'INHERIT';
   reason: string;
@@ -20,9 +21,12 @@ export async function resolveFolderAccess(
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
 
   if (!folderId) {
+    // Root level: admins can create/manage root folders; everyone can
+    // upload orphan files (members need an on-ramp to share files at all).
     return {
       canView: true,
       canEdit: isAdmin,
+      canUpload: true,
       effectiveFolderId: null,
       effectiveVisibility: 'PUBLIC',
       reason: 'root-level',
@@ -37,7 +41,7 @@ export async function resolveFolderAccess(
     },
   });
   if (!cursor) {
-    return { canView: false, canEdit: false, effectiveFolderId: null, effectiveVisibility: 'PRIVATE', reason: 'not-found' };
+    return { canView: false, canEdit: false, canUpload: false, effectiveFolderId: null, effectiveVisibility: 'PRIVATE', reason: 'not-found' };
   }
 
   // Check if the user is a creator anywhere up the chain — a folder's owner
@@ -61,25 +65,22 @@ export async function resolveFolderAccess(
     climbed = parent;
   }
 
-  // Admin override — global read/write.
   if (isAdmin) {
-    return { canView: true, canEdit: true, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: node?.visibility ?? 'INHERIT', reason: 'admin-override' };
+    return { canView: true, canEdit: true, canUpload: true, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: node?.visibility ?? 'INHERIT', reason: 'admin-override' };
   }
 
-  // Creator always owns view + edit, regardless of visibility. Matches user
-  // expectation that folders they built never lock them out.
   if (isCreatorAlongChain) {
-    return { canView: true, canEdit: true, effectiveFolderId: cursor.id, effectiveVisibility: node?.visibility ?? cursor.visibility, reason: 'creator' };
+    return { canView: true, canEdit: true, canUpload: true, effectiveFolderId: cursor.id, effectiveVisibility: node?.visibility ?? cursor.visibility, reason: 'creator' };
   }
 
-  // If the effective visibility is still INHERIT (no ancestor set it
-  // explicitly), treat it as PUBLIC — that's the documented root default.
   if (!node || node.visibility === 'INHERIT') {
-    return { canView: true, canEdit: false, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: 'PUBLIC', reason: 'inherit-root-public' };
+    // PUBLIC fallback at root. Members can upload here so they can share
+    // files with the company; only admins manage the folder itself.
+    return { canView: true, canEdit: false, canUpload: true, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: 'PUBLIC', reason: 'inherit-root-public' };
   }
 
   if (node.visibility === 'PUBLIC') {
-    return { canView: true, canEdit: false, effectiveFolderId: node.id, effectiveVisibility: 'PUBLIC', reason: 'public' };
+    return { canView: true, canEdit: false, canUpload: true, effectiveFolderId: node.id, effectiveVisibility: 'PUBLIC', reason: 'public' };
   }
 
   if (node.visibility === 'DEPARTMENT') {
@@ -88,6 +89,7 @@ export async function resolveFolderAccess(
     return {
       canView: isDeptMember,
       canEdit: false,
+      canUpload: isDeptMember, // dept members can drop files into their own dept folder
       effectiveFolderId: node.id,
       effectiveVisibility: 'DEPARTMENT',
       reason: isDeptMember ? 'department-member' : 'not-in-department',
@@ -97,9 +99,11 @@ export async function resolveFolderAccess(
   // PRIVATE: only explicit FolderMember rows see it.
   const explicit = (node.members ?? []).find((m: any) => m.userId === user.id);
   if (explicit) {
+    const canEdit = explicit.access === 'EDIT';
     return {
       canView: true,
-      canEdit: explicit.access === 'EDIT',
+      canEdit,
+      canUpload: canEdit,
       effectiveFolderId: node.id,
       effectiveVisibility: 'PRIVATE',
       reason: 'explicit-member',
@@ -108,6 +112,7 @@ export async function resolveFolderAccess(
   return {
     canView: false,
     canEdit: false,
+    canUpload: false,
     effectiveFolderId: node.id,
     effectiveVisibility: 'PRIVATE',
     reason: 'no-access',

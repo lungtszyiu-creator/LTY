@@ -2,7 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { parseFields, parseFlow, APPROVAL_CATEGORY_META } from '@/lib/approvalFlow';
+import {
+  parseFields, parseFlow, APPROVAL_CATEGORY_META,
+  CURRENCY_META, LEAVE_BALANCE_CATEGORIES,
+  parseMoneyValue, parseLeaveBalanceValue,
+  type Currency,
+} from '@/lib/approvalFlow';
 
 type Tpl = {
   id: string;
@@ -35,7 +40,14 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
     for (const f of fields) {
       if (f.required) {
         const v = values[f.id];
-        const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+        let empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+        // money + leave_balance use structured shapes; empty-check drills in.
+        if (!empty && f.type === 'money' && v && typeof v === 'object') {
+          empty = v.amount === undefined || v.amount === null || v.amount === '';
+        }
+        if (!empty && f.type === 'leave_balance' && v && typeof v === 'object') {
+          empty = !v.category || v.days === undefined || v.days === null || v.days === '';
+        }
         if (empty) { setErr(`"${f.label}" 是必填项`); return; }
       }
     }
@@ -110,12 +122,90 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                 {f.type === 'number' && (
                   <input type="number" value={values[f.id] ?? ''} onChange={(e) => update(f.id, e.target.value)} className="input" />
                 )}
-                {f.type === 'money' && (
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">¥</span>
-                    <input type="number" step="0.01" value={values[f.id] ?? ''} onChange={(e) => update(f.id, e.target.value)} className="input pl-7" placeholder="0.00" />
-                  </div>
-                )}
+                {f.type === 'money' && (() => {
+                  const parsed = parseMoneyValue(values[f.id], (f.defaultCurrency ?? 'CNY') as Currency);
+                  const currency: Currency = parsed.currency;
+                  const allowSwitch = f.allowCurrencySwitch !== false;
+                  const sym = CURRENCY_META[currency].symbol;
+                  const setAmount = (amt: string) => update(f.id, { amount: amt === '' ? '' : Number(amt), currency });
+                  const setCurrency = (c: Currency) => update(f.id, { amount: parsed.amount ?? '', currency: c });
+                  return (
+                    <div className="flex items-stretch gap-2">
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">{sym}</span>
+                        <input
+                          type="number" step="0.01"
+                          value={parsed.amount ?? ''}
+                          onChange={(e) => setAmount(e.target.value)}
+                          className="input pl-10"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      {allowSwitch ? (
+                        <select
+                          value={currency}
+                          onChange={(e) => setCurrency(e.target.value as Currency)}
+                          className="select w-32 shrink-0"
+                        >
+                          {Object.entries(CURRENCY_META).map(([k, v]) => (
+                            <option key={k} value={k}>{v.icon} {v.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="inline-flex shrink-0 items-center rounded-lg bg-slate-100 px-3 text-sm text-slate-700 ring-1 ring-slate-200">
+                          {CURRENCY_META[currency].icon} {CURRENCY_META[currency].label}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+                {f.type === 'leave_balance' && (() => {
+                  const parsed = parseLeaveBalanceValue(values[f.id]);
+                  const patch = (p: Partial<{ category: string; days: any; balance: any }>) =>
+                    update(f.id, { category: parsed.category, days: parsed.days, balance: parsed.balance, ...p });
+                  return (
+                    <div className="space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500">假期类型</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {LEAVE_BALANCE_CATEGORIES.map((c) => {
+                            const on = parsed.category === c;
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => patch({ category: c })}
+                                className={`rounded-full px-3 py-1 text-xs transition ${on ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'}`}
+                              >
+                                {c}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs text-slate-500">本次申请（天）</span>
+                          <input
+                            type="number" min="0" step="0.5"
+                            value={parsed.days ?? ''}
+                            onChange={(e) => patch({ days: e.target.value === '' ? '' : Number(e.target.value) })}
+                            className="input" placeholder="例如 1 / 0.5"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs text-slate-500">当前剩余（天，自报）</span>
+                          <input
+                            type="number" min="0" step="0.5"
+                            value={parsed.balance ?? ''}
+                            onChange={(e) => patch({ balance: e.target.value === '' ? '' : Number(e.target.value) })}
+                            className="input" placeholder="剩余可用天数"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {f.type === 'date' && (
                   <input type="date" value={values[f.id] ?? ''} onChange={(e) => update(f.id, e.target.value)} className="input" />
                 )}

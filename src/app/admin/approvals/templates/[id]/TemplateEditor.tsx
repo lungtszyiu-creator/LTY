@@ -322,9 +322,8 @@ function EditorInner({
       setName((n) => n || '请假申请');
       setCategory('LEAVE');
       newFields = [
-        { id: fid(), type: 'select', label: '请假类型', required: true, options: ['年假', '病假', '事假', '婚假', '产假', '陪产假', '丧假'], titleField: true },
+        { id: fid(), type: 'leave_balance', label: '假期类型与余额', required: true, titleField: true },
         { id: fid(), type: 'daterange', label: '请假起止日期', required: true },
-        { id: fid(), type: 'number', label: '请假天数', required: true },
         { id: fid(), type: 'textarea', label: '请假事由', required: true, placeholder: '请简述原因' },
         { id: fid(), type: 'textarea', label: '工作交接', required: false, placeholder: '由谁代替完成哪些工作' },
         { id: fid(), type: 'attachment', label: '证明材料（如需）' },
@@ -338,7 +337,7 @@ function EditorInner({
       setCategory('EXPENSE');
       newFields = [
         { id: fid(), type: 'select', label: '费用类别', required: true, options: ['差旅', '餐饮', '交通', '办公用品', '通讯', '培训', '其他'], titleField: true },
-        { id: fid(), type: 'money', label: '报销金额', required: true },
+        { id: fid(), type: 'money', label: '报销金额', required: true, defaultCurrency: 'CNY', allowCurrencySwitch: true },
         { id: fid(), type: 'date', label: '发生日期', required: true },
         { id: fid(), type: 'textarea', label: '费用说明', required: true, placeholder: '具体用途、参与人、事由' },
         { id: fid(), type: 'attachment', label: '发票 / 凭证', required: true },
@@ -658,6 +657,36 @@ function EditorInner({
                         />
                       </div>
                     )}
+                    {f.type === 'money' && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                        <label className="flex items-center gap-1 text-slate-600">
+                          默认币种
+                          <select
+                            value={f.defaultCurrency ?? 'CNY'}
+                            onChange={(e) => updateField(f.id, { defaultCurrency: e.target.value as any })}
+                            className="rounded bg-white px-1.5 py-0.5 text-[11px] ring-1 ring-slate-200"
+                          >
+                            <option value="CNY">💴 RMB 人民币</option>
+                            <option value="HKD">💶 HKD 港币</option>
+                            <option value="USDT">🟢 USDT</option>
+                            <option value="USDC">🔵 USDC</option>
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1 text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={f.allowCurrencySwitch !== false}
+                            onChange={(e) => updateField(f.id, { allowCurrencySwitch: e.target.checked })}
+                          />
+                          允许提交人切换币种
+                        </label>
+                      </div>
+                    )}
+                    {f.type === 'leave_balance' && (
+                      <div className="mt-1 rounded bg-indigo-50 px-2 py-1 text-[11px] text-indigo-800 ring-1 ring-indigo-100">
+                        ℹ️ 提交人会看到：假期类型（年假/调休/病假/事假/其他）+ 本次申请天数 + 当前剩余天数
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -681,7 +710,7 @@ function ApprovalSettings({
   const d: any = node.data;
   const selected: string[] = d.approvers ?? [];
   const mode: 'ALL' | 'ANY' = d.mode ?? 'ALL';
-  const source: 'SPECIFIC' | 'INITIATOR_DEPT_LEAD' | 'DEPT_LEAD' = d.approverSource ?? 'SPECIFIC';
+  const source: 'SPECIFIC' | 'INITIATOR_DEPT_LEAD' | 'DEPT_LEAD' | 'FOUNDER' = d.approverSource ?? 'SPECIFIC';
 
   function toggle(id: string) {
     onChange({ approvers: selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id] });
@@ -699,8 +728,9 @@ function ApprovalSettings({
         <div className="grid grid-cols-1 gap-1">
           {[
             { v: 'SPECIFIC',              label: '指定成员' },
-            { v: 'INITIATOR_DEPT_LEAD',   label: '发起人所在部门的负责人' },
+            { v: 'INITIATOR_DEPT_LEAD',   label: '发起人所在部门的负责人（管理层自动升级到总管理者）' },
             { v: 'DEPT_LEAD',             label: '指定部门的负责人' },
+            { v: 'FOUNDER',               label: '总管理者（SUPER_ADMIN · 防监守自盗）' },
           ].map((opt) => (
             <label key={opt.v} className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs ring-1 ${source === opt.v ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}>
               <input type="radio" className="hidden" checked={source === opt.v} onChange={() => onChange({ approverSource: opt.v })} />

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const folderId = req.nextUrl.searchParams.get('folderId');
   if (folderId) {
     const access = await resolveFolderAccess(folderId, { id: user.id, role: user.role });
-    if (!access.canEdit) {
+    if (!access.canUpload) {
       return NextResponse.json({ error: 'NO_UPLOAD_PERMISSION' }, { status: 403 });
     }
   }

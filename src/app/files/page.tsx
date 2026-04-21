@@ -19,7 +19,7 @@ export default async function FilesPage({
 
   const access = folderId
     ? await resolveFolderAccess(folderId, { id: session.user.id, role: session.user.role })
-    : { canView: true, canEdit: session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN', effectiveFolderId: null, effectiveVisibility: 'PUBLIC' as const, reason: 'root' };
+    : { canView: true, canEdit: session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN', canUpload: true, effectiveFolderId: null, effectiveVisibility: 'PUBLIC' as const, reason: 'root' };
 
   if (folderId && !access.canView) {
     return (

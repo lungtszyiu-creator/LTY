@@ -26,6 +26,7 @@ const MORE_LINKS = [
 
 const ADMIN_LINKS = [
   { href: '/admin/tasks/new',            label: '发布任务' },
+  { href: '/admin/approvals',            label: '审批后台' },
   { href: '/admin/approvals/templates',  label: '审批模板' },
   { href: '/admin/announcements',        label: '公告管理' },
   { href: '/admin/reports',              label: '汇报汇总' },
@@ -38,6 +39,8 @@ const ADMIN_LINKS = [
   { href: '/admin/notifications/settings', label: '通知设置' },
 ];
 
+type Badges = { unreadAnnouncements: number; pendingApprovals: number; incomingReports: number };
+
 export default function Nav() {
   const { data } = useSession();
   const user = data?.user;
@@ -45,10 +48,29 @@ export default function Nav() {
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [badges, setBadges] = useState<Badges>({ unreadAnnouncements: 0, pendingApprovals: 0, incomingReports: 0 });
   const adminRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); }, [pathname]);
+
+  // Poll badges every 60s + refresh on nav change so returning from an email
+  // link reflects the current state without a full page reload.
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/me/badges', { cache: 'no-store' });
+        if (!res.ok) return;
+        const b = await res.json();
+        if (alive) setBadges(b);
+      } catch { /* network hiccups are fine — we'll try again */ }
+    }
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [user, pathname]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -91,11 +113,14 @@ export default function Nav() {
 
         {/* Desktop nav: fixed-sized pill row so items stay aligned regardless of label length */}
         <nav className="hidden items-center gap-1 md:flex">
-          {PUBLIC_LINKS.map((l) => (
-            <NavLink key={l.href} href={l.href} active={pathname === l.href || (l.href !== '/dashboard' && !!pathname?.startsWith(l.href))}>
-              {l.label}
-            </NavLink>
-          ))}
+          {PUBLIC_LINKS.map((l) => {
+            const badge = badgeForHref(l.href, badges);
+            return (
+              <NavLink key={l.href} href={l.href} active={pathname === l.href || (l.href !== '/dashboard' && !!pathname?.startsWith(l.href))} badge={badge}>
+                {l.label}
+              </NavLink>
+            );
+          })}
           <div ref={moreRef} className="relative">
             <button
               type="button"
@@ -214,9 +239,12 @@ export default function Nav() {
         <div className="border-t border-slate-900/5 bg-white/95 backdrop-blur-xl md:hidden">
           <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
-              {PUBLIC_LINKS.map((l) => (
-                <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
-              ))}
+              {PUBLIC_LINKS.map((l) => {
+                const badge = badgeForHref(l.href, badges);
+                return (
+                  <MobileLink key={l.href} href={l.href} active={pathname === l.href} badge={badge}>{l.label}</MobileLink>
+                );
+              })}
               <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">更多</li>
               {MORE_LINKS.map((l) => (
                 <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
@@ -252,7 +280,24 @@ export default function Nav() {
   );
 }
 
-function NavLink({ href, children, active }: { href: string; children: React.ReactNode; active: boolean }) {
+function badgeForHref(href: string, b: Badges): number {
+  if (href === '/announcements') return b.unreadAnnouncements;
+  if (href === '/approvals')     return b.pendingApprovals;
+  if (href === '/reports')       return b.incomingReports;
+  return 0;
+}
+
+function BadgeDot({ count }: { count: number }) {
+  if (!count) return null;
+  const label = count > 99 ? '99+' : String(count);
+  return (
+    <span className="pointer-events-none absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+      {label}
+    </span>
+  );
+}
+
+function NavLink({ href, children, active, badge = 0 }: { href: string; children: React.ReactNode; active: boolean; badge?: number }) {
   return (
     <Link
       href={href}
@@ -264,11 +309,12 @@ function NavLink({ href, children, active }: { href: string; children: React.Rea
       style={active ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
     >
       {children}
+      <BadgeDot count={badge} />
     </Link>
   );
 }
 
-function MobileLink({ href, children, active }: { href: string; children: React.ReactNode; active: boolean }) {
+function MobileLink({ href, children, active, badge = 0 }: { href: string; children: React.ReactNode; active: boolean; badge?: number }) {
   return (
     <li>
       <Link
@@ -280,7 +326,14 @@ function MobileLink({ href, children, active }: { href: string; children: React.
         }`}
         style={active ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
       >
-        <span>{children}</span>
+        <span className="flex items-center gap-2">
+          {children}
+          {badge > 0 && (
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
+        </span>
         <svg className="h-4 w-4 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5l7 7-7 7" /></svg>
       </Link>
     </li>

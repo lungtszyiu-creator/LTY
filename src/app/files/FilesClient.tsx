@@ -26,6 +26,7 @@ type CurrentFolder = {
 type Access = {
   canView: boolean;
   canEdit: boolean;
+  canUpload: boolean;
   effectiveVisibility: string;
   effectiveFolderId: string | null;
   reason: string;
@@ -237,20 +238,24 @@ export default function FilesClient({
         <div className="text-sm text-slate-500">
           {children.length} 个文件夹 · {files.length} 个文件
         </div>
-        {access.canEdit && (
+        {(access.canEdit || access.canUpload) && (
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setCreatingFolder((v) => !v)} className="btn btn-ghost">
-              {creatingFolder ? '取消' : '+ 新建文件夹'}
-            </button>
-            <label className="btn btn-primary cursor-pointer">
-              <input
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => uploadFiles(e.target.files)}
-              />
-              上传文件
-            </label>
+            {access.canEdit && (
+              <button onClick={() => setCreatingFolder((v) => !v)} className="btn btn-ghost">
+                {creatingFolder ? '取消' : '+ 新建文件夹'}
+              </button>
+            )}
+            {access.canUpload && (
+              <label className="btn btn-primary cursor-pointer">
+                <input
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => uploadFiles(e.target.files)}
+                />
+                上传文件
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -347,7 +352,7 @@ export default function FilesClient({
 
       {children.length === 0 && files.length === 0 && (
         <div className="card py-14 text-center text-sm text-slate-500">
-          这里还没有内容。{access.canEdit ? '点上面的按钮上传文件或建文件夹。' : '等有权限的同事上传内容。'}
+          这里还没有内容。{access.canUpload ? '点上面的按钮上传文件或建文件夹。' : '等有权限的同事上传内容。'}
         </div>
       )}
     </div>

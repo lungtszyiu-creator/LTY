@@ -3,7 +3,20 @@
 
 export type FieldType =
   | 'text' | 'textarea' | 'number' | 'money' | 'date' | 'daterange'
-  | 'select' | 'multiselect' | 'user' | 'department' | 'attachment';
+  | 'select' | 'multiselect' | 'user' | 'department' | 'attachment'
+  | 'leave_balance';
+
+export type Currency = 'CNY' | 'HKD' | 'USDT' | 'USDC';
+
+export const CURRENCY_META: Record<Currency, { label: string; symbol: string; icon: string }> = {
+  CNY:  { label: 'RMB 人民币',  symbol: '¥',    icon: '💴' },
+  HKD:  { label: 'HKD 港币',    symbol: 'HK$',  icon: '💶' },
+  USDT: { label: 'USDT',        symbol: '₮',    icon: '🟢' },
+  USDC: { label: 'USDC',        symbol: '$',    icon: '🔵' },
+};
+
+export const LEAVE_BALANCE_CATEGORIES = ['年假', '调休', '事假', '病假', '其他'] as const;
+export type LeaveBalanceCategory = typeof LEAVE_BALANCE_CATEGORIES[number];
 
 export type FormFieldSpec = {
   id: string;           // stable id inside a template
@@ -13,9 +26,49 @@ export type FormFieldSpec = {
   required?: boolean;
   options?: string[];   // for select / multiselect
   titleField?: boolean; // if true, this field's value becomes instance title
+  // money-only:
+  defaultCurrency?: Currency;     // default picked; falls back to CNY
+  allowCurrencySwitch?: boolean;  // if true, submitter can change currency; else fixed
 };
 
-export type ApproverSource = 'SPECIFIC' | 'INITIATOR_DEPT_LEAD' | 'DEPT_LEAD';
+// Deserialize whatever's in formJson for a money field into a normalised
+// { amount, currency } shape. Tolerates legacy number-only values (old
+// instances submitted before the currency field existed).
+export function parseMoneyValue(v: unknown, fallback: Currency = 'CNY'): { amount: number | null; currency: Currency } {
+  if (v == null || v === '') return { amount: null, currency: fallback };
+  if (typeof v === 'number') return { amount: v, currency: fallback };
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return { amount: Number.isFinite(n) ? n : null, currency: fallback };
+  }
+  if (typeof v === 'object') {
+    const o = v as any;
+    const amt = typeof o.amount === 'number' ? o.amount : (o.amount != null ? Number(o.amount) : null);
+    const cur = (o.currency as Currency) ?? fallback;
+    return { amount: Number.isFinite(amt) ? amt : null, currency: CURRENCY_META[cur] ? cur : fallback };
+  }
+  return { amount: null, currency: fallback };
+}
+
+// Same shape-tolerant parser for leave_balance values.
+export function parseLeaveBalanceValue(v: unknown): { category: string; days: number | null; balance: number | null } {
+  const empty = { category: '', days: null as number | null, balance: null as number | null };
+  if (!v || typeof v !== 'object') return empty;
+  const o = v as any;
+  const days = o.days != null && o.days !== '' ? Number(o.days) : null;
+  const balance = o.balance != null && o.balance !== '' ? Number(o.balance) : null;
+  return {
+    category: typeof o.category === 'string' ? o.category : '',
+    days: Number.isFinite(days) ? days : null,
+    balance: Number.isFinite(balance) ? balance : null,
+  };
+}
+
+export type ApproverSource =
+  | 'SPECIFIC'              // explicit list of user ids
+  | 'INITIATOR_DEPT_LEAD'   // initiator's department lead(s)
+  | 'DEPT_LEAD'             // a specific department's lead
+  | 'FOUNDER';              // all active SUPER_ADMIN users — highest integrity anchor
 export type ConditionOp = '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains';
 
 export type FlowNodeData = {
@@ -63,17 +116,18 @@ export const APPROVAL_CATEGORY_META: Record<string, { label: string; icon: strin
 };
 
 export const FIELD_TYPE_META: Record<FieldType, { label: string; icon: string }> = {
-  text:        { label: '单行文本',  icon: '📝' },
-  textarea:    { label: '多行文本',  icon: '📄' },
-  number:      { label: '数字',      icon: '🔢' },
-  money:       { label: '金额',      icon: '💵' },
-  date:        { label: '日期',      icon: '📅' },
-  daterange:   { label: '日期区间',  icon: '📆' },
-  select:      { label: '单选',      icon: '◉' },
-  multiselect: { label: '多选',      icon: '☑' },
-  user:        { label: '成员选择',  icon: '👤' },
-  department:  { label: '部门选择',  icon: '🏢' },
-  attachment:  { label: '附件',      icon: '📎' },
+  text:          { label: '单行文本',        icon: '📝' },
+  textarea:      { label: '多行文本',        icon: '📄' },
+  number:        { label: '数字',            icon: '🔢' },
+  money:         { label: '金额（多币种）',  icon: '💵' },
+  date:          { label: '日期',            icon: '📅' },
+  daterange:     { label: '日期区间',        icon: '📆' },
+  select:        { label: '单选',            icon: '◉' },
+  multiselect:   { label: '多选',            icon: '☑' },
+  user:          { label: '成员选择',        icon: '👤' },
+  department:    { label: '部门选择',        icon: '🏢' },
+  attachment:    { label: '附件',            icon: '📎' },
+  leave_balance: { label: '假期余额（年假/调休）', icon: '🌴' },
 };
 
 // Walk the flow graph forward from `from` (a node id) and return the first
@@ -95,7 +149,13 @@ export function evaluateCondition(
 ): string | null {
   const { field, op, value, trueTargetId, falseTargetId } = node.data;
   if (!field || !op) return nextNodeId(flow, node.id);
-  const actual = form[field];
+  let actual = form[field];
+  // Normalise structured values so conditions on {amount,currency} money
+  // fields and {days,...} leave_balance fields still work.
+  if (actual && typeof actual === 'object') {
+    if ('amount' in actual) actual = (actual as any).amount;
+    else if ('days' in actual) actual = (actual as any).days;
+  }
   const expect = value ?? '';
   let pass = false;
   const actualStr = actual === undefined || actual === null ? '' : String(actual);
