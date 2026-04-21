@@ -100,6 +100,29 @@ export async function POST(req: NextRequest) {
   // user ids so the snapshot is self-contained.
   const { flow: resolvedFlow, warnings } = await resolveRoleApprovers(flow, user.id);
 
+  // Hard block: the initiator must never appear as an approver on their own
+  // submission. Strip the initiator from every approval node; if that leaves
+  // any required node empty, refuse the submission with a clear message.
+  const cleaned: typeof resolvedFlow.nodes = resolvedFlow.nodes.map((n) => {
+    if (n.type !== 'approval') return n;
+    const approvers = (n.data.approvers ?? []).filter((id) => id !== user.id);
+    return { ...n, data: { ...n.data, approvers } };
+  });
+  const missingApprovers = cleaned.filter((n) => n.type === 'approval' && (n.data.approvers ?? []).length === 0);
+  if (missingApprovers.length > 0) {
+    return NextResponse.json({
+      error: 'SELF_APPROVAL_BLOCKED',
+      message: `审批节点"${missingApprovers[0].data.label ?? missingApprovers[0].id}"排除你之后没有其他审批人。请让模板管理员为该节点指定除你之外的人，或由其他同事发起。`,
+    }, { status: 400 });
+  }
+  // Also strip initiator from CC lists — getting your own email is noise.
+  const cleanedCc: typeof cleaned = cleaned.map((n) => {
+    if (n.type !== 'cc') return n;
+    const ccUsers = (n.data.ccUsers ?? []).filter((id) => id !== user.id);
+    return { ...n, data: { ...n.data, ccUsers } };
+  });
+  const finalFlow = { ...resolvedFlow, nodes: cleanedCc };
+
   const instance = await prisma.$transaction(async (tx) => {
     const i = await tx.approvalInstance.create({
       data: {
@@ -108,7 +131,7 @@ export async function POST(req: NextRequest) {
         title,
         status: 'IN_PROGRESS',
         formJson: JSON.stringify(data.form),
-        flowSnapshot: JSON.stringify(resolvedFlow),
+        flowSnapshot: JSON.stringify(finalFlow),
         fieldsSnapshot: tpl.fieldsJson,
       },
     });
@@ -126,7 +149,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Fire the runtime to step past START and create first pending steps.
-  const result = await startInstance(instance.id, resolvedFlow, data.form);
+  const result = await startInstance(instance.id, finalFlow, data.form);
 
   // Notify the initial approvers so they don't have to poll.
   if (result.newStepIds.length > 0) {

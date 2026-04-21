@@ -242,6 +242,59 @@ export async function notifyRewardStatusChanged(args: {
   return result;
 }
 
+export async function notifyAnnouncementPublished(args: {
+  announcementId: string;
+  title: string;
+  body: string;
+  authorName: string;
+  pinned: boolean;
+}) {
+  const members = await prisma.user.findMany({
+    where: { active: true },
+    select: { email: true },
+  });
+  const emails = members.map((m) => m.email).filter((e): e is string => !!e);
+  if (emails.length === 0) return { ok: true, attempts: 0 };
+
+  const link = `${APP_URL}/announcements`;
+  const bodyPreview = args.body.length > 400 ? args.body.slice(0, 400) + '…' : args.body;
+  const subject = `[LTY · 公告] ${args.pinned ? '📌 ' : '📢 '}${args.title}`;
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">${args.pinned ? '📌' : '📢'} ${esc(args.title)}</h2>
+    <p style="color:#475569;margin:0 0 16px;">来自 ${esc(args.authorName)} 的新公告：</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;white-space:pre-wrap;font-size:14px;">${esc(bodyPreview)}</div>
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看全文 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: emails, subject, html });
+  await logNotification({ kind: 'ANNOUNCEMENT', taskId: null, subject, recipients: emails.length }, result);
+  return result;
+}
+
+export async function notifyReportSubmitted(args: {
+  recipientEmail: string;
+  recipientName: string;
+  authorName: string;
+  reportType: 'WEEKLY' | 'MONTHLY';
+  periodLabel: string;
+  done: string | null;
+  reportId: string;
+}) {
+  if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const link = `${APP_URL}/admin/reports?type=${args.reportType}`;
+  const typeLabel = args.reportType === 'WEEKLY' ? '周报' : '月报';
+  const subject = `[LTY · ${typeLabel}] ${args.authorName} 提交了 ${args.periodLabel}`;
+  const donePreview = (args.done ?? '').slice(0, 300);
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">📝 新${typeLabel}已提交</h2>
+    <p style="color:#475569;margin:0 0 16px;">${esc(args.recipientName)}，你的下属 <strong>${esc(args.authorName)}</strong> 提交了 ${esc(args.periodLabel)} 的${typeLabel}：</p>
+    ${donePreview ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:16px;white-space:pre-wrap;font-size:14px;"><strong>本期完成：</strong>\n${esc(donePreview)}</div>` : ''}
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看完整汇报 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
+  await logNotification({ kind: 'REPORT_SUBMITTED', taskId: null, subject, recipients: 1 }, result);
+  return result;
+}
+
 export async function notifyApprovalPending(args: {
   approverEmail: string;
   approverName: string;

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import { parseFields, parseFlow, APPROVAL_CATEGORY_META, FIELD_TYPE_META } from '@/lib/approvalFlow';
 import { fmtDateTime } from '@/lib/datetime';
 import InstanceActions from './InstanceActions';
+import CancelButton from './CancelButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,11 +102,16 @@ export default async function ApprovalInstancePage({
               <span>{inst.initiator.name ?? inst.initiator.email}</span>
             </div>
           </div>
-          {inst.status === 'IN_PROGRESS' && inst.initiatorId === me.id && (
-            <form action={`/api/approvals/${inst.id}`} method="POST" onSubmit={(e) => { e.preventDefault(); if (!confirm('撤销这条审批？')) return; fetch(`/api/approvals/${inst.id}`, { method: 'DELETE' }).then(() => location.reload()); }}>
-              <button type="submit" className="btn btn-ghost text-xs text-rose-600">撤销</button>
-            </form>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {inst.status === 'IN_PROGRESS' && inst.initiatorId === me.id && (
+              <CancelButton instanceId={inst.id} kind="cancel" />
+            )}
+            {/* Hard delete: only the founder (SUPER_ADMIN) can wipe the
+                record. Regular admins should cancel, not delete. */}
+            {me.role === 'SUPER_ADMIN' && (
+              <CancelButton instanceId={inst.id} kind="hardDelete" />
+            )}
+          </div>
         </div>
       </article>
 

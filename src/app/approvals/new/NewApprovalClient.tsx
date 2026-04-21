@@ -46,7 +46,10 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: template.id, form: values }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? '提交失败');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? body.error ?? '提交失败');
+      }
       const inst = await res.json();
       router.push(`/approvals/${inst.id}`);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }

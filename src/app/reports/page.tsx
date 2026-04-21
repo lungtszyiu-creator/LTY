@@ -1,36 +1,57 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { currentPeriodStart, currentPeriodEnd, currentDueAt, formatPeriod } from '@/lib/periods';
 import { fmtDateTime } from '@/lib/datetime';
 import ReportEditor from './ReportEditor';
+import ReportHistoryList from './ReportHistoryList';
 
 export const dynamic = 'force-dynamic';
 
 export default async function MyReportsPage({
   searchParams,
 }: {
-  searchParams: { type?: 'WEEKLY' | 'MONTHLY' };
+  searchParams: { type?: 'WEEKLY' | 'MONTHLY'; tab?: 'mine' | 'incoming' };
 }) {
   const session = await getSession();
   if (!session?.user) redirect('/login');
 
   const type: 'WEEKLY' | 'MONTHLY' = searchParams.type === 'MONTHLY' ? 'MONTHLY' : 'WEEKLY';
+  const tab = searchParams.tab === 'incoming' ? 'incoming' : 'mine';
   const now = new Date();
   const periodStart = currentPeriodStart(type, now);
   const periodEnd = currentPeriodEnd(type, now);
   const dueAt = currentDueAt(type, now);
 
-  const [current, history] = await Promise.all([
+  const [current, history, incoming, users, incomingCount] = await Promise.all([
     prisma.report.findUnique({
       where: { userId_type_periodStart: { userId: session.user.id, type, periodStart } },
-      include: { attachments: true },
+      include: { attachments: true, reportTo: { select: { id: true, name: true, email: true } } },
     }),
+    // My own history
     prisma.report.findMany({
       where: { userId: session.user.id, type },
       orderBy: { periodStart: 'desc' },
-      take: 10,
+      take: 20,
+      include: { reportTo: { select: { id: true, name: true, email: true } } },
     }),
+    // Reports others sent TO me (my inbox)
+    prisma.report.findMany({
+      where: { reportToId: session.user.id, type, submittedAt: { not: null } },
+      orderBy: { periodStart: 'desc' },
+      take: 50,
+      include: {
+        user: { select: { id: true, name: true, email: true, image: true } },
+      },
+    }),
+    // People I can pick as my reportee (all active users except self)
+    prisma.user.findMany({
+      where: { active: true, id: { not: session.user.id } },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: 'asc' }],
+    }),
+    prisma.report.count({ where: { reportToId: session.user.id, submittedAt: { not: null } } }),
   ]);
 
   const periodLabel = formatPeriod(type, periodStart, periodEnd);
@@ -46,70 +67,128 @@ export default async function MyReportsPage({
         </div>
       </div>
 
-      <div className="mb-5 flex gap-2 rise rise-delay-1">
-        <a href="/reports?type=WEEKLY" className={`rounded-full px-4 py-1.5 text-sm transition ${type === 'WEEKLY' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
+      <div className="mb-5 flex flex-wrap gap-2 rise rise-delay-1">
+        <a href={`/reports?tab=mine&type=${type}`} className={`rounded-full px-4 py-1.5 text-sm transition ${tab === 'mine' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
+          我的汇报
+        </a>
+        <a href={`/reports?tab=incoming&type=${type}`} className={`rounded-full px-4 py-1.5 text-sm transition ${tab === 'incoming' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
+          汇报给我的
+          {incomingCount > 0 && (
+            <span className={`ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] ${tab === 'incoming' ? 'bg-white/20' : 'bg-indigo-100 text-indigo-700'}`}>
+              {incomingCount}
+            </span>
+          )}
+        </a>
+        <span className="mx-1 w-px self-center bg-slate-200" />
+        <a href={`/reports?tab=${tab}&type=WEEKLY`} className={`rounded-full px-4 py-1.5 text-sm transition ${type === 'WEEKLY' ? 'bg-amber-500 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
           周报
         </a>
-        <a href="/reports?type=MONTHLY" className={`rounded-full px-4 py-1.5 text-sm transition ${type === 'MONTHLY' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
+        <a href={`/reports?tab=${tab}&type=MONTHLY`} className={`rounded-full px-4 py-1.5 text-sm transition ${type === 'MONTHLY' ? 'bg-amber-500 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
           月报
         </a>
       </div>
 
-      <section className="card rise rise-delay-2 p-5 sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-slate-500">当前 {type === 'WEEKLY' ? '周' : '月'}度</div>
-            <div className="text-lg font-semibold">{periodLabel}</div>
-            <div className="mt-0.5 text-xs text-slate-500">截止 {fmtDateTime(dueAt)}</div>
-          </div>
-          {current?.status === 'LATE' && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700 ring-1 ring-rose-200">⏰ 逾期提交</span>
-          )}
-          {current?.status === 'SUBMITTED' && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">✓ 已提交</span>
-          )}
-          {!current?.submittedAt && now > dueAt && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700 ring-1 ring-rose-200">⚠️ 已逾期，尽快补交</span>
-          )}
-        </div>
-        <ReportEditor
-          type={type}
-          initial={current ? {
-            contentDone: current.contentDone ?? '',
-            contentPlan: current.contentPlan ?? '',
-            contentBlockers: current.contentBlockers ?? '',
-            contentAsks: current.contentAsks ?? '',
-            submitted: !!current.submittedAt,
-            submittedAt: current.submittedAt?.toISOString() ?? null,
-            status: current.status as any,
-          } : { contentDone: '', contentPlan: '', contentBlockers: '', contentAsks: '', submitted: false }}
-        />
-      </section>
+      {tab === 'mine' ? (
+        <>
+          <section className="card rise rise-delay-2 p-5 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs uppercase tracking-widest text-slate-500">当前 {type === 'WEEKLY' ? '周' : '月'}度</div>
+                <div className="text-lg font-semibold">{periodLabel}</div>
+                <div className="mt-0.5 text-xs text-slate-500">截止 {fmtDateTime(dueAt)}</div>
+              </div>
+              {current?.status === 'LATE' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700 ring-1 ring-rose-200">⏰ 逾期提交</span>
+              )}
+              {current?.status === 'SUBMITTED' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">✓ 已提交</span>
+              )}
+              {!current?.submittedAt && now > dueAt && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs text-rose-700 ring-1 ring-rose-200">⚠️ 已逾期，尽快补交</span>
+              )}
+            </div>
+            <ReportEditor
+              type={type}
+              users={users}
+              initial={current ? {
+                contentDone: current.contentDone ?? '',
+                contentPlan: current.contentPlan ?? '',
+                contentBlockers: current.contentBlockers ?? '',
+                contentAsks: current.contentAsks ?? '',
+                reportToId: current.reportToId ?? '',
+                reportToName: current.reportTo?.name ?? current.reportTo?.email ?? null,
+                submitted: !!current.submittedAt,
+                submittedAt: current.submittedAt?.toISOString() ?? null,
+                status: current.status as any,
+              } : {
+                contentDone: '', contentPlan: '', contentBlockers: '', contentAsks: '',
+                reportToId: '', reportToName: null,
+                submitted: false,
+              }}
+            />
+          </section>
 
-      <section className="mt-8 rise rise-delay-3">
-        <h2 className="mb-3 text-lg font-semibold">历史 {type === 'WEEKLY' ? '周报' : '月报'}</h2>
-        {history.length === 0 ? (
-          <div className="card py-10 text-center text-sm text-slate-500">还没有历史记录</div>
-        ) : (
-          <ul className="space-y-2">
-            {history.map((r) => (
-              <li key={r.id} className="card p-4 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium">{formatPeriod(r.type as any, r.periodStart, r.periodEnd)}</div>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ${
-                    r.status === 'SUBMITTED' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' :
-                    r.status === 'LATE' ? 'bg-rose-50 text-rose-700 ring-rose-200' :
-                    'bg-slate-100 text-slate-500 ring-slate-200'
-                  }`}>
-                    {r.status === 'SUBMITTED' ? '已提交' : r.status === 'LATE' ? '逾期提交' : '未提交'}
-                  </span>
-                </div>
-                {r.contentDone && <div className="mt-1.5 line-clamp-2 text-xs text-slate-600">✅ {r.contentDone}</div>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          <section className="mt-8 rise rise-delay-3">
+            <h2 className="mb-3 text-lg font-semibold">历史 {type === 'WEEKLY' ? '周报' : '月报'}</h2>
+            <ReportHistoryList
+              items={history.map((r) => ({
+                id: r.id,
+                periodLabel: formatPeriod(r.type as any, r.periodStart, r.periodEnd),
+                status: r.status,
+                submittedAt: r.submittedAt?.toISOString() ?? null,
+                contentDone: r.contentDone,
+                contentPlan: r.contentPlan,
+                contentBlockers: r.contentBlockers,
+                contentAsks: r.contentAsks,
+                reportToName: r.reportTo?.name ?? r.reportTo?.email ?? null,
+              }))}
+              emptyMessage="还没有历史记录"
+            />
+          </section>
+        </>
+      ) : (
+        <section className="rise rise-delay-2">
+          <h2 className="mb-3 text-lg font-semibold">{type === 'WEEKLY' ? '周报' : '月报'} · 汇报给我的</h2>
+          {incoming.length === 0 ? (
+            <div className="card py-14 text-center text-sm text-slate-500">
+              暂时没有人把你设为他们的汇报对象
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {incoming.map((r) => (
+                <li key={r.id} className="card p-4">
+                  <details>
+                    <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-300 to-fuchsia-300 text-xs font-semibold text-white">
+                        {(r.user.name ?? r.user.email).slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="font-medium">{r.user.name ?? r.user.email}</span>
+                      <span className="text-xs text-slate-500">· {formatPeriod(r.type as any, r.periodStart, r.periodEnd)}</span>
+                      <span className="text-xs text-slate-400">· {fmtDateTime(r.submittedAt)}</span>
+                      {r.status === 'LATE' && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200">逾期</span>}
+                    </summary>
+                    <div className="mt-3 space-y-2 pl-9">
+                      {r.contentDone && <ReportBlock label="本期完成" value={r.contentDone} />}
+                      {r.contentPlan && <ReportBlock label="下期计划" value={r.contentPlan} />}
+                      {r.contentBlockers && <ReportBlock label="遇到问题" value={r.contentBlockers} />}
+                      {r.contentAsks && <ReportBlock label="需要支持" value={r.contentAsks} />}
+                    </div>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ReportBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-100">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</div>
+      <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{value}</div>
     </div>
   );
 }

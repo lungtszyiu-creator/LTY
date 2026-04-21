@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser, requireAdmin } from '@/lib/permissions';
+import { notifyAnnouncementPublished } from '@/lib/email';
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -57,6 +58,16 @@ export async function POST(req: NextRequest) {
     }
     return a;
   });
+
+  // Push an email to everyone so members know a new announcement is up
+  // without having to poll /announcements.
+  notifyAnnouncementPublished({
+    announcementId: created.id,
+    title: created.title,
+    body: created.body,
+    authorName: admin.name ?? admin.email ?? '管理员',
+    pinned: created.pinned,
+  }).catch((e) => console.error('[announcement] notify failed', e));
 
   return NextResponse.json(created, { status: 201 });
 }

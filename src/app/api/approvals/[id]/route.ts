@@ -29,10 +29,24 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(inst);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+// DELETE behaviour:
+// - Default: soft-cancel (status=CANCELLED). Allowed for initiator while
+//   status=IN_PROGRESS, or any admin.
+// - ?hard=1: permanent delete with cascade. SUPER_ADMIN only, regardless of
+//   instance status. Use case: wipe accidental duplicates, old training data.
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await requireUser();
+  const hard = new URL(req.url).searchParams.get('hard') === '1';
   const inst = await prisma.approvalInstance.findUnique({ where: { id: params.id } });
   if (!inst) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
+  if (hard) {
+    if (user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'SUPER_ADMIN_ONLY' }, { status: 403 });
+    }
+    await prisma.approvalInstance.delete({ where: { id: params.id } });
+    return NextResponse.json({ ok: true, hard: true });
+  }
 
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const isInitiator = inst.initiatorId === user.id;

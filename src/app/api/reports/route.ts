@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser, requireAdmin } from '@/lib/permissions';
-import { currentPeriodStart, currentPeriodEnd, currentDueAt } from '@/lib/periods';
+import { currentPeriodStart, currentPeriodEnd, currentDueAt, formatPeriod } from '@/lib/periods';
+import { notifyReportSubmitted } from '@/lib/email';
 
-// GET list — admins see everyone (optionally filtered); members see their own.
+// GET list — admins see everyone; members see their own + ones where they're
+// the reportTo (their reports receive inbox).
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const type = req.nextUrl.searchParams.get('type') as 'WEEKLY' | 'MONTHLY' | null;
+  const scope = req.nextUrl.searchParams.get('scope'); // "mine" | "incoming"
   const userId = req.nextUrl.searchParams.get('userId');
   const status = req.nextUrl.searchParams.get('status');
   const limit = Math.min(200, Number(req.nextUrl.searchParams.get('limit') ?? 50));
@@ -16,13 +19,16 @@ export async function GET(req: NextRequest) {
   const where: any = {};
   if (type) where.type = type;
   if (status) where.status = status;
-  if (!isAdmin) where.userId = user.id;
+  if (scope === 'mine') where.userId = user.id;
+  else if (scope === 'incoming') where.reportToId = user.id;
+  else if (!isAdmin) where.OR = [{ userId: user.id }, { reportToId: user.id }];
   else if (userId) where.userId = userId;
 
   const items = await prisma.report.findMany({
     where,
     include: {
       user: { select: { id: true, name: true, email: true, image: true } },
+      reportTo: { select: { id: true, name: true, email: true } },
       attachments: true,
     },
     orderBy: [{ periodStart: 'desc' }, { type: 'asc' }],
@@ -33,8 +39,6 @@ export async function GET(req: NextRequest) {
 
 const upsertSchema = z.object({
   type: z.enum(['WEEKLY', 'MONTHLY']),
-  // Omit to target the current period. Allow backdated edits only for the
-  // most recent missed period (admin can still fix things via PATCH).
   periodStart: z.string().datetime().optional(),
   contentDone: z.string().max(5000).nullable().optional(),
   contentPlan: z.string().max(5000).nullable().optional(),
@@ -42,6 +46,7 @@ const upsertSchema = z.object({
   contentAsks: z.string().max(5000).nullable().optional(),
   attachmentIds: z.array(z.string()).optional(),
   submit: z.boolean().optional(),
+  reportToId: z.string().nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -72,6 +77,7 @@ export async function POST(req: NextRequest) {
           contentPlan: data.contentPlan ?? existing.contentPlan,
           contentBlockers: data.contentBlockers ?? existing.contentBlockers,
           contentAsks: data.contentAsks ?? existing.contentAsks,
+          reportToId: data.reportToId === undefined ? existing.reportToId : (data.reportToId || null),
           ...(data.submit ? { submittedAt: submittedAt!, status } : {}),
         },
       });
@@ -87,6 +93,7 @@ export async function POST(req: NextRequest) {
           contentPlan: data.contentPlan ?? null,
           contentBlockers: data.contentBlockers ?? null,
           contentAsks: data.contentAsks ?? null,
+          reportToId: data.reportToId || null,
           submittedAt,
           status,
         },
@@ -104,6 +111,25 @@ export async function POST(req: NextRequest) {
     }
     return report;
   });
+
+  // Email reportee when a submit happened (not for saved drafts).
+  if (data.submit && saved.reportToId) {
+    const reportTo = await prisma.user.findUnique({
+      where: { id: saved.reportToId },
+      select: { email: true, name: true },
+    });
+    if (reportTo?.email) {
+      notifyReportSubmitted({
+        recipientEmail: reportTo.email,
+        recipientName: reportTo.name ?? reportTo.email,
+        authorName: user.name ?? user.email ?? '',
+        reportType: data.type,
+        periodLabel: formatPeriod(data.type, periodStart, periodEnd),
+        done: data.contentDone ?? null,
+        reportId: saved.id,
+      }).catch((e) => console.error('[report] notify reportee failed', e));
+    }
+  }
 
   return NextResponse.json(saved);
 }

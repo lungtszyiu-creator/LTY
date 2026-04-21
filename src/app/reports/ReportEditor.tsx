@@ -4,11 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { fmtDateTime } from '@/lib/datetime';
 
+type UserOpt = { id: string; name: string | null; email: string };
 type Initial = {
   contentDone: string;
   contentPlan: string;
   contentBlockers: string;
   contentAsks: string;
+  reportToId: string;
+  reportToName: string | null;
   submitted: boolean;
   submittedAt?: string | null;
   status?: 'PENDING' | 'SUBMITTED' | 'LATE' | null;
@@ -24,9 +27,11 @@ const SECTIONS = [
 export default function ReportEditor({
   type,
   initial,
+  users,
 }: {
   type: 'WEEKLY' | 'MONTHLY';
   initial: Initial;
+  users: UserOpt[];
 }) {
   const router = useRouter();
   const [fields, setFields] = useState(initial);
@@ -42,6 +47,10 @@ export default function ReportEditor({
       setErr('提交前请至少写"本期完成"');
       return;
     }
+    if (submit && !fields.reportToId) {
+      setErr('提交前请选择"汇报对象"');
+      return;
+    }
     setBusy(submit ? 'submit' : 'save'); setErr(null);
     try {
       const res = await fetch('/api/reports', {
@@ -53,6 +62,7 @@ export default function ReportEditor({
           contentPlan: fields.contentPlan || null,
           contentBlockers: fields.contentBlockers || null,
           contentAsks: fields.contentAsks || null,
+          reportToId: fields.reportToId || null,
           submit,
         }),
       });
@@ -67,13 +77,13 @@ export default function ReportEditor({
   }
 
   function resetAndEdit() {
-    // Put the editor into "clean start" mode: empty fields, no status. The
-    // user explicitly wants to write a new version.
     setFields({
       contentDone: '',
       contentPlan: '',
       contentBlockers: '',
       contentAsks: '',
+      reportToId: initial.reportToId,
+      reportToName: initial.reportToName,
       submitted: false,
     });
     setSubmitted(false);
@@ -94,6 +104,9 @@ export default function ReportEditor({
                 <span className="ml-2 text-xs text-emerald-700">
                   {fmtDateTime(fields.submittedAt)}
                 </span>
+              )}
+              {fields.reportToName && (
+                <span className="ml-2 text-xs text-emerald-700">· 汇报给 {fields.reportToName}</span>
               )}
             </div>
             <div className="flex gap-2">
@@ -138,6 +151,27 @@ export default function ReportEditor({
           ⚠️ 你正在修改已提交的 {type === 'WEEKLY' ? '周报' : '月报'}。保存后将覆盖原版本。
         </div>
       )}
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-800">
+          汇报对象 <span className="text-rose-500">*</span>
+        </label>
+        <select
+          value={fields.reportToId}
+          onChange={(e) => {
+            const u = users.find((x) => x.id === e.target.value);
+            setFields({ ...fields, reportToId: e.target.value, reportToName: u?.name ?? u?.email ?? null });
+          }}
+          className="select"
+        >
+          <option value="">—— 请选择汇报给谁 ——</option>
+          {users.map((u) => (<option key={u.id} value={u.id}>{u.name ?? u.email}</option>))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">
+          提交后对方会收到邮件提醒，且能在"汇报给我的"看到本次汇报。
+        </p>
+      </div>
+
       {SECTIONS.map((s) => (
         <div key={s.key}>
           <label className="mb-1 flex items-center justify-between">

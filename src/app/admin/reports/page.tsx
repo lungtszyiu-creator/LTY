@@ -31,7 +31,10 @@ export default async function AdminReportsPage({
     }),
     prisma.report.findMany({
       where: { type, periodStart },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        reportTo: { select: { id: true, name: true, email: true } },
+      },
     }),
   ]);
 
@@ -83,6 +86,7 @@ export default async function AdminReportsPage({
           <thead className="bg-slate-50/70 text-xs uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-5 py-3 text-left font-medium">成员</th>
+              <th className="px-5 py-3 text-left font-medium">汇报给</th>
               <th className="px-5 py-3 text-left font-medium">状态</th>
               <th className="px-5 py-3 text-left font-medium">本期完成</th>
               <th className="px-5 py-3 text-left font-medium">遇到问题</th>
@@ -103,6 +107,9 @@ export default async function AdminReportsPage({
                       </div>
                       <span className="font-medium">{u.name ?? u.email}</span>
                     </div>
+                  </td>
+                  <td className="px-5 py-3 text-xs text-slate-600">
+                    {r?.reportTo?.name ?? r?.reportTo?.email ?? <span className="text-slate-400">—</span>}
                   </td>
                   <td className="px-5 py-3">
                     {isSubmitted ? (

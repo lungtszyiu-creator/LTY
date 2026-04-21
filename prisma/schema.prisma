@@ -97,6 +97,7 @@ model User {
   announcementsCreated Announcement[]         @relation("AnnouncementAuthor")
   announcementReadings AnnouncementReading[]
   reports              Report[]               @relation("ReportAuthor")
+  reportsReceived      Report[]               @relation("ReportRecipient")
   foldersCreated       Folder[]               @relation("FolderCreator")
   folderMemberships    FolderMember[]
 
@@ -316,6 +317,11 @@ model Report {
   periodEnd   DateTime
   dueAt       DateTime
   submittedAt DateTime?
+
+  // "汇报对象" — who this report is submitted to. Optional so reports
+  // without an explicit recipient still work (admins see them in aggregate).
+  reportToId  String?
+  reportTo    User?    @relation("ReportRecipient", fields: [reportToId], references: [id])
 
   // Structured JSON with fixed sections: done / plan / blockers / asks.
   // Stored as text for portability; UI renders via a textarea per section.
