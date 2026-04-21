@@ -11,6 +11,7 @@ import {
   type Currency, type FormFieldSpec,
 } from '@/lib/approvalFlow';
 import BottomSheet from '@/components/BottomSheet';
+import FileUpload, { type UploadedFile } from '@/components/FileUpload';
 import LeaveCategoryPicker from './LeaveCategoryPicker';
 
 type Tpl = {
@@ -113,12 +114,28 @@ export default function NewApprovalClient({ template, myBalances }: { template: 
         return;
       }
     }
+    // Flatten attachment fields → a single top-level attachmentIds array.
+    // Server attaches those uploaded files to the new approval instance.
+    const attachmentIds: string[] = [];
+    for (const f of fields) {
+      if (f.type === 'attachment') {
+        const v = values[f.id];
+        if (Array.isArray(v)) {
+          for (const item of v) {
+            if (item && typeof item === 'object' && typeof item.id === 'string') {
+              attachmentIds.push(item.id);
+            }
+          }
+        }
+      }
+    }
+
     setBusy(true); setErr(null);
     try {
       const res = await fetch('/api/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: template.id, form: values }),
+        body: JSON.stringify({ templateId: template.id, form: values, attachmentIds }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -421,6 +438,21 @@ function FieldRow({
     return (
       <StackedRow label={field.label} required={field.required}>
         <OvertimeHoursInput value={value} update={update} />
+      </StackedRow>
+    );
+  }
+
+  if (field.type === 'attachment') {
+    const current: UploadedFile[] = Array.isArray(value) ? value : [];
+    return (
+      <StackedRow label={field.label} required={field.required}>
+        <FileUpload
+          onChange={(files) => update(files)}
+          label="点击选择文件，或拖到这里"
+        />
+        {current.length > 0 && (
+          <div className="mt-2 text-xs text-slate-500">已上传 {current.length} 个附件</div>
+        )}
       </StackedRow>
     );
   }
