@@ -10,13 +10,14 @@ import { useEffect, useRef, useState } from 'react';
 // layout around and labels stay perfectly aligned on the row.
 const PUBLIC_LINKS = [
   { href: '/dashboard',     label: '任务' },
+  { href: '/approvals',     label: '审批' },
   { href: '/announcements', label: '公告' },
   { href: '/reports',       label: '汇报' },
   { href: '/files',         label: '文件' },
-  { href: '/projects',      label: '项目' },
 ];
 
 const MORE_LINKS = [
+  { href: '/projects',    label: '项目' },
   { href: '/leaderboard', label: '战功榜' },
   { href: '/rewards',     label: '我的奖励' },
   { href: '/faq',         label: 'Q&A' },
@@ -24,15 +25,16 @@ const MORE_LINKS = [
 ];
 
 const ADMIN_LINKS = [
-  { href: '/admin/tasks/new',     label: '发布任务' },
-  { href: '/admin/announcements', label: '公告管理' },
-  { href: '/admin/reports',       label: '汇报汇总' },
-  { href: '/admin/projects',      label: '项目看板配置' },
-  { href: '/admin/departments',   label: '部门管理' },
-  { href: '/admin/rewards',       label: '奖励发放' },
-  { href: '/admin/penalties',     label: '扣罚登记' },
-  { href: '/admin/users',         label: '用户管理' },
-  { href: '/admin/notifications', label: '通知日志' },
+  { href: '/admin/tasks/new',            label: '发布任务' },
+  { href: '/admin/approvals/templates',  label: '审批模板' },
+  { href: '/admin/announcements',        label: '公告管理' },
+  { href: '/admin/reports',              label: '汇报汇总' },
+  { href: '/admin/projects',             label: '项目看板配置' },
+  { href: '/admin/departments',          label: '部门管理' },
+  { href: '/admin/rewards',              label: '奖励发放' },
+  { href: '/admin/penalties',            label: '扣罚登记' },
+  { href: '/admin/users',                label: '用户管理' },
+  { href: '/admin/notifications',        label: '通知日志' },
 ];
 
 export default function Nav() {

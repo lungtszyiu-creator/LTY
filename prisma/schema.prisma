@@ -62,6 +62,11 @@ model VerificationToken {
 //   ReportStatus:     "PENDING" | "SUBMITTED" | "LATE"
 //   FolderVisibility: "PUBLIC" | "DEPARTMENT" | "PRIVATE"
 //   DepartmentRole:   "LEAD" | "MEMBER"
+//   ApprovalCategory: "LEAVE" | "EXPENSE" | "TRAVEL" | "PROCUREMENT" | "STAMP" | "OTHER"
+//   ApprovalStatus:   "IN_PROGRESS" | "APPROVED" | "REJECTED" | "CANCELLED"
+//   ApprovalStepKind: "START" | "APPROVAL" | "CC" | "END"
+//   ApprovalStepMode: "ALL" (会签) | "ANY" (或签)
+//   ApprovalDecision: "APPROVED" | "REJECTED" | "TRANSFERRED"
 
 model User {
   id            String    @id @default(cuid())
@@ -94,6 +99,10 @@ model User {
   reports              Report[]               @relation("ReportAuthor")
   foldersCreated       Folder[]               @relation("FolderCreator")
   folderMemberships    FolderMember[]
+
+  approvalTplsCreated   ApprovalTemplate[]    @relation("ApprovalTplAuthor")
+  approvalsInitiated    ApprovalInstance[]    @relation("ApprovalInitiator")
+  approvalStepsAssigned ApprovalStep[]        @relation("ApprovalStepAssignee")
 }
 
 model Task {
@@ -227,6 +236,9 @@ model Attachment {
   // Reports can include attachments (e.g. screenshots)
   reportId     String?
   report       Report?     @relation("ReportAttachments", fields: [reportId], references: [id], onDelete: Cascade)
+  // Approval submission attachments
+  approvalInstanceId String?
+  approvalInstance   ApprovalInstance? @relation("ApprovalAttachments", fields: [approvalInstanceId], references: [id], onDelete: Cascade)
 }
 
 // ---- Organisation: departments ----
@@ -359,6 +371,87 @@ model FolderMember {
   createdAt  DateTime @default(now())
 
   @@unique([folderId, userId])
+}
+
+// ---- Approval flows (Lark-style visual drag-and-drop) ----
+// The visual layout (nodes + edges) is stored as JSON via React Flow's shape.
+// When an instance is submitted, we snapshot the template's flow + the field
+// definitions so later edits to the template don't rewrite history.
+model ApprovalTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  icon        String?  // emoji
+  category    String   @default("OTHER")
+  description String?
+  active      Boolean  @default(true)
+
+  // React Flow JSON: { nodes: [...], edges: [...] }
+  flowJson    String
+  // Array of form field specs: [{ id, type, label, required, options? }]
+  fieldsJson  String
+
+  createdById String
+  createdBy   User     @relation("ApprovalTplAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances   ApprovalInstance[]
+}
+
+model ApprovalInstance {
+  id             String   @id @default(cuid())
+  templateId     String
+  template       ApprovalTemplate @relation(fields: [templateId], references: [id])
+  initiatorId    String
+  initiator      User     @relation("ApprovalInitiator", fields: [initiatorId], references: [id])
+
+  title          String   // derived from template + a key form value
+  status         String   @default("IN_PROGRESS")
+
+  formJson       String
+  flowSnapshot   String   // frozen at submit time
+  fieldsSnapshot String
+
+  currentNodeId  String?  // node being processed right now
+
+  submittedAt    DateTime @default(now())
+  completedAt    DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  steps          ApprovalStep[]
+  attachments    Attachment[] @relation("ApprovalAttachments")
+
+  @@index([initiatorId, status])
+  @@index([status, submittedAt])
+}
+
+// One row per (node, required-approver). For a multi-approver node in "ALL"
+// mode, N rows must all be APPROVED; any REJECT fails the instance. In "ANY"
+// mode the first APPROVED advances; pending siblings stay for audit but are
+// marked superseded.
+model ApprovalStep {
+  id              String   @id @default(cuid())
+  instanceId      String
+  instance        ApprovalInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  nodeId          String
+  kind            String   // "START" | "APPROVAL" | "CC" | "END"
+  mode            String?  // "ALL" | "ANY" — null for single-approver / CC / START / END
+
+  approverId      String?
+  approver        User?    @relation("ApprovalStepAssignee", fields: [approverId], references: [id])
+
+  decision        String?  // "APPROVED" | "REJECTED" | "TRANSFERRED" — null = pending
+  note            String?
+  decidedAt       DateTime?
+  superseded      Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+
+  @@index([instanceId, nodeId])
+  @@index([approverId, decision])
 }
 
 // ---- External project boards (Jira / Airtable / Lark / Notion iframes) ----

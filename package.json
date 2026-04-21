@@ -13,20 +13,21 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^5.22.0",
     "@vercel/blob": "^0.27.0",
+    "@xyflow/react": "^12.10.2",
     "next": "14.2.15",
-    "nodemailer": "^7.0.0",
     "next-auth": "^4.24.11",
-    "@auth/prisma-adapter": "^2.7.4",
+    "nodemailer": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
-    "@types/react": "^18.3.12",
     "@types/nodemailer": "^6.4.17",
+    "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
