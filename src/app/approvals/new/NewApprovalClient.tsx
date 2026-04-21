@@ -42,6 +42,24 @@ export default function NewApprovalClient({ template, myBalances }: { template: 
   const approvalNodes = flow.nodes.filter((n) => n.type === 'approval');
   const ccNodes = flow.nodes.filter((n) => n.type === 'cc');
 
+  // For OVERTIME templates we auto-compute duration from the two
+  // datetime fields (开始时间 + 结束时间). This drives both the form
+  // preview ("加班 X 小时 = Y 天调休") and the terminal credit hook.
+  const otDatetimes = template.category === 'OVERTIME'
+    ? fields.filter((f) => f.type === 'datetime')
+    : [];
+  const otStart = otDatetimes.find((f) => /开始/.test(f.label)) ?? otDatetimes[0];
+  const otEnd = otDatetimes.find((f) => /结束/.test(f.label)) ?? otDatetimes[1];
+  let otHours: number | null = null;
+  if (otStart && otEnd && values[otStart.id] && values[otEnd.id]) {
+    const t1 = new Date(values[otStart.id]).getTime();
+    const t2 = new Date(values[otEnd.id]).getTime();
+    if (!Number.isNaN(t1) && !Number.isNaN(t2) && t2 > t1) {
+      otHours = +((t2 - t1) / 3600000).toFixed(2);
+    }
+  }
+  const otCompDays = otHours != null ? +(otHours / OVERTIME_HOURS_PER_COMP_DAY).toFixed(2) : null;
+
   function update(id: string, v: any) {
     setValues((prev) => ({ ...prev, [id]: v }));
   }
@@ -120,6 +138,19 @@ export default function NewApprovalClient({ template, myBalances }: { template: 
               balances={myBalances}
             />
           ))}
+        </div>
+      )}
+
+      {/* Overtime duration preview — shows only when both datetimes set */}
+      {template.category === 'OVERTIME' && otHours !== null && otCompDays !== null && (
+        <div className="card flex flex-wrap items-center gap-2 p-4 text-sm ring-2 ring-emerald-200">
+          <span className="text-slate-600">本次加班：</span>
+          <span className="text-base font-semibold text-slate-900">{otHours} 小时</span>
+          <span className="text-slate-400">→</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-900 ring-1 ring-emerald-300">
+            审批通过后 +{otCompDays} 天调休
+          </span>
+          <span className="w-full text-[11px] text-slate-500">（按 1 天 = {OVERTIME_HOURS_PER_COMP_DAY} 小时折算）</span>
         </div>
       )}
 
@@ -247,6 +278,19 @@ function FieldRow({
       <CompactRow label={field.label} required={field.required}>
         <input
           type="date"
+          value={value ?? ''}
+          onChange={(e) => update(e.target.value)}
+          className="bg-transparent text-right text-[15px] text-slate-900 focus:outline-none"
+        />
+      </CompactRow>
+    );
+  }
+
+  if (field.type === 'datetime') {
+    return (
+      <CompactRow label={field.label} required={field.required}>
+        <input
+          type="datetime-local"
           value={value ?? ''}
           onChange={(e) => update(e.target.value)}
           className="bg-transparent text-right text-[15px] text-slate-900 focus:outline-none"

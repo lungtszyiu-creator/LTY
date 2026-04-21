@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { setLeaveBalance } from '@/lib/leaveBalance';
+import { canManageLeaveBalance } from '@/lib/leaveBalanceAuth';
 
 const schema = z.object({
   role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MEMBER']).optional(),
@@ -53,20 +54,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // gets a row; everything else is a plain column update.
   const { annualLeaveBalance, compLeaveBalance, ...rest } = data;
 
+  // Gate: only SUPER_ADMIN + HR dept lead can touch balances. Reject early
+  // with a clear error so clients can surface it.
+  const wantsBalanceChange = typeof annualLeaveBalance === 'number' || typeof compLeaveBalance === 'number';
+  if (wantsBalanceChange) {
+    const allowed = await canManageLeaveBalance(admin.id);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN_LEAVE_BALANCE', message: '只有总管理者或人事部负责人可以修改员工假期余额' },
+        { status: 403 }
+      );
+    }
+  }
+
   let user = await prisma.user.update({ where: { id: params.id }, data: rest });
 
   if (typeof annualLeaveBalance === 'number') {
     await setLeaveBalance({
       userId: params.id, pool: 'ANNUAL',
       newValue: annualLeaveBalance, actorId: admin.id,
-      note: '管理员在用户列表直接设置',
+      note: '在用户列表直接设置',
     });
   }
   if (typeof compLeaveBalance === 'number') {
     await setLeaveBalance({
       userId: params.id, pool: 'COMP',
       newValue: compLeaveBalance, actorId: admin.id,
-      note: '管理员在用户列表直接设置',
+      note: '在用户列表直接设置',
     });
   }
 

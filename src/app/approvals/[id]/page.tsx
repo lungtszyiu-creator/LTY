@@ -159,6 +159,14 @@ export default async function ApprovalInstancePage({
                   ? <span><span className="font-semibold">{n}</span> 天</span>
                   : <span className="text-slate-400">未填写</span>;
               }
+              else if (f.type === 'datetime') {
+                // datetime-local value is "YYYY-MM-DDTHH:mm"; prettify it.
+                const s = String(v);
+                const d = new Date(s);
+                display = !Number.isNaN(d.getTime())
+                  ? d.toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })
+                  : s;
+              }
               else if (f.type === 'overtime_hours') {
                 const h = Number(v);
                 display = Number.isFinite(h) && h > 0

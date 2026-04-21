@@ -69,11 +69,34 @@ export async function applyBalanceEffects(instanceId: string): Promise<void> {
   }
 
   if (inst.template.category === 'OVERTIME') {
-    const f = fields.find((x) => x.type === 'overtime_hours');
-    if (!f) return;
-    const hours = Number(form[f.id]);
-    if (!Number.isFinite(hours) || hours <= 0) return;
+    // Prefer duration from 开始时间 + 结束时间 datetime pair (new preset);
+    // fall back to explicit overtime_hours field (legacy). In both cases
+    // we credit hours / 8 days to comp pool.
+    let hours: number | null = null;
+
+    const datetimes = fields.filter((x) => x.type === 'datetime');
+    const startF = datetimes.find((x) => /开始/.test(x.label)) ?? datetimes[0];
+    const endF   = datetimes.find((x) => /结束/.test(x.label)) ?? datetimes[1];
+    if (startF && endF && form[startF.id] && form[endF.id]) {
+      const t1 = new Date(form[startF.id]).getTime();
+      const t2 = new Date(form[endF.id]).getTime();
+      if (!Number.isNaN(t1) && !Number.isNaN(t2) && t2 > t1) {
+        hours = +((t2 - t1) / 3600000).toFixed(2);
+      }
+    }
+
+    if (hours == null) {
+      const legacy = fields.find((x) => x.type === 'overtime_hours');
+      if (legacy) {
+        const h = Number(form[legacy.id]);
+        if (Number.isFinite(h) && h > 0) hours = h;
+      }
+    }
+
+    if (hours == null || hours <= 0) return;
     const days = +(hours / OVERTIME_HOURS_PER_COMP_DAY).toFixed(2);
+    if (days <= 0) return;
+
     await adjustLeaveBalance({
       userId: inst.initiatorId,
       pool: 'COMP',

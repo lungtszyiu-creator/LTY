@@ -26,10 +26,12 @@ export default function UsersTable({
   initial,
   meId,
   meRole,
+  canEditBalance,
 }: {
   initial: U[];
   meId: string;
   meRole: Role;
+  canEditBalance: boolean;
 }) {
   const [users, setUsers] = useState<U[]>(initial);
   const [email, setEmail] = useState('');
@@ -86,6 +88,12 @@ export default function UsersTable({
 
   return (
     <div className="space-y-5">
+      {!canEditBalance && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          🔒 员工假期余额（年假 / 调休）只有 <strong>总管理者</strong> 和 <strong>人事部负责人</strong> 可以修改。你当前为只读查看。
+        </div>
+      )}
+
       {/* Add-user form — mobile first: inputs stack, desktop: inline row */}
       <form onSubmit={addUser} className="card rise space-y-3 p-4 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:space-y-0 sm:p-5">
         <div className="min-w-0 sm:flex-1">
@@ -167,7 +175,7 @@ export default function UsersTable({
                     <BalanceInputs
                       annual={u.annualLeaveBalance}
                       comp={u.compLeaveBalance}
-                      editable={editable}
+                      editable={editable && canEditBalance}
                       onSave={(patchData) => patch(u.id, patchData as any)}
                     />
                   </td>

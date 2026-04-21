@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { canManageLeaveBalance } from '@/lib/leaveBalanceAuth';
 import UsersTable from './UsersTable';
 
 export const dynamic = 'force-dynamic';
@@ -10,14 +11,17 @@ export default async function AdminUsersPage() {
   if (!session?.user) redirect('/login');
   if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') redirect('/dashboard');
 
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true, name: true, email: true, image: true,
-      role: true, active: true, createdAt: true,
-      annualLeaveBalance: true, compLeaveBalance: true,
-    },
-  });
+  const [users, canEditBalance] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, name: true, email: true, image: true,
+        role: true, active: true, createdAt: true,
+        annualLeaveBalance: true, compLeaveBalance: true,
+      },
+    }),
+    canManageLeaveBalance(session.user.id),
+  ]);
 
   return (
     <div className="pt-8">
@@ -31,6 +35,7 @@ export default async function AdminUsersPage() {
         initial={users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }))}
         meId={session.user.id}
         meRole={session.user.role as any}
+        canEditBalance={canEditBalance}
       />
     </div>
   );

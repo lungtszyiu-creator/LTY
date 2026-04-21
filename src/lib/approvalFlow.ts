@@ -2,7 +2,7 @@
 // Kept in one file so client and server can share shapes.
 
 export type FieldType =
-  | 'text' | 'textarea' | 'number' | 'money' | 'date' | 'daterange'
+  | 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'daterange'
   | 'select' | 'multiselect' | 'user' | 'department' | 'attachment'
   | 'leave_balance' | 'leave_days' | 'overtime_hours';
 
@@ -141,6 +141,7 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; icon: string }>
   number:        { label: '数字',            icon: '🔢' },
   money:         { label: '金额（多币种）',  icon: '💵' },
   date:          { label: '日期',            icon: '📅' },
+  datetime:      { label: '日期 + 时间',     icon: '🕒' },
   daterange:     { label: '日期区间',        icon: '📆' },
   select:        { label: '单选',            icon: '◉' },
   multiselect:   { label: '多选',            icon: '☑' },

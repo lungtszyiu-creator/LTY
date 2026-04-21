@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import BottomSheet from '@/components/BottomSheet';
-import { OVERTIME_HOURS_PER_COMP_DAY } from '@/lib/approvalFlow';
 
 type Balances = { annual: number; comp: number };
 
 // Row-style "tap to open sheet" picker modeled after DingTalk/H5 leave
 // forms: label on the left, selected value (or placeholder) on the right
 // with a chevron, and a bottom sheet that lists each option with its
-// remaining balance inline. 年假 displays 天; 调休 displays 小时 (1 天 = 8
-// 小时) so employees see granular comp-leave availability.
+// remaining balance inline. 年假 and 调休 both display in days so the unit
+// matches the "申请天数" input and avoids hour/day confusion.
 export default function LeaveCategoryPicker({
   label,
   required,
@@ -30,11 +29,8 @@ export default function LeaveCategoryPicker({
 
   function remainingFor(cat: string): string | null {
     if (cat === '年假') return `剩余 ${balances.annual.toFixed(1)} 天`;
-    if (cat === '调休') {
-      const hours = balances.comp * OVERTIME_HOURS_PER_COMP_DAY;
-      return `剩余 ${hours.toFixed(1)} 小时`;
-    }
-    return null;
+    if (cat === '调休') return `剩余 ${balances.comp.toFixed(1)} 天`;
+    return null; // 事假/病假/婚丧/产陪护 no quota
   }
 
   return (

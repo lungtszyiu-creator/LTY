@@ -403,8 +403,8 @@ function EditorInner({
       setName((n) => n || '加班申请');
       setCategory('OVERTIME');
       newFields = [
-        { id: fid(), type: 'date', label: '加班日期', required: true, titleField: true },
-        { id: fid(), type: 'overtime_hours', label: '加班时长', required: true },
+        { id: fid(), type: 'datetime', label: '开始时间', required: true, titleField: true },
+        { id: fid(), type: 'datetime', label: '结束时间', required: true },
         { id: fid(), type: 'textarea', label: '加班事由', required: true, placeholder: '加班内容 / 工作项目' },
         { id: fid(), type: 'attachment', label: '相关附件（可选）' },
       ];
@@ -967,12 +967,17 @@ function upgradeLeaveFields(fields: FormFieldSpec[]): FormFieldSpec[] {
   const { typeId, daysId, bundleId } = detectLegacyLeaveFields(fields);
   const hasNewSplit = fields.some((f) => f.type === 'leave_days')
                     && fields.some((f) => f.type === 'select' && (f.options ?? []).includes('年假'));
-  if (hasNewSplit && !bundleId) return fields; // already on the new split
-  if (!typeId && !daysId && !bundleId) return fields;
+  const hasDateRange = fields.some((f) => f.type === 'daterange');
+  if (hasNewSplit && hasDateRange && !bundleId) return fields; // already fully migrated
+  if (!typeId && !daysId && !bundleId && hasDateRange) return fields;
 
   const fid = () => `f_${Math.random().toString(36).slice(2, 8)}`;
 
   const canonicalOptions = ['年假', '调休', '事假', '病假', '婚假', '丧假', '产假', '陪护假'];
+  const out: FormFieldSpec[] = [];
+  const toDropIds = new Set([bundleId, typeId, daysId].filter((x): x is string => !!x));
+
+  const needNewSplit = !hasNewSplit || !!bundleId;
   const typeReplacement: FormFieldSpec = {
     id: fid(),
     type: 'select',
@@ -981,6 +986,12 @@ function upgradeLeaveFields(fields: FormFieldSpec[]): FormFieldSpec[] {
     titleField: true,
     options: canonicalOptions,
   };
+  const daterangeInjection: FormFieldSpec = {
+    id: fid(),
+    type: 'daterange',
+    label: '请假起止日期',
+    required: true,
+  };
   const daysReplacement: FormFieldSpec = {
     id: fid(),
     type: 'leave_days',
@@ -988,20 +999,27 @@ function upgradeLeaveFields(fields: FormFieldSpec[]): FormFieldSpec[] {
     required: true,
   };
 
-  // Pick an anchor position (first occurrence of any legacy field we're
-  // replacing) so the two new fields slot in roughly where the legacy ones
-  // used to live. Everything else keeps its order.
-  const anchorId = bundleId ?? typeId ?? daysId!;
-  const out: FormFieldSpec[] = [];
-  const toDropIds = new Set([bundleId, typeId, daysId].filter((x): x is string => !!x));
-
+  const anchorId = bundleId ?? typeId ?? daysId ?? null;
+  let injected = false;
   for (const f of fields) {
-    if (f.id === anchorId) {
-      out.push(typeReplacement);
-      out.push(daysReplacement);
+    if (anchorId && f.id === anchorId && !injected) {
+      if (needNewSplit) out.push(typeReplacement);
+      if (!hasDateRange) out.push(daterangeInjection);
+      if (needNewSplit) out.push(daysReplacement);
+      injected = true;
     } else if (!toDropIds.has(f.id)) {
       out.push(f);
     }
+  }
+  // If no anchor existed (template was blank of legacy markers yet still
+  // missing a daterange), append the injections at the top so the submitter
+  // still gets a date to fill in.
+  if (!injected) {
+    const prepend: FormFieldSpec[] = [];
+    if (needNewSplit) prepend.push(typeReplacement);
+    if (!hasDateRange) prepend.push(daterangeInjection);
+    if (needNewSplit) prepend.push(daysReplacement);
+    return [...prepend, ...out];
   }
   return out;
 }
@@ -1035,11 +1053,15 @@ function LeaveFieldsUpgrader({
 }) {
   const leaveLegacy = detectLegacyLeaveFields(fields);
   const hasNewSplit = fields.some((f) => f.type === 'leave_days');
-  // Offer the upgrade when either:
-  //   - legacy bundle (leave_balance) still present, OR
-  //   - very-old select+number pair without a leave_days companion yet.
+  const hasDateRange = fields.some((f) => f.type === 'daterange');
+  const looksLikeLeaveTemplate = hasNewSplit || !!leaveLegacy.bundleId
+    || !!(leaveLegacy.typeId || leaveLegacy.daysId);
+  // Offer the upgrade when any part of the new structure is missing on a
+  // template that's clearly a leave form: legacy bundle, old select+number,
+  // or (new split but no daterange to fill in specific dates).
   const hasLegacyLeave = !!leaveLegacy.bundleId
-    || (!hasNewSplit && !!(leaveLegacy.typeId || leaveLegacy.daysId));
+    || (!hasNewSplit && !!(leaveLegacy.typeId || leaveLegacy.daysId))
+    || (looksLikeLeaveTemplate && !hasDateRange);
   const moneyNeedsUpgrade = expenseCurrencyNeeded && detectMoneyFieldsNeedingCurrency(fields).length > 0;
 
   if (!hasLegacyLeave && !moneyNeedsUpgrade) return null;
