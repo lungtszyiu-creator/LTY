@@ -5,10 +5,10 @@ import Nav from '@/components/Nav';
 
 export const metadata: Metadata = {
   title: {
-    default: 'LTY 旭珑 · 任务池',
-    template: '%s · LTY 旭珑 · 任务池',
+    default: 'LTY 旭珑 · 公司总看板',
+    template: '%s · LTY 旭珑 · 公司总看板',
   },
-  description: 'LTY 旭珑内部任务看板 · 发布 · 领取 · 完成 · 验收',
+  description: 'LTY 旭珑公司总看板 · 任务 · 审批 · 公告 · 汇报 · 文件 · 项目',
   appleWebApp: {
     title: 'LTY 旭珑',
     capable: true,

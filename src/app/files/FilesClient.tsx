@@ -140,6 +140,17 @@ export default function FilesClient({
     else router.push('/files');
   }
 
+  async function deleteFile(fileId: string, filename: string) {
+    if (!confirm(`确定删除文件"${filename}"？此操作不可撤销。`)) return;
+    const res = await fetch(`/api/attachments/${fileId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.message ?? body.error ?? '删除失败');
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <div className="space-y-4">
       {/* Breadcrumbs */}
@@ -214,13 +225,20 @@ export default function FilesClient({
         </div>
       )}
 
+      {/* Permission helper: at root, show a banner explaining the model */}
+      {!currentFolder && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+          🔐 <strong>权限怎么用</strong>：建文件夹时选 <strong>🏢 仅指定部门</strong> → 只有该部门成员可见；选 <strong>🔒 仅指定成员</strong> → 只有你勾的人可见。子文件夹默认<strong>继承父级权限</strong>，一次设好整棵树都听话。先去 <a href="/admin/departments" className="underline">/admin/departments</a> 把部门和成员建好。
+        </div>
+      )}
+
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-slate-500">
           {children.length} 个文件夹 · {files.length} 个文件
         </div>
         {access.canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => setCreatingFolder((v) => !v)} className="btn btn-ghost">
               {creatingFolder ? '取消' : '+ 新建文件夹'}
             </button>
@@ -306,15 +324,22 @@ export default function FilesClient({
       {files.length > 0 && (
         <ul className="card divide-y divide-slate-100 overflow-hidden">
           {files.map((f) => (
-            <li key={f.id}>
-              <a href={`/api/attachments/${f.id}`} target="_blank" className="flex items-center gap-3 px-4 py-3 text-sm transition hover:bg-slate-50">
-                <span className="text-xl">{pickEmoji(f.mimeType, f.filename)}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate">{f.filename}</div>
-                  <div className="text-xs text-slate-500">{(f.size / 1024).toFixed(1)} KB · {new Date(f.createdAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}</div>
-                </div>
-                <span className="text-xs text-indigo-600">下载</span>
+            <li key={f.id} className="flex items-center gap-3 px-4 py-3 text-sm transition hover:bg-slate-50">
+              <span className="text-xl shrink-0">{pickEmoji(f.mimeType, f.filename)}</span>
+              <a href={`/api/attachments/${f.id}`} target="_blank" className="min-w-0 flex-1">
+                <div className="truncate">{f.filename}</div>
+                <div className="text-xs text-slate-500">{(f.size / 1024).toFixed(1)} KB · {new Date(f.createdAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}</div>
               </a>
+              <a href={`/api/attachments/${f.id}`} target="_blank" className="shrink-0 text-xs text-indigo-600">下载</a>
+              {access.canEdit && (
+                <button
+                  onClick={() => deleteFile(f.id, f.filename)}
+                  className="shrink-0 text-xs text-rose-600 hover:underline"
+                  title="删除该文件"
+                >
+                  删除
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -84,7 +84,7 @@ export default function Nav() {
           <div className="flex items-baseline gap-2.5 whitespace-nowrap">
             <span className="text-[15px] font-semibold tracking-tight">LTY 旭珑</span>
             <span className="h-3.5 w-px bg-slate-300/70" />
-            <span className="text-[13px] tracking-wide text-slate-500">任务池</span>
+            <span className="text-[13px] tracking-wide text-slate-500">公司总看板</span>
           </div>
         </Link>
 

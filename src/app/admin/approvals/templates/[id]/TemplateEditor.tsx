@@ -14,11 +14,13 @@ import {
   useNodesState,
   Handle,
   Position,
+  MarkerType,
   type Connection,
   type Node,
   type Edge,
   type NodeProps,
 } from '@xyflow/react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   APPROVAL_CATEGORY_META,
@@ -50,7 +52,48 @@ function nodeLabel(n: FlowNode) {
   if (n.type === 'end') return '结束';
   if (n.type === 'approval') return n.data.label || '审批';
   if (n.type === 'cc') return n.data.label || '抄送';
+  if (n.type === 'condition') return n.data.label || '条件';
   return '节点';
+}
+
+// Order nodes start → ...middle... → end in a tidy vertical column.
+// Topologically sort if possible; otherwise preserve array order. Keeps
+// condition nodes and branch targets vertically aligned so the canvas
+// doesn't turn into spaghetti.
+function autoLayout<N extends Node>(nodes: N[], edges: Edge[], pinned: string[] = []): N[] {
+  if (nodes.length === 0) return nodes;
+  const start = nodes.find((n) => n.type === 'start');
+  const end = nodes.find((n) => n.type === 'end');
+  const others = nodes.filter((n) => n.type !== 'start' && n.type !== 'end');
+
+  // Topological pass: BFS from start following outgoing edges.
+  const order: string[] = [];
+  if (start) {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const visited = new Set<string>();
+    const queue: string[] = [start.id];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      order.push(id);
+      edges.filter((e) => e.source === id).forEach((e) => {
+        if (!visited.has(e.target) && byId.has(e.target)) queue.push(e.target);
+      });
+    }
+    // Append anything not reached (orphans) at the end.
+    others.forEach((n) => { if (!visited.has(n.id)) order.push(n.id); });
+  }
+
+  const sequence = order.length ? order : [start, ...others, end].filter(Boolean).map((n) => (n as N).id);
+  const colX = 240;
+  const rowH = 140;
+  return nodes.map((n) => {
+    if (pinned.includes(n.id)) return n;
+    const idx = sequence.indexOf(n.id);
+    const y = idx >= 0 ? 60 + idx * rowH : n.position.y;
+    return { ...n, position: { x: colX, y } };
+  });
 }
 
 // ---------- Custom node components ----------
@@ -168,22 +211,59 @@ function EditorInner({
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, id: `e-${params.source}-${params.target}-${Date.now()}` }, eds)),
+    (params: Connection) => setEdges((eds) => addEdge({
+      ...params,
+      id: `e-${params.source}-${params.target}-${Date.now()}`,
+      markerEnd: { type: MarkerType.ArrowClosed },
+    }, eds)),
     [setEdges]
   );
 
+  // Smart add: insert the new node between the end node and whatever feeds
+  // into end. User no longer has to drag connections manually for the common
+  // "add one more step before end" case.
   function addNode(type: 'approval' | 'cc' | 'condition') {
     const id = `n_${Math.random().toString(36).slice(2, 8)}`;
     const newNode: Node = {
       id,
       type,
-      position: { x: 200 + Math.random() * 40, y: 280 + nodes.length * 30 },
+      position: { x: 200, y: 0 }, // auto-laid-out below
       data:
-        type === 'approval'  ? { label: '审批人', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } :
-        type === 'cc'        ? { label: '抄送', ccUsers: [] } :
-                               { label: '条件分支', field: '', op: '==', value: '' },
+        type === 'approval'  ? { label: ({ approval: '审批', cc: '抄送', condition: '条件' } as any)[type] + ` ${nodes.filter((n) => n.type === type).length + 1}`, approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } :
+        type === 'cc'        ? { label: `抄送 ${nodes.filter((n) => n.type === 'cc').length + 1}`, ccUsers: [] } :
+                               { label: `条件 ${nodes.filter((n) => n.type === 'condition').length + 1}`, field: '', op: '==', value: '' },
     };
-    setNodes((prev) => [...prev, newNode]);
+
+    setNodes((prev) => {
+      const next = [...prev, newNode];
+      return autoLayout(next, edges, type === 'condition' ? [newNode.id] : []);
+    });
+
+    // Auto-wire: find incoming edge to "end", reroute it through the new node.
+    // For condition nodes, we leave the user to pick trueTarget/falseTarget
+    // explicitly in the side panel — but we still give a placeholder edge
+    // from the predecessor so the canvas doesn't look disconnected.
+    setEdges((prevEdges) => {
+      const endNode = nodes.find((n) => n.type === 'end');
+      if (!endNode) return prevEdges;
+      const feeders = prevEdges.filter((e) => e.target === endNode.id);
+      // Choose the predecessor: if there's exactly one feeder, reroute it.
+      // Otherwise just connect start → newNode → end as a fallback.
+      let withoutOld = prevEdges;
+      let sourceId: string;
+      if (feeders.length === 1) {
+        withoutOld = prevEdges.filter((e) => e.id !== feeders[0].id);
+        sourceId = feeders[0].source;
+      } else {
+        const start = nodes.find((n) => n.type === 'start');
+        sourceId = start?.id ?? endNode.id;
+      }
+      return [
+        ...withoutOld,
+        { id: `e-${sourceId}-${id}-${Date.now()}`, source: sourceId, target: id, markerEnd: { type: MarkerType.ArrowClosed } },
+        { id: `e-${id}-${endNode.id}-${Date.now() + 1}`, source: id, target: endNode.id, markerEnd: { type: MarkerType.ArrowClosed } },
+      ];
+    });
   }
 
   function updateSelectedNodeData(patch: any) {
@@ -198,8 +278,69 @@ function EditorInner({
       alert('起点和结束节点不能删除');
       return;
     }
-    setNodes((prev) => prev.filter((n) => n.id !== selectedId));
-    setEdges((prev) => prev.filter((e) => e.source !== selectedId && e.target !== selectedId));
+    // Before removing, stitch the predecessor(s) to the successor(s) so we
+    // don't leave the canvas disconnected.
+    const incoming = edges.filter((e) => e.target === selectedId);
+    const outgoing = edges.filter((e) => e.source === selectedId);
+    const bridge: Edge[] = [];
+    for (const i of incoming) {
+      for (const o of outgoing) {
+        bridge.push({
+          id: `e-${i.source}-${o.target}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          source: i.source,
+          target: o.target,
+          markerEnd: { type: MarkerType.ArrowClosed },
+        });
+      }
+    }
+    setNodes((prev) => autoLayout(prev.filter((n) => n.id !== selectedId), edges));
+    setEdges((prev) => [
+      ...prev.filter((e) => e.source !== selectedId && e.target !== selectedId),
+      ...bridge,
+    ]);
+    setSelectedId(null);
+  }
+
+  function tidyLayout() {
+    setNodes((prev) => autoLayout(prev, edges));
+  }
+
+  // Drop-in presets — each seeds nodes/edges and laid out automatically.
+  function applyPreset(preset: 'SINGLE' | 'DEPT_LEAD' | 'WITH_CC' | 'CONDITION_MONEY') {
+    if (nodes.length > 3 && !confirm('当前已有节点，应用预设会覆盖现有流程，确定继续？')) return;
+    const start: Node = { id: 'start', type: 'start', position: { x: 240, y: 60 }, data: { label: '发起人' } };
+    const end: Node = { id: 'end', type: 'end', position: { x: 240, y: 900 }, data: { label: '结束' } };
+    let newNodes: Node[] = [start];
+    let newEdges: Edge[] = [];
+    const connect = (a: string, b: string) => newEdges.push({ id: `e-${a}-${b}`, source: a, target: b, markerEnd: { type: MarkerType.ArrowClosed } });
+
+    if (preset === 'SINGLE') {
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属审批', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      newNodes.push(a1, end);
+      connect('start', 'a1'); connect('a1', 'end');
+    } else if (preset === 'DEPT_LEAD') {
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      newNodes.push(a1, a2, end);
+      connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'end');
+    } else if (preset === 'WITH_CC') {
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const cc: Node = { id: 'c1', type: 'cc', position: { x: 240, y: 380 }, data: { label: '抄送 HR', ccUsers: [] } };
+      newNodes.push(a1, cc, end);
+      connect('start', 'a1'); connect('a1', 'c1'); connect('c1', 'end');
+    } else if (preset === 'CONDITION_MONEY') {
+      const cond: Node = { id: 'cond', type: 'condition', position: { x: 240, y: 220 }, data: { label: '金额判断', field: '', op: '>', value: '5000', trueTargetId: 'a_big', falseTargetId: 'a_small' } };
+      const aSmall: Node = { id: 'a_small', type: 'approval', position: { x: 80, y: 400 }, data: { label: '部门负责人', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const aBig: Node = { id: 'a_big', type: 'approval', position: { x: 420, y: 400 }, data: { label: 'CEO 审批', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
+      newNodes.push(cond, aSmall, aBig, end);
+      connect('start', 'cond');
+      // Visual edges; runtime uses explicit targets on condition node.
+      newEdges.push({ id: 'e-cond-small', source: 'cond', target: 'a_small', label: '≤ 5000', markerEnd: { type: MarkerType.ArrowClosed } });
+      newEdges.push({ id: 'e-cond-big',   source: 'cond', target: 'a_big',   label: '> 5000', markerEnd: { type: MarkerType.ArrowClosed } });
+      connect('a_small', 'end'); connect('a_big', 'end');
+    }
+    setNodes(newNodes);
+    setEdges(newEdges);
     setSelectedId(null);
   }
 
@@ -230,7 +371,7 @@ function EditorInner({
     });
   }
 
-  async function save(activate = true) {
+  async function save(activate = true, exitAfter = false) {
     setSaving(true); setMsg(null);
     try {
       // Basic validation
@@ -288,12 +429,31 @@ function EditorInner({
       if (!res.ok) throw new Error((await res.json()).error ?? '保存失败');
       setMsg('✓ 已保存');
       router.refresh();
-      setTimeout(() => setMsg(null), 2500);
+      if (exitAfter) {
+        setTimeout(() => router.push('/admin/approvals/templates'), 600);
+      } else {
+        setTimeout(() => setMsg(null), 2500);
+      }
     } catch (e: any) { setMsg(e.message); } finally { setSaving(false); }
   }
 
   return (
     <div className="space-y-4">
+      {/* Sticky action bar with back + save — solves "no way to exit" */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-white">
+        <Link href="/admin/approvals/templates" className="inline-flex items-center gap-1.5 text-sm text-slate-200 hover:text-white">
+          ← 返回模板列表
+        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => save(false, false)} disabled={saving} className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 disabled:opacity-50">
+            {saving ? '…' : '暂存草稿'}
+          </button>
+          <button onClick={() => save(true, true)} disabled={saving} className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50">
+            {saving ? '保存中…' : '✓ 保存并退出'}
+          </button>
+        </div>
+      </div>
+
       {/* Top toolbar */}
       <div className="card flex flex-wrap items-end gap-3 p-4">
         <div className="flex-1 min-w-[200px]">
@@ -312,9 +472,15 @@ function EditorInner({
           <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">简介</label>
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="一句话说明这个流程" />
         </div>
-        <button onClick={() => save(true)} disabled={saving} className="btn btn-primary">
-          {saving ? '保存中…' : '保存并启用'}
-        </button>
+      </div>
+
+      {/* Preset dropdown for non-designers */}
+      <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
+        <span className="font-medium">🎨 一键开始：</span>
+        <button onClick={() => applyPreset('SINGLE')} className="ml-2 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">单级审批（部门负责人）</button>
+        <button onClick={() => applyPreset('DEPT_LEAD')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">两级：负责人 → 总经理</button>
+        <button onClick={() => applyPreset('WITH_CC')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">含抄送 HR</button>
+        <button onClick={() => applyPreset('CONDITION_MONEY')} className="ml-1 rounded-full bg-white px-2.5 py-0.5 text-xs ring-1 ring-indigo-200 hover:bg-indigo-100">金额分支（&gt; 5000 走 CEO）</button>
       </div>
 
       {msg && <div className={`rounded-xl px-3 py-2 text-sm ${msg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'}`}>{msg}</div>}
@@ -322,13 +488,18 @@ function EditorInner({
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         {/* Canvas */}
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between border-b border-slate-100 px-4 py-2 text-sm">
             <span className="font-semibold">🎨 流程画布</span>
             <div className="flex items-center gap-2">
               <button onClick={() => addNode('approval')} className="btn btn-ghost text-xs">+ 审批</button>
               <button onClick={() => addNode('cc')} className="btn btn-ghost text-xs">+ 抄送</button>
               <button onClick={() => addNode('condition')} className="btn btn-ghost text-xs">+ 条件分支</button>
+              <span className="mx-1 h-4 w-px bg-slate-200" />
+              <button onClick={tidyLayout} className="btn btn-ghost text-xs">📐 自动整理</button>
             </div>
+          </div>
+          <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-2 text-[11px] text-amber-900">
+            💡 新节点会自动插在"结束"前；如需连线，从节点底部的圆点<strong>拖到</strong>另一个节点顶部的圆点；乱了就点"自动整理"。
           </div>
           <div className="h-[520px]">
             <ReactFlow
@@ -339,6 +510,7 @@ function EditorInner({
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onSelectionChange={({ nodes: n }) => setSelectedId(n[0]?.id ?? null)}
+              defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
               fitView
             >
               <Background gap={16} size={1} />

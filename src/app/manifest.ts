@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'LTY 旭珑 · 任务池',
+    name: 'LTY 旭珑 · 公司总看板',
     short_name: 'LTY 旭珑',
-    description: '旭珑内部任务看板',
+    description: 'LTY 旭珑公司总看板',
     start_url: '/',
     display: 'standalone',
     background_color: '#1a0f0a',
