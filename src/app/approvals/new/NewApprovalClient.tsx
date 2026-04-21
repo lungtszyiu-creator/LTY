@@ -163,8 +163,24 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                   const parsed = parseLeaveBalanceValue(values[f.id]);
                   const patch = (p: Partial<{ category: string; days: any; balance: any }>) =>
                     update(f.id, { category: parsed.category, days: parsed.days, balance: parsed.balance, ...p });
+
+                  // Try to auto-compute days from the same form's daterange
+                  // field (typical leave template has 请假起止日期). Inclusive
+                  // count, calendar days — user can still override manually.
+                  const rangeField = fields.find((x) => x.type === 'daterange');
+                  const rangeVal = rangeField ? values[rangeField.id] : undefined;
+                  let autoDays: number | null = null;
+                  if (Array.isArray(rangeVal) && rangeVal[0] && rangeVal[1]) {
+                    const d1 = new Date(rangeVal[0] as string).getTime();
+                    const d2 = new Date(rangeVal[1] as string).getTime();
+                    if (!Number.isNaN(d1) && !Number.isNaN(d2) && d2 >= d1) {
+                      autoDays = Math.round((d2 - d1) / 86400000) + 1;
+                    }
+                  }
+
+                  const QUICK_DAYS = [0.5, 1, 2, 3, 5, 7, 10];
                   return (
-                    <div className="space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                    <div className="space-y-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-slate-500">假期类型</span>
                         <div className="flex flex-wrap gap-1.5">
@@ -183,24 +199,64 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                           })}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="flex flex-col gap-1">
+
+                      <div>
+                        <div className="mb-1 flex items-center gap-2">
                           <span className="text-xs text-slate-500">本次申请（天）</span>
-                          <input
-                            type="number" min="0" step="0.5"
-                            value={parsed.days ?? ''}
-                            onChange={(e) => patch({ days: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="input" placeholder="例如 1 / 0.5"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs text-slate-500">当前剩余（天，自报）</span>
+                          {autoDays !== null && (
+                            <button
+                              type="button"
+                              onClick={() => patch({ days: autoDays })}
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                                parsed.days === autoDays ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                              }`}
+                              title="基于起止日期含头尾计算"
+                            >
+                              📅 按所选日期算：{autoDays} 天
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {QUICK_DAYS.map((d) => {
+                            const on = parsed.days === d;
+                            return (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => patch({ days: d })}
+                                className={`rounded-full px-3 py-1 text-xs transition ${on ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'}`}
+                              >
+                                {d === 0.5 ? '半天' : `${d} 天`}
+                              </button>
+                            );
+                          })}
+                          <div className="ml-1 flex items-center gap-1 text-xs text-slate-500">
+                            或自定义
+                            <input
+                              type="number" min="0" step="0.5"
+                              value={parsed.days ?? ''}
+                              onChange={(e) => patch({ days: e.target.value === '' ? '' : Number(e.target.value) })}
+                              className="w-20 rounded-md bg-white px-2 py-0.5 text-sm ring-1 ring-slate-200 focus:ring-slate-400"
+                              placeholder="天"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 whitespace-nowrap">当前剩余（天，自报）</span>
                           <input
                             type="number" min="0" step="0.5"
                             value={parsed.balance ?? ''}
                             onChange={(e) => patch({ balance: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="input" placeholder="剩余可用天数"
+                            className="input max-w-[140px]" placeholder="剩余可用天数"
                           />
+                          {parsed.days != null && parsed.balance != null && parsed.days > parsed.balance && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
+                              ⚠️ 申请超过剩余
+                            </span>
+                          )}
                         </label>
                       </div>
                     </div>
