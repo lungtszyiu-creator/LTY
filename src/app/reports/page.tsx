@@ -6,6 +6,7 @@ import { currentPeriodStart, currentPeriodEnd, currentDueAt, formatPeriod } from
 import { fmtDateTime } from '@/lib/datetime';
 import ReportEditor from './ReportEditor';
 import ReportHistoryList from './ReportHistoryList';
+import IncomingReportsList from './IncomingReportsList';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +21,9 @@ export default async function MyReportsPage({
   const type: 'WEEKLY' | 'MONTHLY' = searchParams.type === 'MONTHLY' ? 'MONTHLY' : 'WEEKLY';
   const tab = searchParams.tab === 'incoming' ? 'incoming' : 'mine';
   const now = new Date();
-
-  // Opening the incoming tab counts as "seeing" everything in my inbox —
-  // clear the nav unread badge by stamping readAtByReporter on any
-  // unstamped incoming reports. Runs before the fetches below so the
-  // counts returned to the client reflect the cleared state.
-  if (tab === 'incoming') {
-    await prisma.report.updateMany({
-      where: { reportToId: session.user.id, submittedAt: { not: null }, readAtByReporter: null },
-      data: { readAtByReporter: new Date() },
-    });
-  }
+  // Note: badge clearing is per-item — each incoming report has its own
+  // "已阅" button that stamps readAtByReporter. We intentionally do NOT
+  // bulk-clear on tab visit anymore so the recipient decides what's read.
   const periodStart = currentPeriodStart(type, now);
   const periodEnd = currentPeriodEnd(type, now);
   const dueAt = currentDueAt(type, now);
@@ -180,46 +173,23 @@ export default async function MyReportsPage({
       ) : (
         <section className="rise rise-delay-2">
           <h2 className="mb-3 text-lg font-semibold">{type === 'WEEKLY' ? '周报' : '月报'} · 汇报给我的</h2>
-          {incoming.length === 0 ? (
-            <div className="card py-14 text-center text-sm text-slate-500">
-              暂时没有人把你设为他们的汇报对象
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {incoming.map((r) => (
-                <li key={r.id} className="card p-4">
-                  <details>
-                    <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-300 to-fuchsia-300 text-xs font-semibold text-white">
-                        {(r.user.name ?? r.user.email).slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="font-medium">{r.user.name ?? r.user.email}</span>
-                      <span className="text-xs text-slate-500">· {formatPeriod(r.type as any, r.periodStart, r.periodEnd)}</span>
-                      <span className="text-xs text-slate-400">· {fmtDateTime(r.submittedAt)}</span>
-                      {r.status === 'LATE' && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-200">逾期</span>}
-                    </summary>
-                    <div className="mt-3 space-y-2 pl-9">
-                      {r.contentDone && <ReportBlock label="本期完成" value={r.contentDone} />}
-                      {r.contentPlan && <ReportBlock label="下期计划" value={r.contentPlan} />}
-                      {r.contentBlockers && <ReportBlock label="遇到问题" value={r.contentBlockers} />}
-                      {r.contentAsks && <ReportBlock label="需要支持" value={r.contentAsks} />}
-                    </div>
-                  </details>
-                </li>
-              ))}
-            </ul>
-          )}
+          <IncomingReportsList
+            items={incoming.map((r) => ({
+              id: r.id,
+              periodLabel: formatPeriod(r.type as any, r.periodStart, r.periodEnd),
+              status: r.status,
+              submittedAt: r.submittedAt?.toISOString() ?? null,
+              readAtByReporter: r.readAtByReporter?.toISOString() ?? null,
+              contentDone: r.contentDone,
+              contentPlan: r.contentPlan,
+              contentBlockers: r.contentBlockers,
+              contentAsks: r.contentAsks,
+              author: { id: r.user.id, name: r.user.name, email: r.user.email ?? '', image: r.user.image },
+            }))}
+          />
         </section>
       )}
     </div>
   );
 }
 
-function ReportBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-100">
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{value}</div>
-    </div>
-  );
-}
