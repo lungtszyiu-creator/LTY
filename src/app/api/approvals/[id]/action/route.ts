@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
 import { applyDecision } from '@/lib/approvalRuntime';
+import { applyBalanceEffects } from '@/lib/approvalTerminal';
 import { notifyApprovalPending, notifyApprovalFinalised } from '@/lib/email';
 
 const schema = z.object({
@@ -43,6 +44,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             initiatorName: inst.initiator.name ?? inst.initiator.email ?? '',
           }).catch((e) => console.error('[approval] notify next pending failed', e));
         }
+      }
+
+      // Leave/overtime balance effects fire on APPROVED. Idempotent via the
+      // LeaveBalanceLedger unique constraint so admin force-approval after
+      // a normal approval won't double-apply.
+      if (result.status === 'APPROVED') {
+        await applyBalanceEffects(params.id).catch((e) => console.error('[approval] balance effects failed', e));
       }
 
       // Notify initiator on terminal.

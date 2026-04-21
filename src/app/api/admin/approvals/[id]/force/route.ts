@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { adminForceDecide } from '@/lib/approvalRuntime';
+import { applyBalanceEffects } from '@/lib/approvalTerminal';
 import { notifyApprovalFinalised } from '@/lib/email';
 
 // Admin backend: force-decide an in-progress approval from the management
@@ -26,6 +27,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         initiator: { select: { email: true, name: true } },
       },
     });
+
+    if (result.status === 'APPROVED') {
+      await applyBalanceEffects(params.id).catch((e) => console.error('[approval] balance effects failed', e));
+    }
 
     if (inst && (result.status === 'APPROVED' || result.status === 'REJECTED')) {
       notifyApprovalFinalised({

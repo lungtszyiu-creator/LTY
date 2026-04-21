@@ -308,7 +308,7 @@ function EditorInner({
   // Drop-in presets — each seeds nodes/edges AND form fields so the submit
   // page actually has something to fill in. Previously blank templates had
   // no fields other than what the author manually added.
-  function applyPreset(preset: 'LEAVE' | 'EXPENSE' | 'TRAVEL' | 'PROCUREMENT' | 'STAMP') {
+  function applyPreset(preset: 'LEAVE' | 'EXPENSE' | 'TRAVEL' | 'PROCUREMENT' | 'STAMP' | 'OVERTIME') {
     if ((nodes.length > 3 || fields.length > 0) && !confirm('当前已有节点或字段，应用预设会覆盖现有内容，确定继续？')) return;
     const start: Node = { id: 'start', type: 'start', position: { x: 240, y: 60 }, data: { label: '发起人' } };
     const end: Node = { id: 'end', type: 'end', position: { x: 240, y: 800 }, data: { label: '结束' } };
@@ -397,6 +397,19 @@ function EditorInner({
       const a2: Node = { id: 'a2', type: 'approval', position: { x: 240, y: 380 }, data: { label: '总经理', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } };
       newNodes.push(a1, a2, end);
       connect('start', 'a1'); connect('a1', 'a2'); connect('a2', 'end');
+    } else if (preset === 'OVERTIME') {
+      setName((n) => n || '加班申请');
+      setCategory('OVERTIME');
+      newFields = [
+        { id: fid(), type: 'date', label: '加班日期', required: true, titleField: true },
+        { id: fid(), type: 'overtime_hours', label: '加班时长', required: true },
+        { id: fid(), type: 'textarea', label: '加班事由', required: true, placeholder: '加班内容 / 工作项目' },
+        { id: fid(), type: 'attachment', label: '相关附件（可选）' },
+      ];
+      const a1: Node = { id: 'a1', type: 'approval', position: { x: 240, y: 220 }, data: { label: '直属上级', approvers: [], mode: 'ALL', approverSource: 'INITIATOR_DEPT_LEAD' } };
+      const cc: Node = { id: 'c1', type: 'cc', position: { x: 240, y: 380 }, data: { label: '抄送 HR', ccUsers: [] } };
+      newNodes.push(a1, cc, end);
+      connect('start', 'a1'); connect('a1', 'c1'); connect('c1', 'end');
     }
 
     setNodes(newNodes);
@@ -541,6 +554,7 @@ function EditorInner({
         <div className="mb-1.5"><span className="font-medium">🎨 从常用模板开始</span>（含表单字段 + 流程，应用后改审批人即可）：</div>
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => applyPreset('LEAVE')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">🌴 请假</button>
+          <button onClick={() => applyPreset('OVERTIME')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">⏱ 加班（1:1 抵调休）</button>
           <button onClick={() => applyPreset('EXPENSE')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">💰 报销（金额分支）</button>
           <button onClick={() => applyPreset('TRAVEL')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">✈️ 出差</button>
           <button onClick={() => applyPreset('PROCUREMENT')} className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-indigo-200 hover:bg-indigo-100">📦 采购</button>

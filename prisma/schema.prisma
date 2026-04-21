@@ -76,6 +76,11 @@ model User {
   image         String?
   role          String    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "MEMBER"
   active        Boolean   @default(true)
+  // 假期余额（单位：天，允许 0.5 步进）。年假 = HR 每年初设定；调休 = 加班
+  // 审批通过后 1:1 累积。请假类型为"年假"/"调休"时从这里扣减，其他类型
+  // （事假/病假/婚丧/产陪护）不走这里。允许为负 — 借假场景管理员手动调。
+  annualLeaveBalance Float  @default(0)
+  compLeaveBalance   Float  @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -104,6 +109,32 @@ model User {
   approvalTplsCreated   ApprovalTemplate[]    @relation("ApprovalTplAuthor")
   approvalsInitiated    ApprovalInstance[]    @relation("ApprovalInitiator")
   approvalStepsAssigned ApprovalStep[]        @relation("ApprovalStepAssignee")
+
+  leaveLedgerAsSubject  LeaveBalanceLedger[]  @relation("LeaveLedgerUser")
+  leaveLedgerAsActor    LeaveBalanceLedger[]  @relation("LeaveLedgerActor")
+}
+
+// Audit trail for every change to a user's leave balances. Each entry is one
+// delta (positive = credit, negative = debit). source tells us whether it
+// was manual admin input, an auto-deduction from an APPROVED leave, or an
+// auto-credit from an APPROVED overtime. approvalInstanceId is unique per
+// pool so a re-run of the same approval never double-applies.
+model LeaveBalanceLedger {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  pool                String   // "ANNUAL" | "COMP"
+  deltaDays           Float    // signed; negative for deductions
+  balanceAfter        Float    // snapshot of the pool after apply
+  source              String   // "ADMIN_SET" | "LEAVE_APPROVED" | "OVERTIME_APPROVED" | "ADMIN_ADJUST"
+  note                String?
+  approvalInstanceId  String?  // null for manual admin actions
+  actorId             String?
+  actor               User?    @relation("LeaveLedgerActor", fields: [actorId], references: [id])
+  createdAt           DateTime @default(now())
+
+  @@index([userId, pool, createdAt])
+  @@unique([approvalInstanceId, pool])
 }
 
 model Task {

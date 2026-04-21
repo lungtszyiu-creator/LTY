@@ -3,11 +3,16 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { hasMinRole, type Role } from '@/lib/auth';
+import { setLeaveBalance } from '@/lib/leaveBalance';
 
 const schema = z.object({
   role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MEMBER']).optional(),
   active: z.boolean().optional(),
   name: z.string().max(100).nullable().optional(),
+  // Absolute set (admin enters the target value, e.g. "13.5" 天). Ledger
+  // entry records the delta + actor so audit is preserved.
+  annualLeaveBalance: z.number().finite().optional(),
+  compLeaveBalance:   z.number().finite().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -44,7 +49,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'LAST_ADMIN' }, { status: 409 });
   }
 
-  const user = await prisma.user.update({ where: { id: params.id }, data });
+  // Split balance updates out — they go through setLeaveBalance so the ledger
+  // gets a row; everything else is a plain column update.
+  const { annualLeaveBalance, compLeaveBalance, ...rest } = data;
+
+  let user = await prisma.user.update({ where: { id: params.id }, data: rest });
+
+  if (typeof annualLeaveBalance === 'number') {
+    await setLeaveBalance({
+      userId: params.id, pool: 'ANNUAL',
+      newValue: annualLeaveBalance, actorId: admin.id,
+      note: '管理员在用户列表直接设置',
+    });
+  }
+  if (typeof compLeaveBalance === 'number') {
+    await setLeaveBalance({
+      userId: params.id, pool: 'COMP',
+      newValue: compLeaveBalance, actorId: admin.id,
+      note: '管理员在用户列表直接设置',
+    });
+  }
+
+  if (typeof annualLeaveBalance === 'number' || typeof compLeaveBalance === 'number') {
+    user = await prisma.user.findUnique({ where: { id: params.id } }) ?? user;
+  }
   return NextResponse.json(user);
 }
 

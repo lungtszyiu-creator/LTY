@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import {
   parseFields, parseFlow, APPROVAL_CATEGORY_META, FIELD_TYPE_META,
   CURRENCY_META, parseMoneyValue, parseLeaveBalanceValue,
+  OVERTIME_HOURS_PER_COMP_DAY,
 } from '@/lib/approvalFlow';
 import { fmtDateTime } from '@/lib/datetime';
 import InstanceActions from './InstanceActions';
@@ -149,8 +150,17 @@ export default async function ApprovalInstancePage({
                   : <span>
                       <span className="font-semibold">{lb.category}</span>
                       {lb.days != null && <span className="ml-1">· 申请 {lb.days} 天</span>}
-                      {lb.balance != null && <span className="ml-1 text-slate-500">· 剩余 {lb.balance} 天</span>}
+                      {lb.balance != null && <span className="ml-1 text-slate-500">· 提交时余额 {lb.balance} 天</span>}
                     </span>;
+              }
+              else if (f.type === 'overtime_hours') {
+                const h = Number(v);
+                display = Number.isFinite(h) && h > 0
+                  ? <span>
+                      <span className="font-semibold">{h} 小时</span>
+                      <span className="ml-1 text-xs text-emerald-700">≈ {(h / OVERTIME_HOURS_PER_COMP_DAY).toFixed(2)} 天调休（通过后入账）</span>
+                    </span>
+                  : <span className="text-slate-400">未填写</span>;
               }
               else display = String(v);
             }

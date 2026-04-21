@@ -15,6 +15,7 @@ export default async function AdminUsersPage() {
     select: {
       id: true, name: true, email: true, image: true,
       role: true, active: true, createdAt: true,
+      annualLeaveBalance: true, compLeaveBalance: true,
     },
   });
 

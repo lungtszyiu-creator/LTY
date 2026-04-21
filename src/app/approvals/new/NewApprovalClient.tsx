@@ -6,6 +6,7 @@ import {
   parseFields, parseFlow, APPROVAL_CATEGORY_META,
   CURRENCY_META, LEAVE_BALANCE_CATEGORIES,
   parseMoneyValue, parseLeaveBalanceValue,
+  OVERTIME_HOURS_PER_COMP_DAY,
   type Currency,
 } from '@/lib/approvalFlow';
 
@@ -19,7 +20,9 @@ type Tpl = {
   fieldsJson: string;
 };
 
-export default function NewApprovalClient({ template }: { template: Tpl }) {
+type Balances = { annual: number; comp: number };
+
+export default function NewApprovalClient({ template, myBalances }: { template: Tpl; myBalances: Balances }) {
   const router = useRouter();
   const fields = parseFields(template.fieldsJson);
   const flow = parseFlow(template.flowJson);
@@ -161,8 +164,27 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                 })()}
                 {f.type === 'leave_balance' && (() => {
                   const parsed = parseLeaveBalanceValue(values[f.id]);
-                  const patch = (p: Partial<{ category: string; days: any; balance: any }>) =>
-                    update(f.id, { category: parsed.category, days: parsed.days, balance: parsed.balance, ...p });
+                  // Auto-bind "balance" to the DB-sourced pool rather than a
+                  // self-report input so approvers see authoritative numbers.
+                  // Category = 年假 → annual; 调休 → comp; otherwise null.
+                  const boundPool =
+                    parsed.category === '年假' ? 'annual'
+                    : parsed.category === '调休' ? 'comp'
+                    : null;
+                  const officialBalance = boundPool === 'annual' ? myBalances.annual
+                                        : boundPool === 'comp' ? myBalances.comp
+                                        : null;
+                  const patch = (p: Partial<{ category: string; days: any; balance: any }>) => {
+                    const next: any = { category: parsed.category, days: parsed.days, balance: parsed.balance, ...p };
+                    // Keep `balance` in the saved form value snapshotted from the
+                    // authoritative number at submit time — auditors can see what
+                    // the remainder was the moment the request went in.
+                    const category = next.category;
+                    if (category === '年假') next.balance = myBalances.annual;
+                    else if (category === '调休') next.balance = myBalances.comp;
+                    else next.balance = null;
+                    update(f.id, next);
+                  };
 
                   // Try to auto-compute days from the same form's daterange
                   // field (typical leave template has 请假起止日期). Inclusive
@@ -260,21 +282,76 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 whitespace-nowrap">当前剩余（天，自报）</span>
+                      {boundPool && officialBalance !== null && (
+                        <div className="rounded-lg bg-white p-2.5 ring-1 ring-slate-200">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="text-slate-500">你的 {parsed.category} 余额：</span>
+                            <span className="text-lg font-semibold text-slate-900">{officialBalance.toFixed(1)} 天</span>
+                            {parsed.days != null && (
+                              <>
+                                <span className="text-slate-400">—</span>
+                                <span className="text-xs text-slate-500">本次申请 {parsed.days} 天 →</span>
+                                <span className={`text-sm font-semibold ${officialBalance - Number(parsed.days) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                  审批通过后 {(officialBalance - Number(parsed.days)).toFixed(1)} 天
+                                </span>
+                                {officialBalance - Number(parsed.days) < 0 && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
+                                    ⚠️ 余额不足（可由管理员审批后借假）
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            此余额由管理员维护；审批通过后自动扣减，不用手动填写。
+                          </div>
+                        </div>
+                      )}
+                      {!boundPool && parsed.category && (
+                        <div className="text-[11px] text-slate-500">
+                          {parsed.category} 不占用年假/调休池，审批通过不影响余额。
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+                {f.type === 'overtime_hours' && (() => {
+                  const hours = values[f.id];
+                  const h = hours === '' || hours == null ? null : Number(hours);
+                  const compDays = h != null && !Number.isNaN(h) ? +(h / OVERTIME_HOURS_PER_COMP_DAY).toFixed(2) : null;
+                  return (
+                    <div className="space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-2 ring-indigo-300 focus-within:ring-indigo-500">
                           <input
                             type="number" min="0" step="0.5"
-                            value={parsed.balance ?? ''}
-                            onChange={(e) => patch({ balance: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="input max-w-[140px]" placeholder="剩余可用天数"
+                            value={hours ?? ''}
+                            onChange={(e) => update(f.id, e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-24 border-0 bg-transparent p-0 text-center text-lg font-bold text-slate-900 outline-none"
+                            placeholder="0"
                           />
-                          {parsed.days != null && parsed.balance != null && parsed.days > parsed.balance && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
-                              ⚠️ 申请超过剩余
-                            </span>
-                          )}
-                        </label>
+                          <span className="text-sm text-slate-600">小时</span>
+                        </div>
+                        {compDays !== null && (
+                          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900 ring-1 ring-emerald-200">
+                            审批通过后 → <strong>+{compDays} 天</strong> 调休（1 天 = {OVERTIME_HOURS_PER_COMP_DAY} 小时）
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-slate-500">快捷填：</span>
+                        {[2, 4, 6, 8, 12].map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => update(f.id, q)}
+                            className={`rounded-full px-3 py-1 text-xs transition ${
+                              Number(hours) === q ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {q} 小时
+                          </button>
+                        ))}
                       </div>
                     </div>
                   );

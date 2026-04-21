@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MEMBER';
 
 type U = {
   id: string; name: string | null; email: string; image: string | null;
   role: string; active: boolean; createdAt: string;
+  annualLeaveBalance: number; compLeaveBalance: number;
 };
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -121,6 +122,7 @@ export default function UsersTable({
               <th className="px-5 py-3 text-left font-medium">用户</th>
               <th className="px-5 py-3 text-left font-medium">邮箱</th>
               <th className="px-5 py-3 text-left font-medium">角色</th>
+              <th className="px-5 py-3 text-left font-medium">假期余额（天）</th>
               <th className="px-5 py-3 text-left font-medium">状态</th>
               <th className="px-5 py-3 text-right font-medium">操作</th>
             </tr>
@@ -162,6 +164,14 @@ export default function UsersTable({
                     )}
                   </td>
                   <td className="px-5 py-3">
+                    <BalanceInputs
+                      annual={u.annualLeaveBalance}
+                      comp={u.compLeaveBalance}
+                      editable={editable}
+                      onSave={(patchData) => patch(u.id, patchData as any)}
+                    />
+                  </td>
+                  <td className="px-5 py-3">
                     <button
                       type="button"
                       onClick={() => editable && patch(u.id, { active: !u.active })}
@@ -185,7 +195,7 @@ export default function UsersTable({
             })}
             {users.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-sm text-slate-500">还没有用户</td>
+                <td colSpan={6} className="py-10 text-center text-sm text-slate-500">还没有用户</td>
               </tr>
             )}
           </tbody>
@@ -251,6 +261,16 @@ export default function UsersTable({
                 </div>
               </div>
 
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">假期余额（天）</div>
+                <BalanceInputs
+                  annual={u.annualLeaveBalance}
+                  comp={u.compLeaveBalance}
+                  editable={editable}
+                  onSave={(patchData) => patch(u.id, patchData as any)}
+                />
+              </div>
+
               {u.id !== meId && editable && (
                 <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
                   <button onClick={() => remove(u.id)} className="text-xs text-rose-600">
@@ -265,6 +285,65 @@ export default function UsersTable({
           <li className="card py-10 text-center text-sm text-slate-500">还没有用户</li>
         )}
       </ul>
+    </div>
+  );
+}
+
+function BalanceInputs({
+  annual, comp, editable, onSave,
+}: {
+  annual: number; comp: number; editable: boolean;
+  onSave: (patch: { annualLeaveBalance?: number; compLeaveBalance?: number }) => void;
+}) {
+  const [a, setA] = useState(String(annual ?? 0));
+  const [c, setC] = useState(String(comp ?? 0));
+  const aDirty = Number(a) !== Number(annual);
+  const cDirty = Number(c) !== Number(comp);
+
+  // Keep local inputs in sync when the server pushes a new number back via
+  // parent state (e.g. after a save elsewhere) — but only when the user
+  // isn't mid-type, to avoid clobbering what they're typing.
+  useEffect(() => {
+    if (!aDirty) setA(String(annual));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annual]);
+  useEffect(() => {
+    if (!cDirty) setC(String(comp));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comp]);
+
+  function commit() {
+    const patch: any = {};
+    if (aDirty) patch.annualLeaveBalance = Number(a);
+    if (cDirty) patch.compLeaveBalance = Number(c);
+    if (Object.keys(patch).length > 0) onSave(patch);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <label className="inline-flex items-center gap-1">
+        <span className="text-slate-500">年假</span>
+        <input
+          type="number" step="0.5" disabled={!editable}
+          value={a}
+          onChange={(e) => setA(e.target.value)}
+          onBlur={commit}
+          className="w-16 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-right text-xs font-semibold tabular-nums disabled:bg-slate-50 disabled:text-slate-400"
+        />
+      </label>
+      <label className="inline-flex items-center gap-1">
+        <span className="text-slate-500">调休</span>
+        <input
+          type="number" step="0.5" disabled={!editable}
+          value={c}
+          onChange={(e) => setC(e.target.value)}
+          onBlur={commit}
+          className="w-16 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-right text-xs font-semibold tabular-nums disabled:bg-slate-50 disabled:text-slate-400"
+        />
+      </label>
+      {(aDirty || cDirty) && editable && (
+        <button type="button" onClick={commit} className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] text-white hover:bg-indigo-700">保存</button>
+      )}
     </div>
   );
 }

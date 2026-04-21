@@ -4,7 +4,11 @@
 export type FieldType =
   | 'text' | 'textarea' | 'number' | 'money' | 'date' | 'daterange'
   | 'select' | 'multiselect' | 'user' | 'department' | 'attachment'
-  | 'leave_balance';
+  | 'leave_balance' | 'overtime_hours';
+
+// Conversion constant for overtime → comp leave. Matches the common
+// 8-hour workday; kept as a constant so we can surface it in UI copy.
+export const OVERTIME_HOURS_PER_COMP_DAY = 8;
 
 export type Currency = 'CNY' | 'HKD' | 'USDT' | 'USDC';
 
@@ -15,7 +19,9 @@ export const CURRENCY_META: Record<Currency, { label: string; symbol: string; ic
   USDC: { label: 'USDC',        symbol: '$',    icon: '🔵' },
 };
 
-export const LEAVE_BALANCE_CATEGORIES = ['年假', '调休', '事假', '病假', '其他'] as const;
+export const LEAVE_BALANCE_CATEGORIES = [
+  '年假', '调休', '事假', '病假', '婚假', '丧假', '产假', '陪护假',
+] as const;
 export type LeaveBalanceCategory = typeof LEAVE_BALANCE_CATEGORIES[number];
 
 export type FormFieldSpec = {
@@ -108,6 +114,7 @@ export type FlowGraph = {
 
 export const APPROVAL_CATEGORY_META: Record<string, { label: string; icon: string }> = {
   LEAVE:       { label: '请假',   icon: '🌴' },
+  OVERTIME:    { label: '加班',   icon: '⏱' },
   EXPENSE:     { label: '报销',   icon: '💰' },
   TRAVEL:      { label: '出差',   icon: '✈️' },
   PROCUREMENT: { label: '采购',   icon: '📦' },
@@ -127,7 +134,8 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; icon: string }>
   user:          { label: '成员选择',        icon: '👤' },
   department:    { label: '部门选择',        icon: '🏢' },
   attachment:    { label: '附件',            icon: '📎' },
-  leave_balance: { label: '假期余额（年假/调休）', icon: '🌴' },
+  leave_balance:  { label: '假期余额（年假/调休）', icon: '🌴' },
+  overtime_hours: { label: '加班时长（小时）',       icon: '⏱' },
 };
 
 // Walk the flow graph forward from `from` (a node id) and return the first

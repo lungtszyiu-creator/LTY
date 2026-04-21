@@ -15,10 +15,16 @@ export default async function NewApprovalPage({
   const session = await getSession();
   if (!session?.user) redirect('/login');
 
-  const templates = await prisma.approvalTemplate.findMany({
-    where: { active: true },
-    orderBy: [{ category: 'asc' }, { name: 'asc' }],
-  });
+  const [templates, me] = await Promise.all([
+    prisma.approvalTemplate.findMany({
+      where: { active: true },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { annualLeaveBalance: true, compLeaveBalance: true },
+    }),
+  ]);
 
   if (templates.length === 0) {
     return (
@@ -98,6 +104,10 @@ export default async function NewApprovalPage({
                 description: selected.description,
                 flowJson: selected.flowJson,
                 fieldsJson: selected.fieldsJson,
+              }}
+              myBalances={{
+                annual: me?.annualLeaveBalance ?? 0,
+                comp: me?.compLeaveBalance ?? 0,
               }}
             />
           )}

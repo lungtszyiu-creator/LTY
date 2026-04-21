@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { adminForceDecide } from '@/lib/approvalRuntime';
+import { applyBalanceEffects } from '@/lib/approvalTerminal';
 import { notifyApprovalFinalised } from '@/lib/email';
 
 // Batch backend override — let the admin clear a backlog of in-progress
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
   for (const id of data.ids) {
     try {
       await adminForceDecide(id, data.decision, admin.id, data.note ?? null);
+      if (data.decision === 'APPROVED') {
+        await applyBalanceEffects(id).catch((e) => console.error('[approval] batch balance effects failed', id, e));
+      }
       results.push({ id, ok: true });
 
       // Fire-and-forget per-instance notification. Keeps the response fast
