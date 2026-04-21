@@ -38,6 +38,9 @@ export default function IncomingReportsList({ items: initial }: { items: Item[] 
       const payload = await res.json();
       const readAt = payload.readAt ?? new Date().toISOString();
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, readAtByReporter: readAt } : it)));
+      // Tell Nav to re-fetch /api/me/badges right now so the red dot drops
+      // immediately instead of waiting for the 60s poll / next navigation.
+      window.dispatchEvent(new CustomEvent('badges:refresh'));
       router.refresh();
     } catch (e: any) {
       setErr(e.message || '标记失败');

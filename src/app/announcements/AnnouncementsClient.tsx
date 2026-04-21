@@ -50,6 +50,7 @@ export default function AnnouncementsClient({
     const res = await fetch(`/api/announcements/${id}/read`, { method: 'POST' });
     if (!res.ok) return;
     setItems((prev) => prev.map((a) => (a.id === id ? { ...a, readByMe: true, readAtByMe: new Date().toISOString(), readingsCount: a.readingsCount + 1 } : a)));
+    window.dispatchEvent(new CustomEvent('badges:refresh'));
     router.refresh();
   }
 

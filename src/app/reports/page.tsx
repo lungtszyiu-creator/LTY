@@ -55,7 +55,11 @@ export default async function MyReportsPage({
       select: { id: true, name: true, email: true },
       orderBy: [{ name: 'asc' }],
     }),
-    prisma.report.count({ where: { reportToId: session.user.id, submittedAt: { not: null } } }),
+    // Only UNREAD incoming — matches Nav red-dot semantics so the "你有 X
+    // 份等你查阅" banner and tab badge vanish the moment you finish reading.
+    prisma.report.count({
+      where: { reportToId: session.user.id, submittedAt: { not: null }, readAtByReporter: null },
+    }),
   ]);
 
   const periodLabel = formatPeriod(type, periodStart, periodEnd);

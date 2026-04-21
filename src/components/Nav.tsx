@@ -55,7 +55,10 @@ export default function Nav() {
   useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); }, [pathname]);
 
   // Poll badges every 60s + refresh on nav change so returning from an email
-  // link reflects the current state without a full page reload.
+  // link reflects the current state without a full page reload. Also listens
+  // for a `badges:refresh` window event so components that just marked
+  // something read can trigger an instant update without waiting for the
+  // next poll.
   useEffect(() => {
     if (!user) return;
     let alive = true;
@@ -69,7 +72,13 @@ export default function Nav() {
     }
     load();
     const t = setInterval(load, 60_000);
-    return () => { alive = false; clearInterval(t); };
+    const onExternal = () => load();
+    window.addEventListener('badges:refresh', onExternal);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener('badges:refresh', onExternal);
+    };
   }, [user, pathname]);
 
   useEffect(() => {

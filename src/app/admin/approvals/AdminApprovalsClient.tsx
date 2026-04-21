@@ -94,6 +94,7 @@ export default function AdminApprovalsClient({
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: decision, pendingApprovers: [] } : it)));
       setActingOn(null);
       setNoteDraft((d) => ({ ...d, [id]: '' }));
+      window.dispatchEvent(new CustomEvent('badges:refresh'));
       router.refresh();
     } catch (e: any) {
       setErr(e.message || '操作失败');
@@ -135,6 +136,7 @@ export default function AdminApprovalsClient({
         failCount: body.failCount,
         fails: (body.results as { id: string; ok: boolean; error?: string }[]).filter((r) => !r.ok),
       });
+      window.dispatchEvent(new CustomEvent('badges:refresh'));
       router.refresh();
     } catch (e: any) {
       setBatchErr(e.message || '批量操作失败');

@@ -19,6 +19,7 @@ export default function InstanceActions({ instanceId, stepId }: { instanceId: st
         body: JSON.stringify({ stepId, decision, note: note.trim() || null }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? '操作失败');
+      window.dispatchEvent(new CustomEvent('badges:refresh'));
       router.refresh();
     } catch (e: any) { setErr(e.message); } finally { setBusy(null); }
   }
