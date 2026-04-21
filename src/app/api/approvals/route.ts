@@ -89,6 +89,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Date sanity — server-side backstop in case the client skipped it.
+  // Covers both daterange (start/end pair stored as array) and OVERTIME's
+  // two-datetime pattern detected by label (开始 / 结束).
+  for (const f of fields) {
+    const v = data.form[f.id];
+    if (f.type === 'daterange' && Array.isArray(v) && v[0] && v[1]) {
+      if (new Date(v[1]).getTime() < new Date(v[0]).getTime()) {
+        return NextResponse.json(
+          { error: 'INVALID_DATERANGE', message: `"${f.label}" 结束日期不能早于开始日期` },
+          { status: 400 }
+        );
+      }
+    }
+  }
+  if (tpl.category === 'OVERTIME') {
+    const dts = fields.filter((x) => x.type === 'datetime');
+    const startF = dts.find((x) => /开始/.test(x.label)) ?? dts[0];
+    const endF   = dts.find((x) => /结束/.test(x.label)) ?? dts[1];
+    if (startF && endF) {
+      const s = data.form[startF.id]; const e = data.form[endF.id];
+      if (s && e && new Date(e).getTime() <= new Date(s).getTime()) {
+        return NextResponse.json(
+          { error: 'INVALID_DATETIME_RANGE', message: '加班"结束时间"必须晚于"开始时间"' },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
   // Derive title: prefer a field flagged titleField, else template name + date.
   // money / leave_balance fields carry structured objects — summarise them to
   // a readable slug so titles like "报销申请 · 报销金额" don't show [object].

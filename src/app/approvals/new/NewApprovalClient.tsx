@@ -93,6 +93,26 @@ export default function NewApprovalClient({ template, myBalances }: { template: 
         return;
       }
     }
+
+    // Sanity: date ranges and datetime pairs must have end >= start.
+    // Applies to请假起止日期 (daterange) and加班 start/end datetimes.
+    for (const f of fields) {
+      const v = values[f.id];
+      if (f.type === 'daterange' && Array.isArray(v) && v[0] && v[1]) {
+        if (new Date(v[1]).getTime() < new Date(v[0]).getTime()) {
+          setErr(`"${f.label}" 结束日期不能早于开始日期`);
+          return;
+        }
+      }
+    }
+    // OVERTIME: end datetime must be strictly after start datetime.
+    if (template.category === 'OVERTIME' && otStart && otEnd) {
+      const s = values[otStart.id]; const e = values[otEnd.id];
+      if (s && e && new Date(e).getTime() <= new Date(s).getTime()) {
+        setErr('加班"结束时间"必须晚于"开始时间"');
+        return;
+      }
+    }
     setBusy(true); setErr(null);
     try {
       const res = await fetch('/api/approvals', {
@@ -509,47 +529,100 @@ function MoneyInput({
   const allowSwitch = field.allowCurrencySwitch !== false;
   const sym = CURRENCY_META[currency].symbol;
 
-  // Keep this dead-simple: the global `.input` class is battle-tested
-  // across the app (display:block, width:100%). Anything fancier has bitten
-  // us with collapsed inputs on narrow phones. Currency symbol lives in the
-  // placeholder so no absolute/flex tricks can break the input box.
   return (
-    <div className="space-y-2">
-      <input
-        type="number"
-        step="0.01"
-        inputMode="decimal"
-        value={parsed.amount ?? ''}
-        onChange={(e) => update({ amount: e.target.value === '' ? '' : Number(e.target.value), currency })}
-        className="input"
-        placeholder={`${sym}  请输入金额`}
-      />
-      {allowSwitch ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500">币种：</span>
+    <MoneyRowInline
+      amount={parsed.amount}
+      currency={currency}
+      allowSwitch={allowSwitch}
+      onChange={(amount, newCurrency) => update({ amount, currency: newCurrency })}
+    />
+  );
+}
+
+function MoneyRowInline({
+  amount, currency, allowSwitch, onChange,
+}: {
+  amount: number | null;
+  currency: Currency;
+  allowSwitch: boolean;
+  onChange: (amount: number | '', currency: Currency) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const sym = CURRENCY_META[currency].symbol;
+  const short = currency === 'CNY' ? 'RMB' : currency;
+
+  return (
+    <>
+      <div className="flex items-stretch gap-2">
+        {/* Amount input — flex-grow, .input provides proven reliable
+            styling; wrapped in a div so the currency symbol sits inside. */}
+        <div className="relative flex-1 min-w-0">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
+            {sym}
+          </span>
+          <input
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            value={amount ?? ''}
+            onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value), currency)}
+            className="input"
+            style={{ paddingLeft: 40 }}
+            placeholder="请输入金额"
+          />
+        </div>
+        {/* Currency chip — fixed width so it never swallows the amount */}
+        <button
+          type="button"
+          disabled={!allowSwitch}
+          onClick={() => allowSwitch && setPickerOpen(true)}
+          className="shrink-0 inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+          style={{ minWidth: 96 }}
+        >
+          <span>{CURRENCY_META[currency].icon}</span>
+          <span>{short}</span>
+          {allowSwitch && (
+            <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      <BottomSheet open={pickerOpen} title="选择币种" onClose={() => setPickerOpen(false)}>
+        <ul className="divide-y divide-slate-100">
           {(Object.keys(CURRENCY_META) as Currency[]).map((c) => {
-            const on = currency === c;
-            const short = c === 'CNY' ? 'RMB' : c;
+            const isSelected = c === currency;
             return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => update({ amount: parsed.amount ?? '', currency: c })}
-                className={`rounded-full px-3 py-1 text-xs transition ${
-                  on ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {CURRENCY_META[c].icon} {short}
-              </button>
+              <li key={c}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(amount ?? '', c);
+                    setPickerOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between px-5 py-4 text-left transition active:bg-slate-100 ${
+                    isSelected ? 'bg-indigo-50' : ''
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-[15px]">
+                    <span>{CURRENCY_META[c].icon}</span>
+                    <span className={isSelected ? 'font-semibold text-indigo-900' : 'text-slate-900'}>
+                      {CURRENCY_META[c].label}
+                    </span>
+                  </span>
+                  {isSelected && (
+                    <svg className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              </li>
             );
           })}
-        </div>
-      ) : (
-        <div className="text-xs text-slate-500">
-          币种：{CURRENCY_META[currency].icon} {CURRENCY_META[currency].label}
-        </div>
-      )}
-    </div>
+        </ul>
+      </BottomSheet>
+    </>
   );
 }
 
