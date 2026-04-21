@@ -153,6 +153,20 @@ model TaskClaim {
   @@index([userId])
 }
 
+// Per-kind notification config. Rows are auto-created by the app on first
+// send if missing. Admins can toggle a kind off entirely or add "extra
+// recipient" user ids that should always be cc'd on that kind, on top of
+// whatever the code's default audience is.
+model NotificationSetting {
+  id          String   @id @default(cuid())
+  kind        String   @unique   // e.g. "TASK_PUBLISHED" | "ANNOUNCEMENT" | ...
+  enabled     Boolean  @default(true)
+  extraUserIds String  @default("[]") // JSON array of user ids to always cc
+  note        String?              // admin's own label / memo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Audit log for outbound notifications — every attempt (success or failure)
 // is recorded so we never silently drop a publish email. Admin can resend.
 model NotificationLog {

@@ -24,11 +24,14 @@ export default async function AdminNotificationsPage() {
 
   return (
     <div className="pt-8">
-      <div className="mb-6 rise">
-        <h1 className="text-3xl font-semibold tracking-tight">通知日志</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          每次任务发布 / 提交审核通知都会留痕。有失败记录时，点右侧"重发"一键补发。
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rise">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">通知日志</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            每次任务发布 / 提交审核通知都会留痕。有失败记录时，点右侧"重发"一键补发。
+          </p>
+        </div>
+        <Link href="/admin/notifications/settings" className="btn btn-ghost text-xs">⚙️ 通知设置 →</Link>
       </div>
 
       {failing > 0 && (

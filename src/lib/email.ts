@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { prisma } from './db';
+import { applyNotificationSetting } from './notificationSettings';
 
 const GMAIL_USER = process.env.GMAIL_USER;
 // Gmail displays app passwords with spaces; strip them.
@@ -132,7 +133,9 @@ export async function notifyTaskPublished(task: {
     where: { role: { in: ['MEMBER', 'ADMIN'] }, active: true },
     select: { email: true },
   });
-  const emails = members.map((m) => m.email).filter((e): e is string => !!e);
+  const baseEmails = members.map((m) => m.email).filter((e): e is string => !!e);
+  const { emails, enabled } = await applyNotificationSetting('TASK_PUBLISHED', baseEmails);
+  if (!enabled) return { ok: true, attempts: 0 };
   const { subject, html } = buildTaskPublishedEmail(task);
   const result = await sendWithRetry({ to: emails, subject, html });
   await logNotification({ kind: 'TASK_PUBLISHED', taskId: task.id, subject, recipients: emails.length }, result);
@@ -146,7 +149,9 @@ export async function notifySubmission(args: {
     where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, active: true },
     select: { email: true },
   });
-  const emails = admins.map((a) => a.email).filter((e): e is string => !!e);
+  const baseEmails = admins.map((a) => a.email).filter((e): e is string => !!e);
+  const { emails, enabled } = await applyNotificationSetting('SUBMISSION', baseEmails);
+  if (!enabled) return { ok: true, attempts: 0 };
 
   const link = `${APP_URL}/tasks/${args.taskId}`;
   const notePreview = args.note.length > 400 ? args.note.slice(0, 400) + '…' : args.note;
@@ -182,6 +187,8 @@ export async function notifySubmissionReviewed(args: {
   note: string | null;
 }) {
   if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('SUBMISSION_REVIEWED', [args.recipientEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const link = `${APP_URL}/tasks/${args.taskId}`;
   const isApproved = args.decision === 'APPROVED';
   const subject = isApproved
@@ -199,8 +206,8 @@ export async function notifySubmissionReviewed(args: {
     ${isApproved ? '<p style="margin:8px 0;color:#475569;">奖励会自动进入"待发放"列表，发放后会再次通知你。</p>' : ''}
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
-  await logNotification({ kind: 'SUBMISSION_REVIEWED', taskId: args.taskId, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'SUBMISSION_REVIEWED', taskId: args.taskId, subject, recipients: toEmails.length }, result);
   return result;
 }
 
@@ -215,6 +222,8 @@ export async function notifyRewardStatusChanged(args: {
   reason?: string | null;
 }) {
   if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('REWARD_STATUS', [args.recipientEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const link = `${APP_URL}/rewards`;
   const title =
     args.status === 'ISSUED'    ? '🎁 奖励已发放' :
@@ -237,8 +246,8 @@ export async function notifyRewardStatusChanged(args: {
     ${args.status === 'ISSUED' ? '<p style="margin:8px 0;color:#475569;">请在"我的奖励"页面点"已收到"确认回执。</p>' : ''}
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">前往"我的奖励" →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
-  await logNotification({ kind: 'REWARD_STATUS', taskId: args.taskId, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'REWARD_STATUS', taskId: args.taskId, subject, recipients: toEmails.length }, result);
   return result;
 }
 
@@ -253,7 +262,9 @@ export async function notifyAnnouncementPublished(args: {
     where: { active: true },
     select: { email: true },
   });
-  const emails = members.map((m) => m.email).filter((e): e is string => !!e);
+  const baseEmails = members.map((m) => m.email).filter((e): e is string => !!e);
+  const { emails, enabled } = await applyNotificationSetting('ANNOUNCEMENT', baseEmails);
+  if (!enabled) return { ok: true, attempts: 0 };
   if (emails.length === 0) return { ok: true, attempts: 0 };
 
   const link = `${APP_URL}/announcements`;
@@ -280,6 +291,8 @@ export async function notifyReportSubmitted(args: {
   reportId: string;
 }) {
   if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('REPORT_SUBMITTED', [args.recipientEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const link = `${APP_URL}/admin/reports?type=${args.reportType}`;
   const typeLabel = args.reportType === 'WEEKLY' ? '周报' : '月报';
   const subject = `[LTY · ${typeLabel}] ${args.authorName} 提交了 ${args.periodLabel}`;
@@ -290,8 +303,8 @@ export async function notifyReportSubmitted(args: {
     ${donePreview ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:16px;white-space:pre-wrap;font-size:14px;"><strong>本期完成：</strong>\n${esc(donePreview)}</div>` : ''}
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看完整汇报 →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
-  await logNotification({ kind: 'REPORT_SUBMITTED', taskId: null, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'REPORT_SUBMITTED', taskId: null, subject, recipients: toEmails.length }, result);
   return result;
 }
 
@@ -304,6 +317,8 @@ export async function notifyApprovalPending(args: {
   initiatorName: string;
 }) {
   if (!args.approverEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('APPROVAL_PENDING', [args.approverEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const link = `${APP_URL}/approvals/${args.instanceId}`;
   const subject = `[LTY · 审批] ⏰ 待你审批：${args.instanceTitle}`;
   const html = wrap(`
@@ -316,8 +331,8 @@ export async function notifyApprovalPending(args: {
     </div>
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">前往处理 →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.approverEmail], subject, html });
-  await logNotification({ kind: 'APPROVAL_PENDING', taskId: null, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'APPROVAL_PENDING', taskId: null, subject, recipients: toEmails.length }, result);
   return result;
 }
 
@@ -332,6 +347,8 @@ export async function notifyApprovalFinalised(args: {
   lastNote?: string | null;
 }) {
   if (!args.initiatorEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('APPROVAL_FINALISED', [args.initiatorEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const link = `${APP_URL}/approvals/${args.instanceId}`;
   const isOk = args.outcome === 'APPROVED';
   const title = isOk ? '✅ 审批已通过' : args.outcome === 'REJECTED' ? '❌ 审批被驳回' : '📤 审批已撤销';
@@ -348,8 +365,8 @@ export async function notifyApprovalFinalised(args: {
     </div>
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.initiatorEmail], subject, html });
-  await logNotification({ kind: 'APPROVAL_FINALISED', taskId: null, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'APPROVAL_FINALISED', taskId: null, subject, recipients: toEmails.length }, result);
   return result;
 }
 
@@ -363,6 +380,8 @@ export async function notifyPenaltyIssued(args: {
   taskTitle?: string | null;
 }) {
   if (!args.recipientEmail) return { ok: true, attempts: 0 };
+  const { emails: toEmails, enabled } = await applyNotificationSetting('PENALTY_ISSUED', [args.recipientEmail]);
+  if (!enabled) return { ok: true, attempts: 0 };
   const subject = `[LTY · 任务池] ⚠️ 不良记录：扣 ${args.points} 积分`;
   const link = args.taskId ? `${APP_URL}/tasks/${args.taskId}` : `${APP_URL}/dashboard`;
   const html = wrap(`
@@ -378,7 +397,7 @@ export async function notifyPenaltyIssued(args: {
     </p>
     <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
   `);
-  const result = await sendWithRetry({ to: [args.recipientEmail], subject, html });
-  await logNotification({ kind: 'PENALTY_ISSUED', taskId: args.taskId ?? null, subject, recipients: 1 }, result);
+  const result = await sendWithRetry({ to: toEmails, subject, html });
+  await logNotification({ kind: 'PENALTY_ISSUED', taskId: args.taskId ?? null, subject, recipients: toEmails.length }, result);
   return result;
 }

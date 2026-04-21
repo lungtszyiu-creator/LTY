@@ -35,6 +35,7 @@ const ADMIN_LINKS = [
   { href: '/admin/penalties',            label: '扣罚登记' },
   { href: '/admin/users',                label: '用户管理' },
   { href: '/admin/notifications',        label: '通知日志' },
+  { href: '/admin/notifications/settings', label: '通知设置' },
 ];
 
 export default function Nav() {

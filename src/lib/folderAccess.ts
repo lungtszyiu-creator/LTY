@@ -3,22 +3,22 @@ import { prisma } from './db';
 export type FolderAccessDecision = {
   canView: boolean;
   canEdit: boolean;
-  // The folder that the decision came from (may be an ancestor when visibility=INHERIT).
   effectiveFolderId: string | null;
   effectiveVisibility: 'PUBLIC' | 'DEPARTMENT' | 'PRIVATE' | 'INHERIT';
   reason: string;
 };
 
 // Walk from the folder up to root, stopping at the first node whose
-// visibility != INHERIT. Admins always pass. The folder creator always edits.
+// visibility != INHERIT. Admins always pass. The folder creator always has
+// full view+edit on anything they created — intent: "创建者随时可以查看自己
+// 上传的内容及文件夹内的内容". An INHERIT-only chain with no explicit
+// ancestor falls back to PUBLIC.
 export async function resolveFolderAccess(
   folderId: string | null,
   user: { id: string; role: string }
 ): Promise<FolderAccessDecision> {
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
 
-  // Root-level (no folder): only explicitly PUBLIC-by-default for the "my uploads"
-  // area. For simplicity, root is treated as PUBLIC view for everyone.
   if (!folderId) {
     return {
       canView: true,
@@ -29,8 +29,7 @@ export async function resolveFolderAccess(
     };
   }
 
-  // Walk up.
-  let cursor: any = await prisma.folder.findUnique({
+  const cursor: any = await prisma.folder.findUnique({
     where: { id: folderId },
     include: {
       members: true,
@@ -41,71 +40,76 @@ export async function resolveFolderAccess(
     return { canView: false, canEdit: false, effectiveFolderId: null, effectiveVisibility: 'PRIVATE', reason: 'not-found' };
   }
 
-  // If user is the creator, they can always edit their own folder subtree
-  // (until they hand it to someone else by changing visibility).
-  const isCreator = cursor.createdById === user.id;
-
-  let node = cursor;
-  while (node && node.visibility === 'INHERIT' && node.parentId) {
-    node = await prisma.folder.findUnique({
-      where: { id: node.parentId },
+  // Check if the user is a creator anywhere up the chain — a folder's owner
+  // should also retain access to descendants by default, even if a child
+  // folder is set to PRIVATE for someone else. We walk the full chain once
+  // while also computing the effective visibility node.
+  let isCreatorAlongChain = cursor.createdById === user.id;
+  let node: any = cursor;
+  let climbed: any = cursor;
+  while (climbed && climbed.parentId) {
+    const parent = await prisma.folder.findUnique({
+      where: { id: climbed.parentId },
       include: {
         members: true,
         department: { select: { memberships: { select: { userId: true } } } },
       },
     });
-    if (!node) break;
+    if (!parent) break;
+    if (parent.createdById === user.id) isCreatorAlongChain = true;
+    if (node.visibility === 'INHERIT') node = parent; // keep walking to resolve visibility
+    climbed = parent;
   }
 
-  if (!node) {
-    // Reached root via INHERIT chain — treat as DEPARTMENT-members-only by
-    // default (safer) or PUBLIC (friendlier). We pick PUBLIC so shared files
-    // with no explicit restriction are visible to everyone in the org.
-    return {
-      canView: true,
-      canEdit: isAdmin || isCreator,
-      effectiveFolderId: folderId,
-      effectiveVisibility: 'PUBLIC',
-      reason: 'inherit-to-root-public',
-    };
-  }
-
+  // Admin override — global read/write.
   if (isAdmin) {
-    return { canView: true, canEdit: true, effectiveFolderId: node.id, effectiveVisibility: node.visibility, reason: 'admin-override' };
+    return { canView: true, canEdit: true, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: node?.visibility ?? 'INHERIT', reason: 'admin-override' };
+  }
+
+  // Creator always owns view + edit, regardless of visibility. Matches user
+  // expectation that folders they built never lock them out.
+  if (isCreatorAlongChain) {
+    return { canView: true, canEdit: true, effectiveFolderId: cursor.id, effectiveVisibility: node?.visibility ?? cursor.visibility, reason: 'creator' };
+  }
+
+  // If the effective visibility is still INHERIT (no ancestor set it
+  // explicitly), treat it as PUBLIC — that's the documented root default.
+  if (!node || node.visibility === 'INHERIT') {
+    return { canView: true, canEdit: false, effectiveFolderId: node?.id ?? cursor.id, effectiveVisibility: 'PUBLIC', reason: 'inherit-root-public' };
   }
 
   if (node.visibility === 'PUBLIC') {
-    return { canView: true, canEdit: isCreator, effectiveFolderId: node.id, effectiveVisibility: 'PUBLIC', reason: 'public' };
+    return { canView: true, canEdit: false, effectiveFolderId: node.id, effectiveVisibility: 'PUBLIC', reason: 'public' };
   }
 
   if (node.visibility === 'DEPARTMENT') {
     const memberIds = new Set((node.department?.memberships ?? []).map((m: any) => m.userId));
     const isDeptMember = memberIds.has(user.id);
     return {
-      canView: isDeptMember || isCreator,
-      canEdit: isCreator,
+      canView: isDeptMember,
+      canEdit: false,
       effectiveFolderId: node.id,
       effectiveVisibility: 'DEPARTMENT',
       reason: isDeptMember ? 'department-member' : 'not-in-department',
     };
   }
 
-  // PRIVATE: only explicit FolderMember rows + creator can see.
+  // PRIVATE: only explicit FolderMember rows see it.
   const explicit = (node.members ?? []).find((m: any) => m.userId === user.id);
   if (explicit) {
     return {
       canView: true,
-      canEdit: explicit.access === 'EDIT' || isCreator,
+      canEdit: explicit.access === 'EDIT',
       effectiveFolderId: node.id,
       effectiveVisibility: 'PRIVATE',
       reason: 'explicit-member',
     };
   }
   return {
-    canView: isCreator,
-    canEdit: isCreator,
+    canView: false,
+    canEdit: false,
     effectiveFolderId: node.id,
     effectiveVisibility: 'PRIVATE',
-    reason: isCreator ? 'creator-only' : 'no-access',
+    reason: 'no-access',
   };
 }
