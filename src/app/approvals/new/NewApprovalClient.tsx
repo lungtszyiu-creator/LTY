@@ -509,26 +509,21 @@ function MoneyInput({
   const allowSwitch = field.allowCurrencySwitch !== false;
   const sym = CURRENCY_META[currency].symbol;
 
+  // Keep this dead-simple: the global `.input` class is battle-tested
+  // across the app (display:block, width:100%). Anything fancier has bitten
+  // us with collapsed inputs on narrow phones. Currency symbol lives in the
+  // placeholder so no absolute/flex tricks can break the input box.
   return (
     <div className="space-y-2">
-      {/* Primary amount input — big, prominent, full width, currency symbol
-          as a leading glyph so there's no chance the input collapses on a
-          narrow phone layout. */}
-      <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2.5 ring-2 ring-indigo-300 focus-within:ring-indigo-500">
-        <span className="text-lg font-semibold text-slate-600">{sym}</span>
-        <input
-          type="number"
-          step="0.01"
-          inputMode="decimal"
-          value={parsed.amount ?? ''}
-          onChange={(e) => update({ amount: e.target.value === '' ? '' : Number(e.target.value), currency })}
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-lg font-bold text-slate-900 outline-none placeholder:text-slate-300"
-          placeholder="0.00"
-        />
-      </div>
-
-      {/* Currency selector as chip row — always visible, tappable, matches
-          the rest of the form's chip-style choices. */}
+      <input
+        type="number"
+        step="0.01"
+        inputMode="decimal"
+        value={parsed.amount ?? ''}
+        onChange={(e) => update({ amount: e.target.value === '' ? '' : Number(e.target.value), currency })}
+        className="input"
+        placeholder={`${sym}  请输入金额`}
+      />
       {allowSwitch ? (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-slate-500">币种：</span>
