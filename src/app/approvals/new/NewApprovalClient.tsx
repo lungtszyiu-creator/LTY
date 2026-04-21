@@ -201,24 +201,51 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                       </div>
 
                       <div>
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="text-xs text-slate-500">本次申请（天）</span>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          申请天数 <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-2 ring-indigo-300 focus-within:ring-indigo-500">
+                            <button
+                              type="button"
+                              onClick={() => patch({ days: Math.max(0, (Number(parsed.days) || 0) - 0.5) })}
+                              className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-lg font-semibold text-slate-700 hover:bg-slate-200"
+                              aria-label="减 0.5 天"
+                            >−</button>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={parsed.days ?? ''}
+                              onChange={(e) => patch({ days: e.target.value === '' ? '' : Number(e.target.value) })}
+                              className="w-20 border-0 bg-transparent p-0 text-center text-lg font-bold text-slate-900 outline-none"
+                              placeholder="0"
+                            />
+                            <span className="text-sm text-slate-600">天</span>
+                            <button
+                              type="button"
+                              onClick={() => patch({ days: (Number(parsed.days) || 0) + 0.5 })}
+                              className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-lg font-semibold text-slate-700 hover:bg-slate-200"
+                              aria-label="加 0.5 天"
+                            >+</button>
+                          </div>
                           {autoDays !== null && (
                             <button
                               type="button"
                               onClick={() => patch({ days: autoDays })}
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
-                                parsed.days === autoDays ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                              className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                                parsed.days === autoDays ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-100'
                               }`}
                               title="基于起止日期含头尾计算"
                             >
-                              📅 按所选日期算：{autoDays} 天
+                              📅 按起止日期算 = {autoDays} 天
                             </button>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-slate-500">快捷填：</span>
                           {QUICK_DAYS.map((d) => {
-                            const on = parsed.days === d;
+                            const on = Number(parsed.days) === d;
                             return (
                               <button
                                 key={d}
@@ -230,16 +257,6 @@ export default function NewApprovalClient({ template }: { template: Tpl }) {
                               </button>
                             );
                           })}
-                          <div className="ml-1 flex items-center gap-1 text-xs text-slate-500">
-                            或自定义
-                            <input
-                              type="number" min="0" step="0.5"
-                              value={parsed.days ?? ''}
-                              onChange={(e) => patch({ days: e.target.value === '' ? '' : Number(e.target.value) })}
-                              className="w-20 rounded-md bg-white px-2 py-0.5 text-sm ring-1 ring-slate-200 focus:ring-slate-400"
-                              placeholder="天"
-                            />
-                          </div>
                         </div>
                       </div>
 
