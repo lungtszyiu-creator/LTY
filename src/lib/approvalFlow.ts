@@ -4,7 +4,7 @@
 export type FieldType =
   | 'text' | 'textarea' | 'number' | 'money' | 'date' | 'daterange'
   | 'select' | 'multiselect' | 'user' | 'department' | 'attachment'
-  | 'leave_balance' | 'overtime_hours';
+  | 'leave_balance' | 'leave_days' | 'overtime_hours';
 
 // Conversion constant for overtime → comp leave. Matches the common
 // 8-hour workday; kept as a constant so we can surface it in UI copy.
@@ -54,6 +54,19 @@ export function parseMoneyValue(v: unknown, fallback: Currency = 'CNY'): { amoun
     return { amount: Number.isFinite(amt) ? amt : null, currency: CURRENCY_META[cur] ? cur : fallback };
   }
   return { amount: null, currency: fallback };
+}
+
+// Locate the "请假类型" sibling select in a field list — used by leave_days
+// renderers and the balance-effect hook to discover which category the
+// submitter picked. Heuristic: any select whose options contain one of the
+// canonical leave categories (年假/调休/…) qualifies. Matches templates made
+// by the preset AND hand-built ones that happen to use the same vocabulary.
+export function findLeaveCategoryField(fields: FormFieldSpec[]): FormFieldSpec | null {
+  return fields.find((f) =>
+    f.type === 'select' &&
+    Array.isArray(f.options) &&
+    f.options.some((o) => (LEAVE_BALANCE_CATEGORIES as readonly string[]).includes(o))
+  ) ?? null;
 }
 
 // Same shape-tolerant parser for leave_balance values.
@@ -134,8 +147,9 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; icon: string }>
   user:          { label: '成员选择',        icon: '👤' },
   department:    { label: '部门选择',        icon: '🏢' },
   attachment:    { label: '附件',            icon: '📎' },
-  leave_balance:  { label: '假期余额（年假/调休）', icon: '🌴' },
-  overtime_hours: { label: '加班时长（小时）',       icon: '⏱' },
+  leave_balance:  { label: '假期余额（旧版合并字段）', icon: '🌴' },
+  leave_days:     { label: '请假天数（自动扣余额）',   icon: '📆' },
+  overtime_hours: { label: '加班时长（小时）',         icon: '⏱' },
 };
 
 // Walk the flow graph forward from `from` (a node id) and return the first

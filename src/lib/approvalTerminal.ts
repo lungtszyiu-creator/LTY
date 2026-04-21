@@ -1,5 +1,8 @@
 import { prisma } from './db';
-import { parseFields, parseLeaveBalanceValue, OVERTIME_HOURS_PER_COMP_DAY } from './approvalFlow';
+import {
+  parseFields, parseLeaveBalanceValue, findLeaveCategoryField,
+  OVERTIME_HOURS_PER_COMP_DAY,
+} from './approvalFlow';
 import { adjustLeaveBalance, POOL_FOR_CATEGORY } from './leaveBalance';
 
 // When an approval instance becomes APPROVED, look at its template category
@@ -30,18 +33,36 @@ export async function applyBalanceEffects(instanceId: string): Promise<void> {
   const fields = parseFields(inst.fieldsSnapshot || '[]');
 
   if (inst.template.category === 'LEAVE') {
-    const f = fields.find((x) => x.type === 'leave_balance');
-    if (!f) return;
-    const lb = parseLeaveBalanceValue(form[f.id]);
-    const pool = POOL_FOR_CATEGORY[lb.category];
+    // Prefer the new split: select (请假类型) + leave_days. Fall back to the
+    // legacy leave_balance bundle so old submissions still deduct correctly.
+    const daysField = fields.find((x) => x.type === 'leave_days');
+    const catField = findLeaveCategoryField(fields);
+
+    let category = '';
+    let days: number | null = null;
+
+    if (daysField && catField) {
+      category = String(form[catField.id] ?? '');
+      const raw = form[daysField.id];
+      days = raw == null || raw === '' ? null : Number(raw);
+    } else {
+      const legacy = fields.find((x) => x.type === 'leave_balance');
+      if (!legacy) return;
+      const lb = parseLeaveBalanceValue(form[legacy.id]);
+      category = lb.category;
+      days = lb.days;
+    }
+
+    const pool = POOL_FOR_CATEGORY[category];
     if (!pool) return; // 事假/病假/婚丧/产陪护 — no pool to touch
-    if (lb.days == null || lb.days <= 0) return;
+    if (days == null || !Number.isFinite(days) || days <= 0) return;
+
     await adjustLeaveBalance({
       userId: inst.initiatorId,
       pool,
-      deltaDays: -lb.days,
+      deltaDays: -days,
       source: 'LEAVE_APPROVED',
-      note: `${lb.category} 审批通过 · ${inst.template.name}`,
+      note: `${category} 审批通过 · ${inst.template.name}`,
       approvalInstanceId: inst.id,
     });
     return;

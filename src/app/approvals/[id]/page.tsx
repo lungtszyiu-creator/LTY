@@ -153,6 +153,12 @@ export default async function ApprovalInstancePage({
                       {lb.balance != null && <span className="ml-1 text-slate-500">· 提交时余额 {lb.balance} 天</span>}
                     </span>;
               }
+              else if (f.type === 'leave_days') {
+                const n = Number(v);
+                display = Number.isFinite(n) && n > 0
+                  ? <span><span className="font-semibold">{n}</span> 天</span>
+                  : <span className="text-slate-400">未填写</span>;
+              }
               else if (f.type === 'overtime_hours') {
                 const h = Number(v);
                 display = Number.isFinite(h) && h > 0

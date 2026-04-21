@@ -322,8 +322,10 @@ function EditorInner({
       setName((n) => n || '请假申请');
       setCategory('LEAVE');
       newFields = [
-        { id: fid(), type: 'leave_balance', label: '假期类型与余额', required: true, titleField: true },
+        { id: fid(), type: 'select', label: '请假类型', required: true, titleField: true,
+          options: ['年假', '调休', '事假', '病假', '婚假', '丧假', '产假', '陪护假'] },
         { id: fid(), type: 'daterange', label: '请假起止日期', required: true },
+        { id: fid(), type: 'leave_days', label: '请假天数', required: true },
         { id: fid(), type: 'textarea', label: '请假事由', required: true, placeholder: '请简述原因' },
         { id: fid(), type: 'textarea', label: '工作交接', required: false, placeholder: '由谁代替完成哪些工作' },
         { id: fid(), type: 'attachment', label: '证明材料（如需）' },
@@ -934,13 +936,16 @@ function CcSettings({
 }
 
 // ---- 字段一键升级工具 ----
-// Detects legacy leave templates (select "请假类型" + number "请假天数") and
-// in-place replaces them with a single structured `leave_balance` field.
-// Flow graph is untouched — conditions that referenced the removed field ids
-// will show "该字段已删除" in the condition panel and need re-pointing, but
-// the vast majority of leave templates have no conditions on these fields so
-// this is safe for everyone.
-function detectLegacyLeaveFields(fields: FormFieldSpec[]): { typeId: string | null; daysId: string | null } {
+// Migrates either the very-old "select 请假类型 + number 请假天数" pattern OR
+// the intermediate "leave_balance" bundle to the current split layout: a
+// dropdown select for 请假类型 + a dedicated leave_days field. Flow graph is
+// untouched; conditions that referenced a deleted field id will surface as
+// "该字段已删除" in the condition panel.
+function detectLegacyLeaveFields(fields: FormFieldSpec[]): {
+  typeId: string | null;
+  daysId: string | null;
+  bundleId: string | null;
+} {
   const typeField = fields.find(
     (f) => f.type === 'select' && (
       (f.options ?? []).includes('年假') ||
@@ -950,30 +955,55 @@ function detectLegacyLeaveFields(fields: FormFieldSpec[]): { typeId: string | nu
   const daysField = fields.find(
     (f) => f.type === 'number' && /天数/.test(f.label)
   );
-  return { typeId: typeField?.id ?? null, daysId: daysField?.id ?? null };
+  const bundle = fields.find((f) => f.type === 'leave_balance');
+  return {
+    typeId: typeField?.id ?? null,
+    daysId: daysField?.id ?? null,
+    bundleId: bundle?.id ?? null,
+  };
 }
 
 function upgradeLeaveFields(fields: FormFieldSpec[]): FormFieldSpec[] {
-  const { typeId, daysId } = detectLegacyLeaveFields(fields);
-  if (!typeId && !daysId) return fields;
+  const { typeId, daysId, bundleId } = detectLegacyLeaveFields(fields);
+  const hasNewSplit = fields.some((f) => f.type === 'leave_days')
+                    && fields.some((f) => f.type === 'select' && (f.options ?? []).includes('年假'));
+  if (hasNewSplit && !bundleId) return fields; // already on the new split
+  if (!typeId && !daysId && !bundleId) return fields;
 
-  const newId = `f_${Math.random().toString(36).slice(2, 8)}`;
-  const wasTitle = typeId ? (fields.find((f) => f.id === typeId)?.titleField ?? false) : false;
-  const replacement: FormFieldSpec = {
-    id: newId,
-    type: 'leave_balance',
-    label: '假期类型与余额',
+  const fid = () => `f_${Math.random().toString(36).slice(2, 8)}`;
+
+  const canonicalOptions = ['年假', '调休', '事假', '病假', '婚假', '丧假', '产假', '陪护假'];
+  const typeReplacement: FormFieldSpec = {
+    id: fid(),
+    type: 'select',
+    label: '请假类型',
     required: true,
-    titleField: wasTitle,
+    titleField: true,
+    options: canonicalOptions,
+  };
+  const daysReplacement: FormFieldSpec = {
+    id: fid(),
+    type: 'leave_days',
+    label: '请假天数',
+    required: true,
   };
 
-  // Drop the daysId entry; substitute the typeId entry with the new combined
-  // one (preserving position). If only one of the two existed, we still
-  // produce the combined field at whichever spot was found.
-  const anchor = typeId ?? daysId!;
-  return fields
-    .filter((f) => f.id !== daysId || f.id === anchor)
-    .map((f) => (f.id === anchor ? replacement : f));
+  // Pick an anchor position (first occurrence of any legacy field we're
+  // replacing) so the two new fields slot in roughly where the legacy ones
+  // used to live. Everything else keeps its order.
+  const anchorId = bundleId ?? typeId ?? daysId!;
+  const out: FormFieldSpec[] = [];
+  const toDropIds = new Set([bundleId, typeId, daysId].filter((x): x is string => !!x));
+
+  for (const f of fields) {
+    if (f.id === anchorId) {
+      out.push(typeReplacement);
+      out.push(daysReplacement);
+    } else if (!toDropIds.has(f.id)) {
+      out.push(f);
+    }
+  }
+  return out;
 }
 
 function detectMoneyFieldsNeedingCurrency(fields: FormFieldSpec[]): FormFieldSpec[] {
@@ -1004,7 +1034,12 @@ function LeaveFieldsUpgrader({
   onUpgradeMoney: () => void;
 }) {
   const leaveLegacy = detectLegacyLeaveFields(fields);
-  const hasLegacyLeave = !!(leaveLegacy.typeId || leaveLegacy.daysId);
+  const hasNewSplit = fields.some((f) => f.type === 'leave_days');
+  // Offer the upgrade when either:
+  //   - legacy bundle (leave_balance) still present, OR
+  //   - very-old select+number pair without a leave_days companion yet.
+  const hasLegacyLeave = !!leaveLegacy.bundleId
+    || (!hasNewSplit && !!(leaveLegacy.typeId || leaveLegacy.daysId));
   const moneyNeedsUpgrade = expenseCurrencyNeeded && detectMoneyFieldsNeedingCurrency(fields).length > 0;
 
   if (!hasLegacyLeave && !moneyNeedsUpgrade) return null;
@@ -1019,12 +1054,12 @@ function LeaveFieldsUpgrader({
           <button
             type="button"
             onClick={() => {
-              if (!confirm('将删除"请假类型"(select) 和"请假天数"(number)，合并为一个"假期余额"字段（含类型/申请天数/剩余余额）。继续？')) return;
+              if (!confirm('升级为新版两字段结构：单独下拉"请假类型" + "请假天数"（自动扣余额）。旧字段会被移除，流程图不动。继续？')) return;
               onUpgradeLeave();
             }}
             className="rounded-full bg-white px-2.5 py-0.5 ring-1 ring-amber-300 hover:bg-amber-100"
           >
-            🌴 升级为"假期余额"字段
+            🌴 升级为"类型 + 天数"独立字段
           </button>
         )}
         {moneyNeedsUpgrade && (

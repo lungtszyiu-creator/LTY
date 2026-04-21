@@ -6,6 +6,7 @@ import {
   parseFields, parseFlow, APPROVAL_CATEGORY_META,
   CURRENCY_META, LEAVE_BALANCE_CATEGORIES,
   parseMoneyValue, parseLeaveBalanceValue,
+  findLeaveCategoryField,
   OVERTIME_HOURS_PER_COMP_DAY,
   type Currency,
 } from '@/lib/approvalFlow';
@@ -310,6 +311,129 @@ export default function NewApprovalClient({ template, myBalances }: { template: 
                       {!boundPool && parsed.category && (
                         <div className="text-[11px] text-slate-500">
                           {parsed.category} 不占用年假/调休池，审批通过不影响余额。
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+                {f.type === 'leave_days' && (() => {
+                  // Days-only picker, paired with a separate "请假类型" select
+                  // elsewhere in the form. Balance preview is driven by that
+                  // sibling's current value; no category chips here so the
+                  // template author can show the type field as its own line.
+                  const days = values[f.id] === '' || values[f.id] == null ? null : Number(values[f.id]);
+
+                  const rangeField = fields.find((x) => x.type === 'daterange');
+                  const rangeVal = rangeField ? values[rangeField.id] : undefined;
+                  let autoDays: number | null = null;
+                  if (Array.isArray(rangeVal) && rangeVal[0] && rangeVal[1]) {
+                    const d1 = new Date(rangeVal[0] as string).getTime();
+                    const d2 = new Date(rangeVal[1] as string).getTime();
+                    if (!Number.isNaN(d1) && !Number.isNaN(d2) && d2 >= d1) {
+                      autoDays = Math.round((d2 - d1) / 86400000) + 1;
+                    }
+                  }
+
+                  const catField = findLeaveCategoryField(fields);
+                  const category = catField ? (values[catField.id] ?? '') : '';
+                  const pool =
+                    category === '年假' ? 'annual'
+                    : category === '调休' ? 'comp'
+                    : null;
+                  const official = pool === 'annual' ? myBalances.annual
+                                 : pool === 'comp' ? myBalances.comp
+                                 : null;
+
+                  const QUICK_DAYS = [0.5, 1, 2, 3, 5, 7, 10];
+                  return (
+                    <div className="space-y-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-2 ring-indigo-300 focus-within:ring-indigo-500">
+                          <button
+                            type="button"
+                            onClick={() => update(f.id, Math.max(0, (Number(days) || 0) - 0.5))}
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-lg font-semibold text-slate-700 hover:bg-slate-200"
+                            aria-label="减 0.5 天"
+                          >−</button>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={days ?? ''}
+                            onChange={(e) => update(f.id, e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-20 border-0 bg-transparent p-0 text-center text-lg font-bold text-slate-900 outline-none"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-slate-600">天</span>
+                          <button
+                            type="button"
+                            onClick={() => update(f.id, (Number(days) || 0) + 0.5)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-lg font-semibold text-slate-700 hover:bg-slate-200"
+                            aria-label="加 0.5 天"
+                          >+</button>
+                        </div>
+                        {autoDays !== null && (
+                          <button
+                            type="button"
+                            onClick={() => update(f.id, autoDays)}
+                            className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                              days === autoDays ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-100'
+                            }`}
+                          >
+                            📅 按起止日期算 = {autoDays} 天
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-slate-500">快捷填：</span>
+                        {QUICK_DAYS.map((d) => {
+                          const on = Number(days) === d;
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => update(f.id, d)}
+                              className={`rounded-full px-3 py-1 text-xs transition ${on ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'}`}
+                            >
+                              {d === 0.5 ? '半天' : `${d} 天`}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {pool && official !== null && (
+                        <div className="rounded-lg bg-white p-2.5 ring-1 ring-slate-200">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="text-slate-500">你的 {category} 余额：</span>
+                            <span className="text-lg font-semibold text-slate-900">{official.toFixed(1)} 天</span>
+                            {days != null && (
+                              <>
+                                <span className="text-slate-400">—</span>
+                                <span className="text-xs text-slate-500">本次申请 {days} 天 →</span>
+                                <span className={`text-sm font-semibold ${official - days < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                  审批通过后 {(official - days).toFixed(1)} 天
+                                </span>
+                                {official - days < 0 && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
+                                    ⚠️ 余额不足（可由管理员审批后借假）
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            此余额由管理员维护；审批通过后自动扣减。
+                          </div>
+                        </div>
+                      )}
+                      {!pool && category && (
+                        <div className="rounded-lg bg-slate-100 px-2.5 py-2 text-[11px] text-slate-600">
+                          {category} 不占用年假/调休池，不影响余额。
+                        </div>
+                      )}
+                      {!category && (
+                        <div className="rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 ring-1 ring-amber-200">
+                          💡 请先在上方选择"请假类型"，年假/调休会自动显示你的剩余余额。
                         </div>
                       )}
                     </div>
