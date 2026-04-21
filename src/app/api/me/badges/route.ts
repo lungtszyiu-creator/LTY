@@ -26,9 +26,10 @@ export async function GET() {
         superseded: false,
       },
     }),
-    // Work reports submitted TO me.
+    // Work reports submitted TO me that I haven't surfaced yet. Cleared in
+    // bulk when I open /reports?tab=incoming.
     prisma.report.count({
-      where: { reportToId: user.id, submittedAt: { not: null } },
+      where: { reportToId: user.id, submittedAt: { not: null }, readAtByReporter: null },
     }),
   ]);
 

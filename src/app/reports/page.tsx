@@ -20,6 +20,17 @@ export default async function MyReportsPage({
   const type: 'WEEKLY' | 'MONTHLY' = searchParams.type === 'MONTHLY' ? 'MONTHLY' : 'WEEKLY';
   const tab = searchParams.tab === 'incoming' ? 'incoming' : 'mine';
   const now = new Date();
+
+  // Opening the incoming tab counts as "seeing" everything in my inbox —
+  // clear the nav unread badge by stamping readAtByReporter on any
+  // unstamped incoming reports. Runs before the fetches below so the
+  // counts returned to the client reflect the cleared state.
+  if (tab === 'incoming') {
+    await prisma.report.updateMany({
+      where: { reportToId: session.user.id, submittedAt: { not: null }, readAtByReporter: null },
+      data: { readAtByReporter: new Date() },
+    });
+  }
   const periodStart = currentPeriodStart(type, now);
   const periodEnd = currentPeriodEnd(type, now);
   const dueAt = currentDueAt(type, now);

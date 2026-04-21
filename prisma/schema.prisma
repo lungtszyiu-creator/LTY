@@ -337,6 +337,11 @@ model Report {
   reportToId  String?
   reportTo    User?    @relation("ReportRecipient", fields: [reportToId], references: [id])
 
+  // First time the recipient (reportTo) opened their "汇报给我的" tab with
+  // this report visible. Drives the nav unread badge: null = still unread;
+  // non-null = already surfaced to the recipient, no more red dot.
+  readAtByReporter DateTime?
+
   // Structured JSON with fixed sections: done / plan / blockers / asks.
   // Stored as text for portability; UI renders via a textarea per section.
   contentDone     String?
