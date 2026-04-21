@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
 import { saveUploadedFile } from '@/lib/storage';
+import { resolveFolderAccess } from '@/lib/folderAccess';
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
-// Upload one or more files. Returned attachments are "orphan" (no taskId/submissionId);
-// the client passes their ids when creating a task or submission, which attaches them.
+// Upload one or more files. Returned attachments default to "orphan" (no
+// taskId/submissionId/folderId); the client passes their ids when creating
+// a task or submission, which attaches them. If a `folderId` query param is
+// provided, files are placed directly in that folder after a permission
+// check (edit-access required).
 export async function POST(req: NextRequest) {
-  await requireUser();
+  const user = await requireUser();
   const form = await req.formData();
   const files = form.getAll('file').filter((v): v is File => v instanceof File);
   if (files.length === 0)
@@ -17,6 +21,14 @@ export async function POST(req: NextRequest) {
   for (const f of files) {
     if (f.size > MAX_SIZE)
       return NextResponse.json({ error: 'FILE_TOO_LARGE', filename: f.name }, { status: 413 });
+  }
+
+  const folderId = req.nextUrl.searchParams.get('folderId');
+  if (folderId) {
+    const access = await resolveFolderAccess(folderId, { id: user.id, role: user.role });
+    if (!access.canEdit) {
+      return NextResponse.json({ error: 'NO_UPLOAD_PERMISSION' }, { status: 403 });
+    }
   }
 
   const saved = await Promise.all(files.map((f) => saveUploadedFile(f)));
@@ -28,6 +40,8 @@ export async function POST(req: NextRequest) {
           storedPath: s.storedPath,
           mimeType: s.mimeType,
           size: s.size,
+          folderId: folderId || null,
+          uploadedById: user.id,
         },
       })
     )

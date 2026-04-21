@@ -9,14 +9,26 @@ import { useEffect, useRef, useState } from 'react';
 // Admin-only destinations live under a "管理" dropdown so they don't push the
 // layout around and labels stay perfectly aligned on the row.
 const PUBLIC_LINKS = [
-  { href: '/dashboard',   label: '看板' },
+  { href: '/dashboard',     label: '任务' },
+  { href: '/announcements', label: '公告' },
+  { href: '/reports',       label: '汇报' },
+  { href: '/files',         label: '文件' },
+  { href: '/projects',      label: '项目' },
+];
+
+const MORE_LINKS = [
   { href: '/leaderboard', label: '战功榜' },
   { href: '/rewards',     label: '我的奖励' },
   { href: '/faq',         label: 'Q&A' },
+  { href: '/positions',   label: '岗位' },
 ];
 
 const ADMIN_LINKS = [
   { href: '/admin/tasks/new',     label: '发布任务' },
+  { href: '/admin/announcements', label: '公告管理' },
+  { href: '/admin/reports',       label: '汇报汇总' },
+  { href: '/admin/projects',      label: '项目看板配置' },
+  { href: '/admin/departments',   label: '部门管理' },
   { href: '/admin/rewards',       label: '奖励发放' },
   { href: '/admin/penalties',     label: '扣罚登记' },
   { href: '/admin/users',         label: '用户管理' },
@@ -29,19 +41,22 @@ export default function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const adminRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setOpen(false); setAdminOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); }, [pathname]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!adminRef.current?.contains(e.target as Node)) setAdminOpen(false);
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
     }
-    if (adminOpen) {
+    if (adminOpen || moreOpen) {
       document.addEventListener('mousedown', onDoc);
       return () => document.removeEventListener('mousedown', onDoc);
     }
-  }, [adminOpen]);
+  }, [adminOpen, moreOpen]);
 
   if (!user) return null;
 
@@ -50,6 +65,7 @@ export default function Nav() {
   const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
 
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
+  const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
 
   return (
     <header
@@ -77,6 +93,44 @@ export default function Nav() {
               {l.label}
             </NavLink>
           ))}
+          <div ref={moreRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-expanded={moreOpen}
+              className={`relative inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-sm transition ${
+                moreActive
+                  ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
+                  : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
+              }`}
+              style={moreActive ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
+            >
+              更多
+              <svg className={`h-3 w-3 transition ${moreOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur-xl rise">
+                <ul className="py-1">
+                  {MORE_LINKS.map((l) => {
+                    const active = pathname === l.href || pathname?.startsWith(l.href);
+                    return (
+                      <li key={l.href}>
+                        <Link
+                          href={l.href}
+                          onClick={() => setMoreOpen(false)}
+                          className={`flex items-center justify-between px-4 py-2 text-sm transition ${
+                            active ? 'bg-amber-50 text-amber-900' : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {l.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
           {isAdmin && (
             <div ref={adminRef} className="relative">
               <button
@@ -158,6 +212,10 @@ export default function Nav() {
           <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
               {PUBLIC_LINKS.map((l) => (
+                <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
+              ))}
+              <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">更多</li>
+              {MORE_LINKS.map((l) => (
                 <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
               ))}
               {isAdmin && (

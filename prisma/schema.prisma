@@ -58,6 +58,10 @@ model VerificationToken {
 //   RewardMethod:     "CASH" | "TRANSFER" | "VOUCHER" | "IN_KIND" | "POINTS_ONLY" | "OTHER"
 //   RewardStatus:     "PENDING" | "ISSUED" | "ACKNOWLEDGED" | "DISPUTED" | "CANCELLED"
 //   PenaltyStatus:    "ACTIVE" | "REVOKED"
+//   ReportType:       "WEEKLY" | "MONTHLY"
+//   ReportStatus:     "PENDING" | "SUBMITTED" | "LATE"
+//   FolderVisibility: "PUBLIC" | "DEPARTMENT" | "PRIVATE"
+//   DepartmentRole:   "LEAD" | "MEMBER"
 
 model User {
   id            String    @id @default(cuid())
@@ -82,6 +86,14 @@ model User {
   penaltiesReceived Penalty[]        @relation("PenaltyTarget")
   penaltiesIssued  Penalty[]         @relation("PenaltyIssuer")
   penaltiesRevoked Penalty[]         @relation("PenaltyRevoker")
+
+  departments          DepartmentMembership[]
+  departmentsLed       Department[]           @relation("DepartmentLead")
+  announcementsCreated Announcement[]         @relation("AnnouncementAuthor")
+  announcementReadings AnnouncementReading[]
+  reports              Report[]               @relation("ReportAuthor")
+  foldersCreated       Folder[]               @relation("FolderCreator")
+  folderMemberships    FolderMember[]
 }
 
 model Task {
@@ -204,6 +216,162 @@ model Attachment {
   submission   Submission? @relation("SubmissionAttachments", fields: [submissionId], references: [id], onDelete: Cascade)
   rewardId     String?
   reward       RewardIssuance? @relation("RewardReceipts", fields: [rewardId], references: [id], onDelete: Cascade)
+
+  // Shared-files module
+  folderId     String?
+  folder       Folder?     @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
+  uploadedById String?
+  // Announcements can include attachments
+  announcementId String?
+  announcement   Announcement? @relation("AnnouncementAttachments", fields: [announcementId], references: [id], onDelete: Cascade)
+  // Reports can include attachments (e.g. screenshots)
+  reportId     String?
+  report       Report?     @relation("ReportAttachments", fields: [reportId], references: [id], onDelete: Cascade)
+}
+
+// ---- Organisation: departments ----
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  parentId    String?
+  parent      Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children    Department[] @relation("DepartmentHierarchy")
+  leadUserId  String?
+  lead        User?    @relation("DepartmentLead", fields: [leadUserId], references: [id])
+  description String?
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships DepartmentMembership[]
+  folders     Folder[]
+}
+
+model DepartmentMembership {
+  id            String   @id @default(cuid())
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          String   @default("MEMBER") // "LEAD" | "MEMBER"
+  createdAt     DateTime @default(now())
+
+  @@unique([departmentId, userId])
+  @@index([userId])
+}
+
+// ---- Announcements ----
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  body        String    // markdown
+  pinned      Boolean  @default(false)
+  publishedAt DateTime @default(now())
+  expiresAt   DateTime?
+  createdById String
+  createdBy   User     @relation("AnnouncementAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  readings    AnnouncementReading[]
+  attachments Attachment[] @relation("AnnouncementAttachments")
+
+  @@index([publishedAt])
+}
+
+model AnnouncementReading {
+  id              String   @id @default(cuid())
+  announcementId  String
+  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt          DateTime @default(now())
+
+  @@unique([announcementId, userId])
+}
+
+// ---- Work reports (weekly / monthly) ----
+// Each (user, type, periodStart) is unique so re-submitting just updates the
+// existing row. Overdue rows are those where status = PENDING and dueAt < now.
+model Report {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("ReportAuthor", fields: [userId], references: [id])
+  type        String   // "WEEKLY" | "MONTHLY"
+  periodStart DateTime
+  periodEnd   DateTime
+  dueAt       DateTime
+  submittedAt DateTime?
+
+  // Structured JSON with fixed sections: done / plan / blockers / asks.
+  // Stored as text for portability; UI renders via a textarea per section.
+  contentDone     String?
+  contentPlan     String?
+  contentBlockers String?
+  contentAsks     String?
+
+  status      String   @default("PENDING") // "PENDING" | "SUBMITTED" | "LATE"
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attachments Attachment[] @relation("ReportAttachments")
+
+  @@unique([userId, type, periodStart])
+  @@index([type, periodStart])
+  @@index([status])
+}
+
+// ---- Shared files (folders with permission inheritance) ----
+// Permissions resolve by walking up the parent chain until the first folder
+// whose visibility != INHERIT, then apply that. PUBLIC = everyone with a
+// session; DEPARTMENT = members of the attached department; PRIVATE = only
+// explicit FolderMember rows (plus admins + creator).
+model Folder {
+  id           String   @id @default(cuid())
+  name         String
+  parentId     String?
+  parent       Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[] @relation("FolderHierarchy")
+  visibility   String   @default("INHERIT") // "INHERIT" | "PUBLIC" | "DEPARTMENT" | "PRIVATE"
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdById  String
+  createdBy    User     @relation("FolderCreator", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  files        Attachment[]  @relation("FolderFiles")
+  members      FolderMember[]
+
+  @@index([parentId])
+}
+
+model FolderMember {
+  id         String   @id @default(cuid())
+  folderId   String
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  access     String   @default("VIEW") // "VIEW" | "EDIT"
+  createdAt  DateTime @default(now())
+
+  @@unique([folderId, userId])
+}
+
+// ---- External project boards (Jira / Airtable / Lark / Notion iframes) ----
+model ProjectBoard {
+  id          String   @id @default(cuid())
+  name        String
+  iframeUrl   String
+  description String?
+  icon        String?  // emoji or short code
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // One record per approved task. Captures what was promised, what was actually
