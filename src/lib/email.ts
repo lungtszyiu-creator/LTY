@@ -228,6 +228,64 @@ export async function notifyRewardStatusChanged(args: {
   return result;
 }
 
+export async function notifyApprovalPending(args: {
+  approverEmail: string;
+  approverName: string;
+  instanceId: string;
+  instanceTitle: string;
+  templateName: string;
+  initiatorName: string;
+}) {
+  if (!args.approverEmail) return { ok: true, attempts: 0 };
+  const link = `${APP_URL}/approvals/${args.instanceId}`;
+  const subject = `[LTY · 审批] ⏰ 待你审批：${args.instanceTitle}`;
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">⏰ 待你审批</h2>
+    <p style="color:#475569;margin:0 0 16px;">${esc(args.approverName)}，有一条审批等你处理：</p>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:#1e3a8a;font-weight:600;">${esc(args.instanceTitle)}</p>
+      <p style="margin:6px 0 0;color:#334155;">模板：${esc(args.templateName)}</p>
+      <p style="margin:6px 0 0;color:#334155;">发起人：${esc(args.initiatorName)}</p>
+    </div>
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">前往处理 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.approverEmail], subject, html });
+  await logNotification({ kind: 'APPROVAL_PENDING', taskId: null, subject, recipients: 1 }, result);
+  return result;
+}
+
+export async function notifyApprovalFinalised(args: {
+  initiatorEmail: string;
+  initiatorName: string;
+  instanceId: string;
+  instanceTitle: string;
+  templateName: string;
+  outcome: 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  lastActorName?: string;
+  lastNote?: string | null;
+}) {
+  if (!args.initiatorEmail) return { ok: true, attempts: 0 };
+  const link = `${APP_URL}/approvals/${args.instanceId}`;
+  const isOk = args.outcome === 'APPROVED';
+  const title = isOk ? '✅ 审批已通过' : args.outcome === 'REJECTED' ? '❌ 审批被驳回' : '📤 审批已撤销';
+  const subject = `[LTY · 审批] ${title}：${args.instanceTitle}`;
+  const bg = isOk ? { box: '#ecfdf5', border: '#a7f3d0', fg: '#065f46' } : args.outcome === 'REJECTED' ? { box: '#fef2f2', border: '#fecaca', fg: '#991b1b' } : { box: '#f8fafc', border: '#e2e8f0', fg: '#475569' };
+  const html = wrap(`
+    <h2 style="margin:0 0 8px;font-size:18px;">${title}</h2>
+    <p style="color:#475569;margin:0 0 16px;">${esc(args.initiatorName)}，你发起的审批有了结果：</p>
+    <div style="background:${bg.box};border:1px solid ${bg.border};border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:${bg.fg};font-weight:600;">${esc(args.instanceTitle)}</p>
+      <p style="margin:6px 0 0;color:#334155;">模板：${esc(args.templateName)}</p>
+      ${args.lastActorName ? `<p style="margin:6px 0 0;color:#334155;">决定人：${esc(args.lastActorName)}</p>` : ''}
+      ${args.lastNote ? `<p style="margin:10px 0 0;color:#334155;white-space:pre-wrap;"><strong>说明：</strong>${esc(args.lastNote)}</p>` : ''}
+    </div>
+    <p style="margin:24px 0 8px;"><a href="${link}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500;">查看详情 →</a></p>
+  `);
+  const result = await sendWithRetry({ to: [args.initiatorEmail], subject, html });
+  await logNotification({ kind: 'APPROVAL_FINALISED', taskId: null, subject, recipients: 1 }, result);
+  return result;
+}
+
 export async function notifyPenaltyIssued(args: {
   recipientEmail: string;
   userName: string;

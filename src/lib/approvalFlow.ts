@@ -15,18 +15,29 @@ export type FormFieldSpec = {
   titleField?: boolean; // if true, this field's value becomes instance title
 };
 
+export type ApproverSource = 'SPECIFIC' | 'INITIATOR_DEPT_LEAD' | 'DEPT_LEAD';
+export type ConditionOp = '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains';
+
 export type FlowNodeData = {
   label?: string;
   // approval nodes
-  approvers?: string[];   // user ids
-  mode?: 'ALL' | 'ANY';   // 会签 or 或签
+  approvers?: string[];          // user ids — resolved at submit time
+  mode?: 'ALL' | 'ANY';          // 会签 or 或签
+  approverSource?: ApproverSource; // how to populate approvers; defaults to SPECIFIC
+  sourceDepartmentId?: string;   // for DEPT_LEAD source
   // cc nodes
   ccUsers?: string[];
+  // condition nodes
+  field?: string;                // form field id to read
+  op?: ConditionOp;
+  value?: string;                // compared as string / number depending on op
+  trueTargetId?: string;         // node id to go to if condition is true
+  falseTargetId?: string;        // node id to go to if condition is false
 };
 
 export type FlowNode = {
   id: string;
-  type: 'start' | 'approval' | 'cc' | 'end';
+  type: 'start' | 'approval' | 'cc' | 'end' | 'condition';
   position: { x: number; y: number };
   data: FlowNodeData;
 };
@@ -66,12 +77,43 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; icon: string }>
 };
 
 // Walk the flow graph forward from `from` (a node id) and return the first
-// approval/cc/end node following the edges. Doesn't recurse into branches
-// — v1 flows are effectively linear (no condition nodes yet).
+// non-condition downstream node. For condition nodes, call pickBranch with
+// form values to resolve which branch to follow.
 export function nextNodeId(flow: FlowGraph, fromId: string): string | null {
   const outgoing = flow.edges.filter((e) => e.source === fromId);
   if (outgoing.length === 0) return null;
-  return outgoing[0].target; // v1: single outgoing edge
+  return outgoing[0].target;
+}
+
+// Evaluate a condition node against form values and return the next node id
+// based on trueTargetId / falseTargetId. Falls back to the first outgoing
+// edge if the explicit targets are missing (graceful degradation).
+export function evaluateCondition(
+  node: FlowNode,
+  form: Record<string, any>,
+  flow: FlowGraph
+): string | null {
+  const { field, op, value, trueTargetId, falseTargetId } = node.data;
+  if (!field || !op) return nextNodeId(flow, node.id);
+  const actual = form[field];
+  const expect = value ?? '';
+  let pass = false;
+  const actualStr = actual === undefined || actual === null ? '' : String(actual);
+  const actualNum = Number(actualStr);
+  const expectNum = Number(expect);
+  switch (op) {
+    case '==':       pass = actualStr === expect; break;
+    case '!=':       pass = actualStr !== expect; break;
+    case '>':        pass = !Number.isNaN(actualNum) && !Number.isNaN(expectNum) && actualNum > expectNum; break;
+    case '<':        pass = !Number.isNaN(actualNum) && !Number.isNaN(expectNum) && actualNum < expectNum; break;
+    case '>=':       pass = !Number.isNaN(actualNum) && !Number.isNaN(expectNum) && actualNum >= expectNum; break;
+    case '<=':       pass = !Number.isNaN(actualNum) && !Number.isNaN(expectNum) && actualNum <= expectNum; break;
+    case 'contains': pass = actualStr.includes(expect); break;
+  }
+  const targetId = pass ? trueTargetId : falseTargetId;
+  if (targetId && flow.nodes.some((n) => n.id === targetId)) return targetId;
+  // Fallback to first outgoing edge
+  return nextNodeId(flow, node.id);
 }
 
 // Starting point — the "start" node.

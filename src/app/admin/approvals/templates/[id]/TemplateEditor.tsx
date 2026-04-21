@@ -111,7 +111,29 @@ function CcNode({ data, selected }: NodeProps) {
   );
 }
 
-const nodeTypes = { start: StartNode, end: EndNode, approval: ApprovalNode, cc: CcNode };
+function ConditionNode({ data, selected }: NodeProps) {
+  const d = data as any;
+  const configured = d.field && d.op;
+  return (
+    <div className={`relative min-w-[180px] rounded-xl bg-violet-50 px-4 py-3 text-sm shadow ring-2 ${selected ? 'ring-violet-400' : 'ring-violet-200'}`}>
+      <Handle type="target" position={Position.Top} />
+      <div className="flex items-center gap-1.5 font-semibold text-violet-900">
+        <span>🔀</span>
+        <span>{d.label || '条件分支'}</span>
+      </div>
+      <div className="mt-1 text-xs text-violet-700">
+        {configured ? (
+          <span>{d.field} {d.op} {d.value}</span>
+        ) : (
+          <span>⚠ 未设条件</span>
+        )}
+      </div>
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}
+
+const nodeTypes = { start: StartNode, end: EndNode, approval: ApprovalNode, cc: CcNode, condition: ConditionNode };
 
 // ---------- Main editor ----------
 
@@ -150,15 +172,16 @@ function EditorInner({
     [setEdges]
   );
 
-  function addNode(type: 'approval' | 'cc') {
+  function addNode(type: 'approval' | 'cc' | 'condition') {
     const id = `n_${Math.random().toString(36).slice(2, 8)}`;
     const newNode: Node = {
       id,
       type,
       position: { x: 200 + Math.random() * 40, y: 280 + nodes.length * 30 },
-      data: type === 'approval'
-        ? { label: '审批人', approvers: [], mode: 'ALL' }
-        : { label: '抄送', ccUsers: [] },
+      data:
+        type === 'approval'  ? { label: '审批人', approvers: [], mode: 'ALL', approverSource: 'SPECIFIC' } :
+        type === 'cc'        ? { label: '抄送', ccUsers: [] } :
+                               { label: '条件分支', field: '', op: '==', value: '' },
     };
     setNodes((prev) => [...prev, newNode]);
   }
@@ -218,8 +241,27 @@ function EditorInner({
       const approvalNodes = nodes.filter((n) => n.type === 'approval');
       for (const n of approvalNodes) {
         const d: any = n.data;
-        if (!d.approvers || d.approvers.length === 0) {
-          throw new Error(`节点"${d.label || n.id}"还没有设审批人`);
+        const src = d.approverSource ?? 'SPECIFIC';
+        if (src === 'SPECIFIC') {
+          if (!d.approvers || d.approvers.length === 0) {
+            throw new Error(`节点"${d.label || n.id}"还没有设审批人`);
+          }
+        } else if (src === 'DEPT_LEAD') {
+          if (!d.sourceDepartmentId) {
+            throw new Error(`节点"${d.label || n.id}"需要指定一个部门（其负责人作为审批人）`);
+          }
+        }
+        // INITIATOR_DEPT_LEAD: resolved at submit time; no config needed
+      }
+
+      const conditionNodes = nodes.filter((n) => n.type === 'condition');
+      for (const n of conditionNodes) {
+        const d: any = n.data;
+        if (!d.field || !d.op) {
+          throw new Error(`条件节点"${d.label || n.id}"没有设置判断条件`);
+        }
+        if (!d.trueTargetId || !d.falseTargetId) {
+          throw new Error(`条件节点"${d.label || n.id}"没有指定"满足时去"和"不满足时去"的节点`);
         }
       }
 
@@ -283,8 +325,9 @@ function EditorInner({
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 text-sm">
             <span className="font-semibold">🎨 流程画布</span>
             <div className="flex items-center gap-2">
-              <button onClick={() => addNode('approval')} className="btn btn-ghost text-xs">+ 审批节点</button>
-              <button onClick={() => addNode('cc')} className="btn btn-ghost text-xs">+ 抄送节点</button>
+              <button onClick={() => addNode('approval')} className="btn btn-ghost text-xs">+ 审批</button>
+              <button onClick={() => addNode('cc')} className="btn btn-ghost text-xs">+ 抄送</button>
+              <button onClick={() => addNode('condition')} className="btn btn-ghost text-xs">+ 条件分支</button>
             </div>
           </div>
           <div className="h-[520px]">
@@ -316,9 +359,11 @@ function EditorInner({
             ) : (selected.type === 'start' || selected.type === 'end') ? (
               <p className="text-xs text-slate-500">起点 / 结束 节点不需要配置。</p>
             ) : selected.type === 'approval' ? (
-              <ApprovalSettings node={selected} users={users} onChange={updateSelectedNodeData} onDelete={deleteSelectedNode} />
+              <ApprovalSettings node={selected} users={users} departments={departments} onChange={updateSelectedNodeData} onDelete={deleteSelectedNode} />
             ) : selected.type === 'cc' ? (
               <CcSettings node={selected} users={users} onChange={updateSelectedNodeData} onDelete={deleteSelectedNode} />
+            ) : selected.type === 'condition' ? (
+              <ConditionSettings node={selected} fields={fields} allNodes={nodes} onChange={updateSelectedNodeData} onDelete={deleteSelectedNode} />
             ) : null}
           </div>
 
@@ -387,16 +432,18 @@ function EditorInner({
 }
 
 function ApprovalSettings({
-  node, users, onChange, onDelete,
+  node, users, departments, onChange, onDelete,
 }: {
   node: Node;
   users: UserOpt[];
+  departments: DeptOpt[];
   onChange: (patch: any) => void;
   onDelete: () => void;
 }) {
   const d: any = node.data;
   const selected: string[] = d.approvers ?? [];
   const mode: 'ALL' | 'ANY' = d.mode ?? 'ALL';
+  const source: 'SPECIFIC' | 'INITIATOR_DEPT_LEAD' | 'DEPT_LEAD' = d.approverSource ?? 'SPECIFIC';
 
   function toggle(id: string) {
     onChange({ approvers: selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id] });
@@ -408,34 +455,149 @@ function ApprovalSettings({
         <label className="mb-1 block text-xs font-medium text-slate-500">节点名称</label>
         <input value={d.label ?? ''} onChange={(e) => onChange({ label: e.target.value })} className="input" />
       </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">审批人类型</label>
+        <div className="grid grid-cols-1 gap-1">
+          {[
+            { v: 'SPECIFIC',              label: '指定成员' },
+            { v: 'INITIATOR_DEPT_LEAD',   label: '发起人所在部门的负责人' },
+            { v: 'DEPT_LEAD',             label: '指定部门的负责人' },
+          ].map((opt) => (
+            <label key={opt.v} className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs ring-1 ${source === opt.v ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}>
+              <input type="radio" className="hidden" checked={source === opt.v} onChange={() => onChange({ approverSource: opt.v })} />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {source === 'DEPT_LEAD' && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">目标部门</label>
+          <select
+            value={d.sourceDepartmentId ?? ''}
+            onChange={(e) => onChange({ sourceDepartmentId: e.target.value || null })}
+            className="select"
+          >
+            <option value="">—— 选择部门 ——</option>
+            {departments.map((dp) => <option key={dp.id} value={dp.id}>{dp.name}</option>)}
+          </select>
+        </div>
+      )}
+
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-500">多人审批方式</label>
         <div className="flex gap-2">
           <label className={`flex-1 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-center ring-1 ${mode === 'ALL' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}>
             <input type="radio" className="hidden" checked={mode === 'ALL'} onChange={() => onChange({ mode: 'ALL' })} />
-            会签（全部同意）
+            会签
           </label>
           <label className={`flex-1 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-center ring-1 ${mode === 'ANY' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}>
             <input type="radio" className="hidden" checked={mode === 'ANY'} onChange={() => onChange({ mode: 'ANY' })} />
-            或签（一人同意即可）
+            或签
           </label>
         </div>
       </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-500">审批人（多选）</label>
-        <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1">
-          <ul className="space-y-0.5">
-            {users.map((u) => (
-              <li key={u.id}>
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-slate-50">
-                  <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} />
-                  <span>{u.name ?? u.email}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
+
+      {source === 'SPECIFIC' ? (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">审批人（多选）</label>
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1">
+            <ul className="space-y-0.5">
+              {users.map((u) => (
+                <li key={u.id}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-slate-50">
+                    <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} />
+                    <span>{u.name ?? u.email}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
+      ) : (
+        <p className="rounded bg-indigo-50 px-2 py-1.5 text-[11px] text-indigo-800 ring-1 ring-indigo-100">
+          ℹ️ 审批人将在每次提交时自动解析。你可以再勾选下方"备选"成员作为兜底，在解析不到时使用。
+        </p>
+      )}
+
+      {source !== 'SPECIFIC' && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">备选审批人（可选）</label>
+          <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1">
+            <ul className="space-y-0.5">
+              {users.map((u) => (
+                <li key={u.id}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-slate-50">
+                    <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} />
+                    <span>{u.name ?? u.email}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <button onClick={onDelete} className="text-xs text-rose-600">删除此节点</button>
+    </div>
+  );
+}
+
+function ConditionSettings({
+  node, fields, allNodes, onChange, onDelete,
+}: {
+  node: Node;
+  fields: FormFieldSpec[];
+  allNodes: Node[];
+  onChange: (patch: any) => void;
+  onDelete: () => void;
+}) {
+  const d: any = node.data;
+  const targetOptions = allNodes.filter((n) => n.id !== node.id && n.type !== 'start');
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">节点名称</label>
+        <input value={d.label ?? ''} onChange={(e) => onChange({ label: e.target.value })} className="input" />
       </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">判断字段</label>
+        <select value={d.field ?? ''} onChange={(e) => onChange({ field: e.target.value })} className="select">
+          <option value="">—— 选择表单字段 ——</option>
+          {fields.map((f) => <option key={f.id} value={f.id}>{f.label} ({f.type})</option>)}
+        </select>
+      </div>
+      <div className="grid grid-cols-[auto_1fr] gap-2">
+        <select value={d.op ?? '=='} onChange={(e) => onChange({ op: e.target.value })} className="select w-24">
+          <option value="==">等于</option>
+          <option value="!=">不等于</option>
+          <option value=">">大于</option>
+          <option value="<">小于</option>
+          <option value=">=">≥</option>
+          <option value="<=">≤</option>
+          <option value="contains">包含</option>
+        </select>
+        <input value={d.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} placeholder="对比值" className="input" />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">✅ 满足时去</label>
+        <select value={d.trueTargetId ?? ''} onChange={(e) => onChange({ trueTargetId: e.target.value })} className="select">
+          <option value="">—— 选择目标节点 ——</option>
+          {targetOptions.map((n) => <option key={n.id} value={n.id}>{(n.data as any).label ?? n.id} ({n.type})</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">❌ 不满足时去</label>
+        <select value={d.falseTargetId ?? ''} onChange={(e) => onChange({ falseTargetId: e.target.value })} className="select">
+          <option value="">—— 选择目标节点 ——</option>
+          {targetOptions.map((n) => <option key={n.id} value={n.id}>{(n.data as any).label ?? n.id} ({n.type})</option>)}
+        </select>
+      </div>
+      <p className="rounded bg-violet-50 px-2 py-1.5 text-[11px] text-violet-800 ring-1 ring-violet-100">
+        ℹ️ 条件节点从表单值评估后直接跳到指定节点，画布上的连线仅用于可视化（实际以上面选择的"去"为准）。
+      </p>
       <button onClick={onDelete} className="text-xs text-rose-600">删除此节点</button>
     </div>
   );

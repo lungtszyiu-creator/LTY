@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
 import { parseFlow, parseFields, findStartNode, nextNodeId, type FormFieldSpec } from '@/lib/approvalFlow';
-import { startInstance } from '@/lib/approvalRuntime';
+import { startInstance, resolveRoleApprovers } from '@/lib/approvalRuntime';
+import { notifyApprovalPending } from '@/lib/email';
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -95,6 +96,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'INVALID_FLOW' }, { status: 400 });
   }
 
+  // Resolve role-based approvers (e.g. 发起人所在部门负责人) to concrete
+  // user ids so the snapshot is self-contained.
+  const { flow: resolvedFlow, warnings } = await resolveRoleApprovers(flow, user.id);
+
   const instance = await prisma.$transaction(async (tx) => {
     const i = await tx.approvalInstance.create({
       data: {
@@ -103,7 +108,7 @@ export async function POST(req: NextRequest) {
         title,
         status: 'IN_PROGRESS',
         formJson: JSON.stringify(data.form),
-        flowSnapshot: tpl.flowJson,
+        flowSnapshot: JSON.stringify(resolvedFlow),
         fieldsSnapshot: tpl.fieldsJson,
       },
     });
@@ -121,7 +126,26 @@ export async function POST(req: NextRequest) {
   });
 
   // Fire the runtime to step past START and create first pending steps.
-  await startInstance(instance.id, flow);
+  const result = await startInstance(instance.id, resolvedFlow, data.form);
 
-  return NextResponse.json(instance, { status: 201 });
+  // Notify the initial approvers so they don't have to poll.
+  if (result.newStepIds.length > 0) {
+    const steps = await prisma.approvalStep.findMany({
+      where: { id: { in: result.newStepIds } },
+      include: { approver: { select: { email: true, name: true } } },
+    });
+    for (const s of steps) {
+      if (!s.approver?.email) continue;
+      notifyApprovalPending({
+        approverEmail: s.approver.email,
+        approverName: s.approver.name ?? s.approver.email,
+        instanceId: instance.id,
+        instanceTitle: title,
+        templateName: tpl.name,
+        initiatorName: user.name ?? user.email ?? '',
+      }).catch((e) => console.error('[approval] notify pending failed', e));
+    }
+  }
+
+  return NextResponse.json({ ...instance, warnings }, { status: 201 });
 }

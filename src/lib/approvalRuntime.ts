@@ -1,5 +1,61 @@
 import { prisma } from './db';
-import { parseFlow, nextNodeId, findStartNode, findNodeById, type FlowGraph } from './approvalFlow';
+import {
+  parseFlow, nextNodeId, findStartNode, findNodeById, evaluateCondition,
+  type FlowGraph, type FlowNode,
+} from './approvalFlow';
+
+// Resolve role-based approvers (INITIATOR_DEPT_LEAD / DEPT_LEAD) on all
+// approval nodes to concrete user ids. Mutates a copy of the flow so the
+// snapshot saved on the instance reflects the resolution. Also resolves
+// CC users the same way if ever needed (currently only SPECIFIC for CC).
+export async function resolveRoleApprovers(
+  flow: FlowGraph,
+  initiatorId: string
+): Promise<{ flow: FlowGraph; warnings: string[] }> {
+  const warnings: string[] = [];
+  // Cache: which dept leads does the initiator inherit?
+  let initiatorDeptLeadIds: string[] | null = null;
+  async function getInitiatorDeptLeads() {
+    if (initiatorDeptLeadIds !== null) return initiatorDeptLeadIds;
+    const memberships = await prisma.departmentMembership.findMany({
+      where: { userId: initiatorId },
+      include: { department: { select: { leadUserId: true, name: true } } },
+    });
+    const ids = memberships
+      .map((m) => m.department.leadUserId)
+      .filter((x): x is string => !!x && x !== initiatorId);
+    initiatorDeptLeadIds = Array.from(new Set(ids));
+    return initiatorDeptLeadIds;
+  }
+
+  const nextNodes: FlowNode[] = [];
+  for (const n of flow.nodes) {
+    if (n.type !== 'approval') { nextNodes.push(n); continue; }
+    const src = n.data.approverSource ?? 'SPECIFIC';
+    if (src === 'SPECIFIC') { nextNodes.push(n); continue; }
+
+    let resolved: string[] = [];
+    if (src === 'INITIATOR_DEPT_LEAD') {
+      resolved = await getInitiatorDeptLeads();
+      if (resolved.length === 0) {
+        warnings.push(`节点"${n.data.label ?? n.id}": 发起人没有所属部门或部门无负责人，已退回指定的审批人`);
+      }
+    } else if (src === 'DEPT_LEAD' && n.data.sourceDepartmentId) {
+      const d = await prisma.department.findUnique({
+        where: { id: n.data.sourceDepartmentId },
+        select: { leadUserId: true, name: true },
+      });
+      if (d?.leadUserId) resolved = [d.leadUserId];
+      else warnings.push(`节点"${n.data.label ?? n.id}": 部门"${d?.name ?? '未知'}"没有指定负责人`);
+    }
+
+    // Merge resolved users with pre-selected specific approvers (if any) so
+    // a template author can still specify fallbacks.
+    const merged = Array.from(new Set([...resolved, ...(n.data.approvers ?? [])]));
+    nextNodes.push({ ...n, data: { ...n.data, approvers: merged } });
+  }
+  return { flow: { ...flow, nodes: nextNodes }, warnings };
+}
 
 // Instantiate approval steps for a given nodeId. Called when the flow enters
 // a new node. START/END/CC nodes don't require human action; APPROVAL nodes
@@ -8,8 +64,9 @@ export async function enterNode(
   tx: any,
   instanceId: string,
   nodeId: string,
-  flow: FlowGraph
-): Promise<{ done: boolean; terminalStatus?: 'APPROVED' | 'REJECTED' }> {
+  flow: FlowGraph,
+  form?: Record<string, any>
+): Promise<{ done: boolean; terminalStatus?: 'APPROVED' | 'REJECTED'; newStepIds?: string[] }> {
   const node = findNodeById(flow, nodeId);
   if (!node) {
     // Unknown node — treat as end.
@@ -29,7 +86,6 @@ export async function enterNode(
   }
 
   if (node.type === 'cc') {
-    // CC is a pass-through: create notification steps and immediately advance.
     const ccUsers = (node.data.ccUsers ?? []) as string[];
     if (ccUsers.length > 0) {
       await tx.approvalStep.createMany({
@@ -38,7 +94,7 @@ export async function enterNode(
           nodeId: node.id,
           kind: 'CC',
           approverId: uid,
-          decision: 'APPROVED', // mark done so the row doesn't count as pending
+          decision: 'APPROVED',
           decidedAt: new Date(),
         })),
       });
@@ -51,34 +107,48 @@ export async function enterNode(
       });
       return { done: true, terminalStatus: 'APPROVED' };
     }
-    return enterNode(tx, instanceId, nxt, flow);
+    return enterNode(tx, instanceId, nxt, flow, form);
+  }
+
+  if (node.type === 'condition') {
+    // Evaluate and jump. No steps are created for condition nodes — they're
+    // silent routing.
+    const nxt = form ? evaluateCondition(node, form, flow) : nextNodeId(flow, node.id);
+    if (!nxt) {
+      await tx.approvalInstance.update({
+        where: { id: instanceId },
+        data: { status: 'APPROVED', completedAt: new Date(), currentNodeId: null },
+      });
+      return { done: true, terminalStatus: 'APPROVED' };
+    }
+    return enterNode(tx, instanceId, nxt, flow, form);
   }
 
   if (node.type === 'approval') {
     const approvers = (node.data.approvers ?? []) as string[];
     if (approvers.length === 0) {
-      // No approver configured — invalid flow. Reject so the instance doesn't
-      // hang forever.
       await tx.approvalInstance.update({
         where: { id: instanceId },
         data: { status: 'REJECTED', completedAt: new Date(), currentNodeId: null },
       });
       return { done: true, terminalStatus: 'REJECTED' };
     }
-    await tx.approvalStep.createMany({
-      data: approvers.map((uid) => ({
-        instanceId,
-        nodeId: node.id,
-        kind: 'APPROVAL',
-        mode: (node.data.mode as 'ALL' | 'ANY' | undefined) ?? 'ALL',
-        approverId: uid,
-      })),
-    });
+    const created = await Promise.all(
+      approvers.map((uid) => tx.approvalStep.create({
+        data: {
+          instanceId,
+          nodeId: node.id,
+          kind: 'APPROVAL',
+          mode: (node.data.mode as 'ALL' | 'ANY' | undefined) ?? 'ALL',
+          approverId: uid,
+        },
+      }))
+    );
     await tx.approvalInstance.update({
       where: { id: instanceId },
       data: { currentNodeId: node.id },
     });
-    return { done: false };
+    return { done: false, newStepIds: created.map((s: any) => s.id) };
   }
 
   // Start node: just advance.
@@ -90,18 +160,19 @@ export async function enterNode(
     });
     return { done: true, terminalStatus: 'APPROVED' };
   }
-  return enterNode(tx, instanceId, nxt, flow);
+  return enterNode(tx, instanceId, nxt, flow, form);
 }
 
 // Apply an approver's decision; advance the flow if the node is satisfied.
-// Returns the updated instance status.
+// Returns the updated instance status + any new pending step ids (so the
+// caller can fire notifications to the next approvers).
 export async function applyDecision(
   instanceId: string,
   stepId: string,
   decision: 'APPROVED' | 'REJECTED',
   actorId: string,
   note: string | null
-): Promise<{ status: string; currentNodeId: string | null }> {
+): Promise<{ status: string; currentNodeId: string | null; newStepIds: string[] }> {
   return prisma.$transaction(async (tx) => {
     const step = await tx.approvalStep.findUnique({ where: { id: stepId } });
     if (!step) throw new Error('STEP_NOT_FOUND');
@@ -118,7 +189,6 @@ export async function applyDecision(
     });
 
     if (decision === 'REJECTED') {
-      // Any reject kills the instance; mark other pending steps as superseded.
       await tx.approvalStep.updateMany({
         where: { instanceId, decision: null },
         data: { superseded: true },
@@ -127,7 +197,7 @@ export async function applyDecision(
         where: { id: instanceId },
         data: { status: 'REJECTED', completedAt: new Date(), currentNodeId: null },
       });
-      return { status: 'REJECTED', currentNodeId: null };
+      return { status: 'REJECTED', currentNodeId: null, newStepIds: [] };
     }
 
     // APPROVED — check if node is satisfied.
@@ -138,12 +208,11 @@ export async function applyDecision(
 
     const anyRejected = siblingSteps.some((s) => s.decision === 'REJECTED');
     if (anyRejected) {
-      // Shouldn't happen here since we handle REJECT above, but bail safely.
       await tx.approvalInstance.update({
         where: { id: instanceId },
         data: { status: 'REJECTED', completedAt: new Date(), currentNodeId: null },
       });
-      return { status: 'REJECTED', currentNodeId: null };
+      return { status: 'REJECTED', currentNodeId: null, newStepIds: [] };
     }
 
     let nodeSatisfied = false;
@@ -161,34 +230,43 @@ export async function applyDecision(
     }
 
     if (!nodeSatisfied) {
-      return { status: 'IN_PROGRESS', currentNodeId: instance.currentNodeId };
+      return { status: 'IN_PROGRESS', currentNodeId: instance.currentNodeId, newStepIds: [] };
     }
 
     // Advance to next node.
     const flow = parseFlow(instance.flowSnapshot);
+    const form = JSON.parse(instance.formJson || '{}');
     const nxtId = nextNodeId(flow, step.nodeId);
     if (!nxtId) {
       await tx.approvalInstance.update({
         where: { id: instanceId },
         data: { status: 'APPROVED', completedAt: new Date(), currentNodeId: null },
       });
-      return { status: 'APPROVED', currentNodeId: null };
+      return { status: 'APPROVED', currentNodeId: null, newStepIds: [] };
     }
-    const result = await enterNode(tx, instanceId, nxtId, flow);
+    const result = await enterNode(tx, instanceId, nxtId, flow, form);
     if (result.done) {
-      return { status: result.terminalStatus ?? 'APPROVED', currentNodeId: null };
+      return { status: result.terminalStatus ?? 'APPROVED', currentNodeId: null, newStepIds: [] };
     }
-    // Re-read current node after advancing.
     const fresh = await tx.approvalInstance.findUnique({ where: { id: instanceId } });
-    return { status: 'IN_PROGRESS', currentNodeId: fresh?.currentNodeId ?? null };
+    return { status: 'IN_PROGRESS', currentNodeId: fresh?.currentNodeId ?? null, newStepIds: result.newStepIds ?? [] };
   });
 }
 
-// Start a fresh instance by stepping past the start node.
-export async function startInstance(instanceId: string, flow: FlowGraph) {
+// Start a fresh instance by stepping past the start node. Returns the ids
+// of the initial pending ApprovalStep rows so the caller can email them.
+export async function startInstance(
+  instanceId: string,
+  flow: FlowGraph,
+  form: Record<string, any>
+): Promise<{ newStepIds: string[]; finalStatus: string | null }> {
   const start = findStartNode(flow);
   if (!start) throw new Error('NO_START_NODE');
   return prisma.$transaction(async (tx) => {
-    await enterNode(tx, instanceId, start.id, flow);
+    const res = await enterNode(tx, instanceId, start.id, flow, form);
+    return {
+      newStepIds: res.newStepIds ?? [],
+      finalStatus: res.done ? (res.terminalStatus ?? null) : null,
+    };
   });
 }
