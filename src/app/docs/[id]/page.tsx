@@ -7,6 +7,7 @@ import { fmtDateTime } from '@/lib/datetime';
 import DocsTree from '../DocsTree';
 import CreateDocButton from '../CreateDocButton';
 import DocWorkspace from './DocWorkspace';
+import DocSharePanel from './DocSharePanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,16 +29,27 @@ export default async function DocPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const [doc, visibleIds] = await Promise.all([
+  const [doc, visibleIds, departments, users] = await Promise.all([
     prisma.doc.findUnique({
       where: { id: params.id },
       include: {
         creator:    { select: { id: true, name: true, email: true } },
         lastEditor: { select: { id: true, name: true, email: true } },
         department: { select: { id: true, name: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
       },
     }),
     listVisibleDocIds({ id: me.id, role: me.role }),
+    prisma.department.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: 'asc' }, { email: 'asc' }],
+    }),
   ]);
   if (!doc) notFound();
 
@@ -46,6 +58,10 @@ export default async function DocPage({ params }: { params: { id: string } }) {
     orderBy: { updatedAt: 'desc' },
     select: { id: true, title: true, icon: true, parentId: true, visibility: true, updatedAt: true },
   });
+
+  // Manage = creator or SUPER_ADMIN. Regular editors can edit the body but
+  // not re-share the document with new people.
+  const canManageSharing = me.role === 'SUPER_ADMIN' || doc.creatorId === me.id;
 
   return (
     <div className="pt-4 sm:pt-6">
@@ -65,17 +81,25 @@ export default async function DocPage({ params }: { params: { id: string } }) {
         </aside>
 
         <div className="card p-6 sm:p-8">
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
-              {doc.visibility === 'PUBLIC' ? '🌐 公开' : doc.visibility === 'DEPARTMENT' ? `🏢 ${doc.department?.name ?? '部门'}` : '🔒 私密'}
-            </span>
-            <span>创建：{doc.creator.name ?? doc.creator.email} · {fmtDateTime(doc.createdAt)}</span>
-            {doc.lastEditor && (
-              <span>· 最后编辑：{doc.lastEditor.name ?? doc.lastEditor.email} · {fmtDateTime(doc.updatedAt)}</span>
-            )}
-            {!access.canEdit && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 text-white">只读</span>
-            )}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span>创建：{doc.creator.name ?? doc.creator.email} · {fmtDateTime(doc.createdAt)}</span>
+              {doc.lastEditor && (
+                <span>· 最后编辑：{doc.lastEditor.name ?? doc.lastEditor.email} · {fmtDateTime(doc.updatedAt)}</span>
+              )}
+              {!access.canEdit && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 text-white">只读</span>
+              )}
+            </div>
+            <DocSharePanel
+              docId={doc.id}
+              canManage={canManageSharing}
+              initialVisibility={doc.visibility as any}
+              initialDepartmentId={doc.departmentId}
+              initialMembers={doc.members.map((m) => ({ userId: m.userId, access: m.access, user: m.user }))}
+              departments={departments}
+              users={users}
+            />
           </div>
           <DocWorkspace
             docId={doc.id}

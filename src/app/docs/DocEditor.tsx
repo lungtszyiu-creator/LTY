@@ -12,6 +12,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { useEffect, useRef, useState } from 'react';
+import SaveIndicator from './SaveIndicator';
 
 type Props = {
   docId: string;
@@ -33,6 +34,9 @@ export default function DocEditor({
 }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
+    initialUpdatedAt ? new Date(initialUpdatedAt) : null
+  );
   const pendingRef = useRef<null | ReturnType<typeof setTimeout>>(null);
   const snapshotCountdownRef = useRef(0);
   // Tracks the updatedAt we've already rendered. Poller compares against
@@ -79,7 +83,7 @@ export default function DocEditor({
           if (shouldSnapshot) snapshotCountdownRef.current = 0;
           await onSave({ title, bodyJson, bodyText });
           setStatus('saved');
-          setTimeout(() => setStatus('idle'), 1200);
+          setLastSavedAt(new Date());
         } catch {
           setStatus('error');
         }
@@ -190,12 +194,13 @@ export default function DocEditor({
           className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-300 focus:outline-none"
         />
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          {status === 'saving' && <span>正在保存…</span>}
-          {status === 'saved' && <span>✓ 已保存</span>}
-          {status === 'error' && <span className="text-rose-600">⚠️ 保存失败，稍后重试</span>}
+          <SaveIndicator status={status} lastSavedAt={lastSavedAt} canEdit={canEdit} />
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200">
+            🔄 近实时同步（5s 轮询）
+          </span>
           {remoteUpdater && (
             <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-800 ring-1 ring-indigo-200">
-              🔄 {remoteUpdater} 刚刚更新了内容
+              {remoteUpdater} 刚刚更新了内容
             </span>
           )}
         </div>

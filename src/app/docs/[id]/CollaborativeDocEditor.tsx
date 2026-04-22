@@ -17,6 +17,7 @@ import * as Y from 'yjs';
 import { LiveblocksYjsProvider } from '@liveblocks/yjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RoomProvider, useRoom, useOthers } from '@/lib/liveblocks';
+import SaveIndicator from '../SaveIndicator';
 
 // Real-time collab editor. Top-level wraps the RoomProvider so every
 // collaborator joining a given doc shares one Yjs doc via Liveblocks.
@@ -50,6 +51,8 @@ function InnerEditor({
   const [provider, setProvider] = useState<LiveblocksYjsProvider | null>(null);
   const [title, setTitle] = useState(initialTitle);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'synced' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [liveConnected, setLiveConnected] = useState(false);
   const pendingRef = useRef<null | ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -116,8 +119,8 @@ function InnerEditor({
           }
         } catch { /* ignore malformed initial */ }
       }
-      setStatus('synced');
-      setTimeout(() => setStatus('idle'), 1200);
+      setLiveConnected(true);
+      setStatus('idle');
     });
     return () => { cancelled = true; };
   }, [editor, provider, yDoc, initialBodyJson]);
@@ -137,7 +140,7 @@ function InnerEditor({
             bodyText: editor.getText(),
           });
           setStatus('saved');
-          setTimeout(() => setStatus('idle'), 1200);
+          setLastSavedAt(new Date());
         } catch {
           setStatus('error');
         }
@@ -191,29 +194,37 @@ function InnerEditor({
           className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-300 focus:outline-none"
         />
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          {status === 'saving' && <span>正在保存…</span>}
-          {status === 'saved'  && <span>✓ 已保存</span>}
-          {status === 'synced' && <span className="text-emerald-600">🟢 实时同步已连上</span>}
-          {status === 'error'  && <span className="text-rose-600">⚠️ 保存失败</span>}
-          {others.length > 0 && (
-            <span className="inline-flex items-center gap-1">
-              · 正在同屏：
-              {others.map((o) => {
-                const u = (o.info ?? {}) as any;
-                const name = u.name ?? '匿名';
-                const color = u.color ?? '#64748b';
-                return (
-                  <span
-                    key={o.connectionId}
-                    className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                    style={{ backgroundColor: color }}
-                  >
-                    {name}
-                  </span>
-                );
-              })}
+          <SaveIndicator status={status} lastSavedAt={lastSavedAt} canEdit={canEdit} />
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ring-1 ${
+            liveConnected
+              ? 'bg-emerald-50 text-emerald-800 ring-emerald-300'
+              : 'bg-slate-100 text-slate-600 ring-slate-200'
+          }`}>
+            {liveConnected ? '🟢 实时同步已连上' : '⏳ 正在连接实时服务…'}
+          </span>
+          {/* Presence — always show the count so you know whether you're
+              alone. Hovering / narrow screens still render the name chips. */}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-600">
+              {others.length === 0 ? '👤 仅你在线' : `👥 ${others.length + 1} 人在线`}
             </span>
-          )}
+            {others.map((o) => {
+              const u = (o.info ?? {}) as any;
+              const name = u.name ?? '匿名';
+              const color = u.color ?? '#64748b';
+              const initial = String(name).slice(0, 1).toUpperCase();
+              return (
+                <span
+                  key={o.connectionId}
+                  title={name}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-white"
+                  style={{ backgroundColor: color }}
+                >
+                  {initial}
+                </span>
+              );
+            })}
+          </span>
         </div>
       </div>
 
