@@ -6,16 +6,18 @@ import CollaborativeDocEditor from './CollaborativeDocEditor';
 import { isLiveblocksEnabled } from '@/lib/liveblocks';
 
 // Branches based on whether Liveblocks env keys are present:
-//   - key configured → CollaborativeDocEditor (Yjs + live cursors)
-//   - no key         → single-user DocEditor (Phase 1 behaviour)
+//   - key configured → CollaborativeDocEditor (Yjs + live cursors, ~100ms)
+//   - no key         → DocEditor with 5s polling (zero-config "near-live")
 // Postgres autosave fires in both paths so the DB stays the durable truth.
 export default function DocWorkspace({
-  docId, initialTitle, initialBodyJson, canEdit,
+  docId, initialTitle, initialBodyJson, initialUpdatedAt, canEdit, meId,
 }: {
   docId: string;
   initialTitle: string;
   initialBodyJson: string;
+  initialUpdatedAt: string;
   canEdit: boolean;
+  meId: string;
 }) {
   const onSave = useCallback(async (state: { title: string; bodyJson: string; bodyText: string }) => {
     const res = await fetch(`/api/docs/${docId}`, {
@@ -34,9 +36,7 @@ export default function DocWorkspace({
     }
   }, [docId]);
 
-  const collab = isLiveblocksEnabled();
-
-  if (collab) {
+  if (isLiveblocksEnabled()) {
     return (
       <CollaborativeDocEditor
         docId={docId}
@@ -53,7 +53,9 @@ export default function DocWorkspace({
       docId={docId}
       initialTitle={initialTitle}
       initialBodyJson={initialBodyJson}
+      initialUpdatedAt={initialUpdatedAt}
       canEdit={canEdit}
+      meId={meId}
       onSave={canEdit ? onSave : undefined}
     />
   );

@@ -18,6 +18,8 @@ type Props = {
   initialTitle: string;
   initialBodyJson: string;
   canEdit: boolean;
+  meId: string;
+  initialUpdatedAt: string;
   onSave?: (state: { title: string; bodyJson: string; bodyText: string }) => Promise<void>;
 };
 
@@ -27,12 +29,17 @@ type Props = {
 const AUTOSAVE_DELAY_MS = 1500;
 
 export default function DocEditor({
-  docId, initialTitle, initialBodyJson, canEdit, onSave,
+  docId, initialTitle, initialBodyJson, canEdit, meId, initialUpdatedAt, onSave,
 }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const pendingRef = useRef<null | ReturnType<typeof setTimeout>>(null);
   const snapshotCountdownRef = useRef(0);
+  // Tracks the updatedAt we've already rendered. Poller compares against
+  // the server value to detect remote edits. Bumped after our own saves so
+  // we don't re-apply our own changes.
+  const lastSeenUpdatedRef = useRef<number>(new Date(initialUpdatedAt).getTime() || Date.now());
+  const [remoteUpdater, setRemoteUpdater] = useState<string | null>(null);
 
   let parsed: any = {};
   try { parsed = JSON.parse(initialBodyJson || '{}'); } catch { parsed = {}; }
@@ -118,6 +125,44 @@ export default function DocEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- Poll-based near-realtime sync ----
+  // Every 5s re-fetch the doc. If the server has a newer updatedAt and the
+  // last editor wasn't me, swap content in. Skipped whenever:
+  //   - local save is pending (we're mid-type)
+  //   - editor has focus (interrupting typing is jarring)
+  // This is the zero-config fallback when Liveblocks isn't enabled. Not
+  // true CRDT collab — last-save-wins if two people type simultaneously —
+  // but for a 50-person team where conflicts are rare it's enough.
+  useEffect(() => {
+    if (!editor || !canEdit) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      if (cancelled) return;
+      if (pendingRef.current) return;
+      if (editor.isFocused) return;
+      try {
+        const res = await fetch(`/api/docs/${docId}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const fresh = await res.json();
+        const freshTs = new Date(fresh.updatedAt).getTime();
+        if (freshTs <= lastSeenUpdatedRef.current) return;
+        lastSeenUpdatedRef.current = freshTs;
+        if (fresh.lastEditor?.id && fresh.lastEditor.id !== meId) {
+          try {
+            const parsed = JSON.parse(fresh.bodyJson);
+            if (parsed && parsed.type) {
+              editor.commands.setContent(parsed, { emitUpdate: false });
+            }
+          } catch { /* malformed body — skip */ }
+          setTitle(fresh.title);
+          setRemoteUpdater(fresh.lastEditor.name ?? fresh.lastEditor.email ?? '同事');
+          setTimeout(() => setRemoteUpdater(null), 4000);
+        }
+      } catch { /* network hiccup — retry next tick */ }
+    }, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [editor, canEdit, docId, meId]);
+
   async function onImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -144,10 +189,15 @@ export default function DocEditor({
           readOnly={!canEdit}
           className="w-full border-0 bg-transparent p-0 text-3xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-300 focus:outline-none"
         />
-        <div className="mt-1 text-xs text-slate-500">
-          {status === 'saving' && '正在保存…'}
-          {status === 'saved' && '✓ 已保存'}
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          {status === 'saving' && <span>正在保存…</span>}
+          {status === 'saved' && <span>✓ 已保存</span>}
           {status === 'error' && <span className="text-rose-600">⚠️ 保存失败，稍后重试</span>}
+          {remoteUpdater && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-800 ring-1 ring-indigo-200">
+              🔄 {remoteUpdater} 刚刚更新了内容
+            </span>
+          )}
         </div>
       </div>
 

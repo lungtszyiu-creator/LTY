@@ -81,7 +81,9 @@ export default async function DocPage({ params }: { params: { id: string } }) {
             docId={doc.id}
             initialTitle={doc.title}
             initialBodyJson={doc.bodyJson}
+            initialUpdatedAt={doc.updatedAt.toISOString()}
             canEdit={access.canEdit}
+            meId={me.id}
           />
         </div>
       </div>
