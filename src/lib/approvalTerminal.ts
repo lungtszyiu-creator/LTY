@@ -3,7 +3,7 @@ import {
   parseFields, parseLeaveBalanceValue, findLeaveCategoryField,
   OVERTIME_HOURS_PER_COMP_DAY,
 } from './approvalFlow';
-import { adjustLeaveBalance, POOL_FOR_CATEGORY } from './leaveBalance';
+import { adjustLeaveBalance, POOL_FOR_CATEGORY, type LeavePool } from './leaveBalance';
 
 // When an approval instance becomes APPROVED, look at its template category
 // and formJson to see if it should change the initiator's leave balances:
@@ -106,4 +106,33 @@ export async function applyBalanceEffects(instanceId: string): Promise<void> {
       approvalInstanceId: inst.id,
     });
   }
+}
+
+// Reverse any ledger entries that were written when this instance previously
+// hit its terminal state. Each original entry becomes a compensating entry
+// with opposite delta and source=ROLLBACK; we deliberately do NOT set
+// approvalInstanceId on the rollback rows because the (instanceId, pool)
+// unique index is already taken by the original row — keeping them untagged
+// also makes audit clearer ("this was a reversal, not a fresh action").
+export async function rollbackBalanceEffects(
+  instanceId: string,
+  actorId: string,
+  reason?: string | null
+): Promise<{ rolledBack: number }> {
+  const entries = await prisma.leaveBalanceLedger.findMany({
+    where: { approvalInstanceId: instanceId },
+  });
+  if (entries.length === 0) return { rolledBack: 0 };
+
+  for (const e of entries) {
+    await adjustLeaveBalance({
+      userId: e.userId,
+      pool: e.pool as LeavePool,
+      deltaDays: -e.deltaDays,
+      source: 'ROLLBACK',
+      note: reason ? `撤销审批回滚 · ${reason}` : `撤销审批回滚（原流水 ${e.id}）`,
+      actorId,
+    });
+  }
+  return { rolledBack: entries.length };
 }

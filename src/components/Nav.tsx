@@ -28,6 +28,7 @@ const ADMIN_LINKS = [
   { href: '/admin/tasks/new',            label: '发布任务' },
   { href: '/admin/approvals',            label: '审批后台' },
   { href: '/admin/approvals/templates',  label: '审批模板' },
+  { href: '/admin/leave-ledger',         label: '假期流水审计' },
   { href: '/admin/announcements',        label: '公告管理' },
   { href: '/admin/reports',              label: '汇报汇总' },
   { href: '/admin/projects',             label: '项目看板配置' },

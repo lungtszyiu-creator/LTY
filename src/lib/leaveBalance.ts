@@ -1,7 +1,20 @@
 import { prisma } from './db';
 
 export type LeavePool = 'ANNUAL' | 'COMP';
-export type LedgerSource = 'ADMIN_SET' | 'LEAVE_APPROVED' | 'OVERTIME_APPROVED' | 'ADMIN_ADJUST';
+export type LedgerSource =
+  | 'ADMIN_SET'
+  | 'LEAVE_APPROVED'
+  | 'OVERTIME_APPROVED'
+  | 'ADMIN_ADJUST'
+  | 'ROLLBACK';
+
+export const LEDGER_SOURCE_LABEL: Record<LedgerSource, string> = {
+  ADMIN_SET:         '管理员设置',
+  ADMIN_ADJUST:      '管理员调整',
+  LEAVE_APPROVED:    '请假通过 · 扣除',
+  OVERTIME_APPROVED: '加班通过 · 入账',
+  ROLLBACK:          '撤销回滚',
+};
 
 export const POOL_FOR_CATEGORY: Record<string, LeavePool | null> = {
   '年假':   'ANNUAL',

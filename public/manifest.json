@@ -1,0 +1,34 @@
+{
+  "name": "LTY 旭珑 · 公司总看板",
+  "short_name": "LTY 旭珑",
+  "description": "LTY 旭珑公司总看板 · 任务 · 审批 · 公告 · 汇报 · 文件 · 项目",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#3a0a14",
+  "background_color": "#ffffff",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

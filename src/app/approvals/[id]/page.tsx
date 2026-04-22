@@ -11,6 +11,8 @@ import {
 import { fmtDateTime } from '@/lib/datetime';
 import InstanceActions from './InstanceActions';
 import CancelButton from './CancelButton';
+import RollbackButton from './RollbackButton';
+import { canManageLeaveBalance } from '@/lib/leaveBalanceAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +33,7 @@ export default async function ApprovalInstancePage({
   if (!session?.user) redirect('/login');
   const me = session.user;
   const isAdmin = hasMinRole(me.role as Role, 'ADMIN');
+  const canRollback = me.role === 'SUPER_ADMIN' || (await canManageLeaveBalance(me.id));
 
   const inst = await prisma.approvalInstance.findUnique({
     where: { id: params.id },
@@ -109,6 +112,12 @@ export default async function ApprovalInstancePage({
           <div className="flex flex-wrap items-center gap-2">
             {inst.status === 'IN_PROGRESS' && inst.initiatorId === me.id && (
               <CancelButton instanceId={inst.id} kind="cancel" />
+            )}
+            {/* Rollback only makes sense once an approval has finalised with
+                an outcome (APPROVED / REJECTED). Uses compensating ledger
+                entries so balances come back cleanly. */}
+            {canRollback && (inst.status === 'APPROVED' || inst.status === 'REJECTED') && (
+              <RollbackButton instanceId={inst.id} />
             )}
             {/* Hard delete: only the founder (SUPER_ADMIN) can wipe the
                 record. Regular admins should cancel, not delete. */}

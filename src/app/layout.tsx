@@ -9,6 +9,17 @@ export const metadata: Metadata = {
     template: '%s · LTY 旭珑 · 公司总看板',
   },
   description: 'LTY 旭珑公司总看板 · 任务 · 审批 · 公告 · 汇报 · 文件 · 项目',
+  // PWA: linked manifest + icons. iOS picks up apple-touch-icon for the
+  // home-screen tile; Android uses the manifest's icon array.
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/logo.png', type: 'image/png', sizes: '512x512' },
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/logo.png',
+    apple: [{ url: '/logo.png', sizes: '180x180', type: 'image/png' }],
+  },
   appleWebApp: {
     title: 'LTY 旭珑',
     capable: true,
@@ -16,6 +27,9 @@ export const metadata: Metadata = {
     // the page under it. 'black-translucent' caused the nav to sit under the
     // time/battery and be untappable in PWA mode.
     statusBarStyle: 'default',
+    // iOS splash: single logo as a safe default. Replace with per-device
+    // 1125x2436 / 1170x2532 PNGs when the design team produces them.
+    startupImage: [{ url: '/logo.png' }],
   },
 };
 
