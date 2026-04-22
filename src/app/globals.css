@@ -501,3 +501,28 @@ body::before {
   border: 1px solid #e2e8f0; padding: 0.45rem 0.7rem; text-align: left; vertical-align: top;
 }
 .doc-editor .ProseMirror th { background: #f8fafc; font-weight: 600; }
+
+/* ---- Collaborative cursor (Yjs + Liveblocks) ---- */
+.doc-editor .collaboration-cursor__caret {
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+.doc-editor .collaboration-cursor__label {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 0.1rem 0.3rem;
+  position: absolute;
+  top: -1.25rem;
+  user-select: none;
+  white-space: nowrap;
+}

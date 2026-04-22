@@ -2,10 +2,13 @@
 
 import { useCallback } from 'react';
 import DocEditor from '../DocEditor';
+import CollaborativeDocEditor from './CollaborativeDocEditor';
+import { isLiveblocksEnabled } from '@/lib/liveblocks';
 
-// Thin wrapper that owns the save closure. When real-time collab lands in
-// Phase 2 this is where the Liveblocks provider will sit — the editor
-// itself stays unchanged.
+// Branches based on whether Liveblocks env keys are present:
+//   - key configured → CollaborativeDocEditor (Yjs + live cursors)
+//   - no key         → single-user DocEditor (Phase 1 behaviour)
+// Postgres autosave fires in both paths so the DB stays the durable truth.
 export default function DocWorkspace({
   docId, initialTitle, initialBodyJson, canEdit,
 }: {
@@ -15,8 +18,6 @@ export default function DocWorkspace({
   canEdit: boolean;
 }) {
   const onSave = useCallback(async (state: { title: string; bodyJson: string; bodyText: string }) => {
-    // Snapshot flag is the autosave-side's call; we always send it false
-    // here and let the server-side bundle snapshots on its own cadence.
     const res = await fetch(`/api/docs/${docId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -24,7 +25,7 @@ export default function DocWorkspace({
         title: state.title,
         bodyJson: state.bodyJson,
         bodyText: state.bodyText,
-        snapshot: Math.random() < 0.1, // ~1 in 10 saves also writes a version row
+        snapshot: Math.random() < 0.1,
       }),
     });
     if (!res.ok) {
@@ -32,6 +33,20 @@ export default function DocWorkspace({
       throw new Error(body.error ?? 'SAVE_FAILED');
     }
   }, [docId]);
+
+  const collab = isLiveblocksEnabled();
+
+  if (collab) {
+    return (
+      <CollaborativeDocEditor
+        docId={docId}
+        initialTitle={initialTitle}
+        initialBodyJson={initialBodyJson}
+        canEdit={canEdit}
+        onSave={onSave}
+      />
+    );
+  }
 
   return (
     <DocEditor
