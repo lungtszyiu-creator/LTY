@@ -112,6 +112,11 @@ model User {
 
   leaveLedgerAsSubject  LeaveBalanceLedger[]  @relation("LeaveLedgerUser")
   leaveLedgerAsActor    LeaveBalanceLedger[]  @relation("LeaveLedgerActor")
+
+  docsCreated           Doc[]                 @relation("DocCreator")
+  docsUpdated           Doc[]                 @relation("DocLastEditor")
+  docMemberships        DocMember[]
+  docVersions           DocVersion[]          @relation("DocVersionAuthor")
 }
 
 // Audit trail for every change to a user's leave balances. Each entry is one
@@ -311,6 +316,7 @@ model Department {
 
   memberships DepartmentMembership[]
   folders     Folder[]
+  docs        Doc[]                  @relation("DepartmentDocs")
 }
 
 model DepartmentMembership {
@@ -591,4 +597,68 @@ model Penalty {
 
   @@index([userId, status])
   @@index([createdAt])
+}
+
+// ---- Collaborative docs (Lark/Notion-style) ----
+// Each Doc is a node in a tree (parentId) so users can organise by workspace.
+// bodyJson stores TipTap's JSON document; bodyText is a flattened searchable
+// copy regenerated on each save. Visibility mirrors the folder sharing model.
+model Doc {
+  id           String   @id @default(cuid())
+  title        String   @default("无标题文档")
+  bodyJson     String   @default("{}")  // TipTap ProseMirror JSON
+  bodyText     String   @default("")    // flattened plain text for search
+  icon         String?  // optional emoji the user picks
+  parentId     String?
+  parent       Doc?     @relation("DocHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Doc[]    @relation("DocHierarchy")
+
+  visibility   String   @default("PUBLIC")   // "PUBLIC" | "DEPARTMENT" | "PRIVATE" | "INHERIT"
+  departmentId String?
+  department   Department? @relation("DepartmentDocs", fields: [departmentId], references: [id], onDelete: SetNull)
+
+  creatorId    String
+  creator      User     @relation("DocCreator", fields: [creatorId], references: [id])
+  lastEditorId String?
+  lastEditor   User?    @relation("DocLastEditor", fields: [lastEditorId], references: [id])
+
+  members      DocMember[]
+  versions     DocVersion[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  // Soft-delete: trashed docs disappear from nav but stay 30d for recovery.
+  deletedAt    DateTime?
+
+  @@index([parentId])
+  @@index([visibility])
+  @@index([updatedAt])
+}
+
+model DocMember {
+  id        String   @id @default(cuid())
+  docId     String
+  doc       Doc      @relation(fields: [docId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  access    String   @default("VIEW") // "VIEW" | "EDIT"
+  createdAt DateTime @default(now())
+
+  @@unique([docId, userId])
+}
+
+// Periodic snapshot taken when the autosave debouncer flushes a change.
+// Lets users see/restore previous revisions. Keep the last N per doc so we
+// don't balloon the DB; older rows are pruned in a cron or on each write.
+model DocVersion {
+  id          String   @id @default(cuid())
+  docId       String
+  doc         Doc      @relation(fields: [docId], references: [id], onDelete: Cascade)
+  title       String
+  bodyJson    String
+  createdById String
+  createdBy   User     @relation("DocVersionAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([docId, createdAt])
 }

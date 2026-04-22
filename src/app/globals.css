@@ -438,3 +438,66 @@ body::before {
     animation: none !important;
   }
 }
+
+/* ---- Collaborative docs: TipTap editor surface ---- */
+.doc-editor .ProseMirror {
+  min-height: 60vh;
+  padding: 0.25rem 0;
+  outline: none;
+  color: #1e293b;
+  line-height: 1.7;
+}
+.doc-editor .ProseMirror > * + * { margin-top: 0.75rem; }
+.doc-editor .ProseMirror h1 { font-size: 1.875rem; font-weight: 700; margin-top: 1.75rem; }
+.doc-editor .ProseMirror h2 { font-size: 1.5rem;   font-weight: 700; margin-top: 1.5rem; }
+.doc-editor .ProseMirror h3 { font-size: 1.25rem;  font-weight: 600; margin-top: 1.25rem; }
+.doc-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: #94a3b8; content: attr(data-placeholder);
+  float: left; height: 0; pointer-events: none;
+}
+.doc-editor .ProseMirror blockquote {
+  border-left: 3px solid #d4d4d8;
+  padding-left: 1rem;
+  color: #64748b;
+  font-style: italic;
+}
+.doc-editor .ProseMirror code {
+  background: #f1f5f9;
+  padding: 0.125rem 0.35rem;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.doc-editor .ProseMirror pre {
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 0.9rem 1.1rem;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
+}
+.doc-editor .ProseMirror pre code { background: transparent; padding: 0; color: inherit; }
+.doc-editor .ProseMirror ul, .doc-editor .ProseMirror ol { padding-left: 1.4rem; }
+.doc-editor .ProseMirror ul { list-style: disc; }
+.doc-editor .ProseMirror ol { list-style: decimal; }
+.doc-editor .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+}
+.doc-editor .ProseMirror ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 0.35rem; }
+.doc-editor .ProseMirror ul[data-type="taskList"] li > div { flex: 1; }
+.doc-editor .ProseMirror a {
+  color: #4f46e5; text-decoration: underline; text-underline-offset: 2px;
+}
+.doc-editor .ProseMirror img {
+  max-width: 100%; height: auto; border-radius: 10px; margin: 0.5rem 0;
+}
+.doc-editor .ProseMirror hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1.25rem 0; }
+.doc-editor .ProseMirror table {
+  border-collapse: collapse; width: 100%; margin: 0.75rem 0;
+}
+.doc-editor .ProseMirror th, .doc-editor .ProseMirror td {
+  border: 1px solid #e2e8f0; padding: 0.45rem 0.7rem; text-align: left; vertical-align: top;
+}
+.doc-editor .ProseMirror th { background: #f8fafc; font-weight: 600; }

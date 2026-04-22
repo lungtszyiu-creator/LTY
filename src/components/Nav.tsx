@@ -13,6 +13,7 @@ const PUBLIC_LINKS = [
   { href: '/approvals',     label: '审批' },
   { href: '/announcements', label: '公告' },
   { href: '/reports',       label: '汇报' },
+  { href: '/docs',          label: '文档' },
   { href: '/files',         label: '文件' },
 ];
 
