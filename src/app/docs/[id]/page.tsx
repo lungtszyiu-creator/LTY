@@ -65,9 +65,31 @@ export default async function DocPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="pt-4 sm:pt-6">
+      {/* Lark-style header: clear back button left, close (✕) right. Back
+          goes to the docs index; close goes to the main dashboard (exits
+          the doc workspace entirely). */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rise">
-        <Link href="/docs" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800">← 返回文档列表</Link>
-        <CreateDocButton />
+        <Link
+          href="/docs"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          返回文档列表
+        </Link>
+        <div className="flex items-center gap-2">
+          <CreateDocButton />
+          <Link
+            href="/dashboard"
+            title="关闭文档，回到主看板"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 shadow-sm transition hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
