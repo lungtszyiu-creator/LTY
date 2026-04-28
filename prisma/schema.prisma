@@ -69,33 +69,33 @@ model VerificationToken {
 //   ApprovalDecision: "APPROVED" | "REJECTED" | "TRANSFERRED"
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  role          String    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "MEMBER"
-  active        Boolean   @default(true)
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String    @unique
+  emailVerified      DateTime?
+  image              String?
+  role               String    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "MEMBER"
+  active             Boolean   @default(true)
   // 假期余额（单位：天，允许 0.5 步进）。年假 = HR 每年初设定；调休 = 加班
   // 审批通过后 1:1 累积。请假类型为"年假"/"调休"时从这里扣减，其他类型
   // （事假/病假/婚丧/产陪护）不走这里。允许为负 — 借假场景管理员手动调。
-  annualLeaveBalance Float  @default(0)
-  compLeaveBalance   Float  @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  annualLeaveBalance Float     @default(0)
+  compLeaveBalance   Float     @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  accounts         Account[]
-  sessions         Session[]
-  tasksCreated     Task[]            @relation("TaskCreator")
-  tasksClaimed     Task[]            @relation("TaskClaimant")
-  submissions      Submission[]
-  reviewed         Submission[]      @relation("SubmissionReviewer")
-  taskClaims       TaskClaim[]
-  rewardsReceived  RewardIssuance[]  @relation("RewardRecipient")
-  rewardsIssued    RewardIssuance[]  @relation("RewardIssuer")
+  accounts          Account[]
+  sessions          Session[]
+  tasksCreated      Task[]           @relation("TaskCreator")
+  tasksClaimed      Task[]           @relation("TaskClaimant")
+  submissions       Submission[]
+  reviewed          Submission[]     @relation("SubmissionReviewer")
+  taskClaims        TaskClaim[]
+  rewardsReceived   RewardIssuance[] @relation("RewardRecipient")
+  rewardsIssued     RewardIssuance[] @relation("RewardIssuer")
   penaltiesReceived Penalty[]        @relation("PenaltyTarget")
-  penaltiesIssued  Penalty[]         @relation("PenaltyIssuer")
-  penaltiesRevoked Penalty[]         @relation("PenaltyRevoker")
+  penaltiesIssued   Penalty[]        @relation("PenaltyIssuer")
+  penaltiesRevoked  Penalty[]        @relation("PenaltyRevoker")
 
   departments          DepartmentMembership[]
   departmentsLed       Department[]           @relation("DepartmentLead")
@@ -106,17 +106,23 @@ model User {
   foldersCreated       Folder[]               @relation("FolderCreator")
   folderMemberships    FolderMember[]
 
-  approvalTplsCreated   ApprovalTemplate[]    @relation("ApprovalTplAuthor")
-  approvalsInitiated    ApprovalInstance[]    @relation("ApprovalInitiator")
-  approvalStepsAssigned ApprovalStep[]        @relation("ApprovalStepAssignee")
+  approvalTplsCreated   ApprovalTemplate[] @relation("ApprovalTplAuthor")
+  approvalsInitiated    ApprovalInstance[] @relation("ApprovalInitiator")
+  approvalStepsAssigned ApprovalStep[]     @relation("ApprovalStepAssignee")
 
-  leaveLedgerAsSubject  LeaveBalanceLedger[]  @relation("LeaveLedgerUser")
-  leaveLedgerAsActor    LeaveBalanceLedger[]  @relation("LeaveLedgerActor")
+  leaveLedgerAsSubject LeaveBalanceLedger[] @relation("LeaveLedgerUser")
+  leaveLedgerAsActor   LeaveBalanceLedger[] @relation("LeaveLedgerActor")
 
-  docsCreated           Doc[]                 @relation("DocCreator")
-  docsUpdated           Doc[]                 @relation("DocLastEditor")
-  docMemberships        DocMember[]
-  docVersions           DocVersion[]          @relation("DocVersionAuthor")
+  docsCreated    Doc[]        @relation("DocCreator")
+  docsUpdated    Doc[]        @relation("DocLastEditor")
+  docMemberships DocMember[]
+  docVersions    DocVersion[] @relation("DocVersionAuthor")
+
+  // 财务模块反向关系
+  walletsHeld     CryptoWallet[]          @relation("WalletHolder")
+  payrollProfile  EmployeePayrollProfile? @relation("PayrollProfile")
+  vouchersCreated Voucher[]               @relation("VoucherCreator")
+  vouchersPosted  Voucher[]               @relation("VoucherPoster")
 }
 
 // Audit trail for every change to a user's leave balances. Each entry is one
@@ -125,50 +131,53 @@ model User {
 // auto-credit from an APPROVED overtime. approvalInstanceId is unique per
 // pool so a re-run of the same approval never double-applies.
 model LeaveBalanceLedger {
-  id                  String   @id @default(cuid())
-  userId              String
-  user                User     @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
-  pool                String   // "ANNUAL" | "COMP"
-  deltaDays           Float    // signed; negative for deductions
-  balanceAfter        Float    // snapshot of the pool after apply
-  source              String   // "ADMIN_SET" | "LEAVE_APPROVED" | "OVERTIME_APPROVED" | "ADMIN_ADJUST"
-  note                String?
-  approvalInstanceId  String?  // null for manual admin actions
-  actorId             String?
-  actor               User?    @relation("LeaveLedgerActor", fields: [actorId], references: [id])
-  createdAt           DateTime @default(now())
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  pool               String // "ANNUAL" | "COMP"
+  deltaDays          Float // signed; negative for deductions
+  balanceAfter       Float // snapshot of the pool after apply
+  source             String // "ADMIN_SET" | "LEAVE_APPROVED" | "OVERTIME_APPROVED" | "ADMIN_ADJUST"
+  note               String?
+  approvalInstanceId String? // null for manual admin actions
+  actorId            String?
+  actor              User?    @relation("LeaveLedgerActor", fields: [actorId], references: [id])
+  createdAt          DateTime @default(now())
 
-  @@index([userId, pool, createdAt])
   @@unique([approvalInstanceId, pool])
+  @@index([userId, pool, createdAt])
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  title       String
-  description String
-  reward      String?    // free-form reward text ("￥100" / "奶茶一杯" 等)
-  points       Int       @default(10)   // numeric score used by leaderboard
-  priority     String    @default("NORMAL")   // see enum comment above
-  contribution String    @default("OTHER")    // see Contribution enum; marks task as "额外贡献" — not a core duty
-  status      String     @default("OPEN")
-  deadline    DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id           String    @id @default(cuid())
+  title        String
+  description  String
+  reward       String? // free-form reward text ("￥100" / "奶茶一杯" 等)
+  // Default / advertised points for this task. Supports decimals so admins
+  // can post 7.5-pt tasks. Actual award lives on Submission.awardedPoints
+  // (reviewer can grant partial credit when work is partially complete).
+  points       Float     @default(10)
+  priority     String    @default("NORMAL") // see enum comment above
+  contribution String    @default("OTHER") // see Contribution enum; marks task as "额外贡献" — not a core duty
+  status       String    @default("OPEN")
+  deadline     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   // Single-claim (default) uses claimantId. Multi-claim uses TaskClaim rows;
   // when a winning submission is approved, claimantId is set to the winner so
   // leaderboard/stats continue to work unchanged.
   allowMultiClaim Boolean @default(false)
 
-  creatorId   String
-  creator     User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  creatorId String
+  creator   User   @relation("TaskCreator", fields: [creatorId], references: [id])
 
-  claimantId  String?
-  claimant    User?      @relation("TaskClaimant", fields: [claimantId], references: [id])
-  claimedAt   DateTime?
+  claimantId String?
+  claimant   User?     @relation("TaskClaimant", fields: [claimantId], references: [id])
+  claimedAt  DateTime?
 
   submissions Submission[]
-  attachments Attachment[] @relation("TaskAttachments")
+  attachments Attachment[]     @relation("TaskAttachments")
   claims      TaskClaim[]
   rewards     RewardIssuance[]
   penalties   Penalty[]
@@ -194,24 +203,24 @@ model TaskClaim {
 // recipient" user ids that should always be cc'd on that kind, on top of
 // whatever the code's default audience is.
 model NotificationSetting {
-  id          String   @id @default(cuid())
-  kind        String   @unique   // e.g. "TASK_PUBLISHED" | "ANNOUNCEMENT" | ...
-  enabled     Boolean  @default(true)
-  extraUserIds String  @default("[]") // JSON array of user ids to always cc
-  note        String?              // admin's own label / memo
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  kind         String   @unique // e.g. "TASK_PUBLISHED" | "ANNOUNCEMENT" | ...
+  enabled      Boolean  @default(true)
+  extraUserIds String   @default("[]") // JSON array of user ids to always cc
+  note         String? // admin's own label / memo
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Audit log for outbound notifications — every attempt (success or failure)
 // is recorded so we never silently drop a publish email. Admin can resend.
 model NotificationLog {
   id         String   @id @default(cuid())
-  kind       String   // "TASK_PUBLISHED" | "SUBMISSION"
+  kind       String // "TASK_PUBLISHED" | "SUBMISSION"
   taskId     String?
   subject    String
   recipients Int
-  status     String   // "SENT" | "FAILED" | "NOT_CONFIGURED"
+  status     String // "SENT" | "FAILED" | "NOT_CONFIGURED"
   attempts   Int      @default(1)
   error      String?
   createdAt  DateTime @default(now())
@@ -221,30 +230,37 @@ model NotificationLog {
 }
 
 model Submission {
-  id          String    @id @default(cuid())
-  taskId      String
-  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  note        String    // submitter's description of work done
-  status      String    @default("PENDING")
-  reviewerId  String?
-  reviewer    User?     @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
-  reviewNote  String?
-  reviewedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  taskId     String
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  note       String // submitter's description of work done
+  // PENDING | APPROVED | REJECTED | REVISION_REQUESTED (退回让对方修改后重交)
+  status     String    @default("PENDING")
+  // Actual points granted by reviewer at approval time. Decimal-aware so
+  // admins can hand out partial credit (e.g. 12.5 / 20). Null when
+  // pending or rejected. Falls back to task.points if reviewer didn't
+  // touch the slider — preserves old behaviour.
+  awardedPoints Float?
+  reviewerId String?
+  reviewer   User?     @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
+  reviewNote String?
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   attachments Attachment[] @relation("SubmissionAttachments")
 }
 
 model Position {
   id                   String   @id @default(cuid())
-  title                String   // 岗位名称，例如 "市场运营 - 增长方向"
+  title                String // 岗位名称，例如 "市场运营 - 增长方向"
   level                String   @default("STAFF") // EXECUTIVE | MANAGER | STAFF
-  department           String?  // 所属部门
-  coreResponsibilities String   // 本职职责（Lane A）
-  kpis                 String   // 考核重点
-  notInTaskPool        String?  // 哪些事属于本职，不进任务池（显式划界）
+  department           String? // 所属部门
+  coreResponsibilities String // 本职职责（Lane A）
+  kpis                 String // 考核重点
+  notInTaskPool        String? // 哪些事属于本职，不进任务池（显式划界）
   order                Int      @default(0)
   active               Boolean  @default(true)
   createdAt            DateTime @default(now())
@@ -263,36 +279,36 @@ model FAQ {
 }
 
 model Attachment {
-  id           String      @id @default(cuid())
-  filename     String      // original filename
+  id         String   @id @default(cuid())
+  filename   String // original filename
   // storedPath: Vercel Blob URL (legacy / large files). Empty string for
   // DB-inline records — we store the bytes in `content` instead so admins
   // don't have to configure cloud storage for the basic flow.
-  storedPath   String
+  storedPath String
   // Inline blob (nullable). Set for records where content lives in the DB.
   // Postgres bytea; Prisma returns a Buffer / Uint8Array at runtime.
-  content      Bytes?
-  mimeType     String
-  size         Int
-  createdAt    DateTime    @default(now())
+  content    Bytes?
+  mimeType   String
+  size       Int
+  createdAt  DateTime @default(now())
 
   taskId       String?
-  task         Task?       @relation("TaskAttachments", fields: [taskId], references: [id], onDelete: Cascade)
+  task         Task?           @relation("TaskAttachments", fields: [taskId], references: [id], onDelete: Cascade)
   submissionId String?
-  submission   Submission? @relation("SubmissionAttachments", fields: [submissionId], references: [id], onDelete: Cascade)
+  submission   Submission?     @relation("SubmissionAttachments", fields: [submissionId], references: [id], onDelete: Cascade)
   rewardId     String?
   reward       RewardIssuance? @relation("RewardReceipts", fields: [rewardId], references: [id], onDelete: Cascade)
 
   // Shared-files module
-  folderId     String?
-  folder       Folder?     @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
-  uploadedById String?
+  folderId           String?
+  folder             Folder?           @relation("FolderFiles", fields: [folderId], references: [id], onDelete: SetNull)
+  uploadedById       String?
   // Announcements can include attachments
-  announcementId String?
-  announcement   Announcement? @relation("AnnouncementAttachments", fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId     String?
+  announcement       Announcement?     @relation("AnnouncementAttachments", fields: [announcementId], references: [id], onDelete: Cascade)
   // Reports can include attachments (e.g. screenshots)
-  reportId     String?
-  report       Report?     @relation("ReportAttachments", fields: [reportId], references: [id], onDelete: Cascade)
+  reportId           String?
+  report             Report?           @relation("ReportAttachments", fields: [reportId], references: [id], onDelete: Cascade)
   // Approval submission attachments
   approvalInstanceId String?
   approvalInstance   ApprovalInstance? @relation("ApprovalAttachments", fields: [approvalInstanceId], references: [id], onDelete: Cascade)
@@ -300,33 +316,37 @@ model Attachment {
 
 // ---- Organisation: departments ----
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  slug        String   @unique
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
   parentId    String?
-  parent      Department? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
   children    Department[] @relation("DepartmentHierarchy")
   leadUserId  String?
-  lead        User?    @relation("DepartmentLead", fields: [leadUserId], references: [id])
+  lead        User?        @relation("DepartmentLead", fields: [leadUserId], references: [id])
   description String?
-  order       Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  order       Int          @default(0)
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   memberships DepartmentMembership[]
   folders     Folder[]
   docs        Doc[]                  @relation("DepartmentDocs")
+
+  // 财务模块反向关系
+  cryptoWallets CryptoWallet[] @relation("FinanceWallets")
+  bankAccounts  BankAccount[]  @relation("FinanceBankAccounts")
 }
 
 model DepartmentMembership {
-  id            String   @id @default(cuid())
-  departmentId  String
-  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role          String   @default("MEMBER") // "LEAD" | "MEMBER"
-  createdAt     DateTime @default(now())
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         String     @default("MEMBER") // "LEAD" | "MEMBER"
+  createdAt    DateTime   @default(now())
 
   @@unique([departmentId, userId])
   @@index([userId])
@@ -334,30 +354,30 @@ model DepartmentMembership {
 
 // ---- Announcements ----
 model Announcement {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
-  body        String    // markdown
-  pinned      Boolean  @default(false)
-  publishedAt DateTime @default(now())
+  body        String // markdown
+  pinned      Boolean   @default(false)
+  publishedAt DateTime  @default(now())
   expiresAt   DateTime?
   createdById String
-  createdBy   User     @relation("AnnouncementAuthor", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User      @relation("AnnouncementAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   readings    AnnouncementReading[]
-  attachments Attachment[] @relation("AnnouncementAttachments")
+  attachments Attachment[]          @relation("AnnouncementAttachments")
 
   @@index([publishedAt])
 }
 
 model AnnouncementReading {
-  id              String   @id @default(cuid())
-  announcementId  String
-  announcement    Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  readAt          DateTime @default(now())
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
 
   @@unique([announcementId, userId])
 }
@@ -366,10 +386,10 @@ model AnnouncementReading {
 // Each (user, type, periodStart) is unique so re-submitting just updates the
 // existing row. Overdue rows are those where status = PENDING and dueAt < now.
 model Report {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  user        User     @relation("ReportAuthor", fields: [userId], references: [id])
-  type        String   // "WEEKLY" | "MONTHLY"
+  user        User      @relation("ReportAuthor", fields: [userId], references: [id])
+  type        String // "WEEKLY" | "MONTHLY"
   periodStart DateTime
   periodEnd   DateTime
   dueAt       DateTime
@@ -377,8 +397,8 @@ model Report {
 
   // "汇报对象" — who this report is submitted to. Optional so reports
   // without an explicit recipient still work (admins see them in aggregate).
-  reportToId  String?
-  reportTo    User?    @relation("ReportRecipient", fields: [reportToId], references: [id])
+  reportToId String?
+  reportTo   User?   @relation("ReportRecipient", fields: [reportToId], references: [id])
 
   // First time the recipient (reportTo) opened their "汇报给我的" tab with
   // this report visible. Drives the nav unread badge: null = still unread;
@@ -392,10 +412,10 @@ model Report {
   contentBlockers String?
   contentAsks     String?
 
-  status      String   @default("PENDING") // "PENDING" | "SUBMITTED" | "LATE"
+  status String @default("PENDING") // "PENDING" | "SUBMITTED" | "LATE"
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   attachments Attachment[] @relation("ReportAttachments")
 
@@ -410,33 +430,33 @@ model Report {
 // session; DEPARTMENT = members of the attached department; PRIVATE = only
 // explicit FolderMember rows (plus admins + creator).
 model Folder {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   name         String
   parentId     String?
-  parent       Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Folder[] @relation("FolderHierarchy")
-  visibility   String   @default("INHERIT") // "INHERIT" | "PUBLIC" | "DEPARTMENT" | "PRIVATE"
+  parent       Folder?     @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]    @relation("FolderHierarchy")
+  visibility   String      @default("INHERIT") // "INHERIT" | "PUBLIC" | "DEPARTMENT" | "PRIVATE"
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id])
   createdById  String
-  createdBy    User     @relation("FolderCreator", fields: [createdById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdBy    User        @relation("FolderCreator", fields: [createdById], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  files        Attachment[]  @relation("FolderFiles")
-  members      FolderMember[]
+  files   Attachment[]   @relation("FolderFiles")
+  members FolderMember[]
 
   @@index([parentId])
 }
 
 model FolderMember {
-  id         String   @id @default(cuid())
-  folderId   String
-  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  access     String   @default("VIEW") // "VIEW" | "EDIT"
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  folderId  String
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  access    String   @default("VIEW") // "VIEW" | "EDIT"
+  createdAt DateTime @default(now())
 
   @@unique([folderId, userId])
 }
@@ -446,51 +466,52 @@ model FolderMember {
 // When an instance is submitted, we snapshot the template's flow + the field
 // definitions so later edits to the template don't rewrite history.
 model ApprovalTemplate {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
-  slug        String   @unique
-  icon        String?  // emoji
-  category    String   @default("OTHER")
+  slug        String  @unique
+  icon        String? // emoji
+  category    String  @default("OTHER")
   description String?
-  active      Boolean  @default(true)
+  active      Boolean @default(true)
 
   // React Flow JSON: { nodes: [...], edges: [...] }
-  flowJson    String
+  flowJson   String
   // Array of form field specs: [{ id, type, label, required, options? }]
-  fieldsJson  String
+  fieldsJson String
 
   createdById String
   createdBy   User     @relation("ApprovalTplAuthor", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  instances   ApprovalInstance[]
+  instances ApprovalInstance[]
 }
 
 model ApprovalInstance {
-  id             String   @id @default(cuid())
-  templateId     String
-  template       ApprovalTemplate @relation(fields: [templateId], references: [id])
-  initiatorId    String
-  initiator      User     @relation("ApprovalInitiator", fields: [initiatorId], references: [id])
+  id          String           @id @default(cuid())
+  templateId  String
+  template    ApprovalTemplate @relation(fields: [templateId], references: [id])
+  initiatorId String
+  initiator   User             @relation("ApprovalInitiator", fields: [initiatorId], references: [id])
 
-  title          String   // derived from template + a key form value
-  status         String   @default("IN_PROGRESS")
+  title  String // derived from template + a key form value
+  status String @default("IN_PROGRESS")
 
   formJson       String
-  flowSnapshot   String   // frozen at submit time
+  flowSnapshot   String // frozen at submit time
   fieldsSnapshot String
 
-  currentNodeId  String?  // node being processed right now
+  currentNodeId String? // node being processed right now
 
-  submittedAt    DateTime @default(now())
-  completedAt    DateTime?
+  submittedAt DateTime  @default(now())
+  completedAt DateTime?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  steps          ApprovalStep[]
-  attachments    Attachment[] @relation("ApprovalAttachments")
+  steps       ApprovalStep[]
+  attachments Attachment[]   @relation("ApprovalAttachments")
+  vouchers    Voucher[]      @relation("VoucherApproval")
 
   @@index([initiatorId, status])
   @@index([status, submittedAt])
@@ -501,22 +522,22 @@ model ApprovalInstance {
 // mode the first APPROVED advances; pending siblings stay for audit but are
 // marked superseded.
 model ApprovalStep {
-  id              String   @id @default(cuid())
-  instanceId      String
-  instance        ApprovalInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  nodeId          String
-  kind            String   // "START" | "APPROVAL" | "CC" | "END"
-  mode            String?  // "ALL" | "ANY" — null for single-approver / CC / START / END
+  id         String           @id @default(cuid())
+  instanceId String
+  instance   ApprovalInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  nodeId     String
+  kind       String // "START" | "APPROVAL" | "CC" | "END"
+  mode       String? // "ALL" | "ANY" — null for single-approver / CC / START / END
 
-  approverId      String?
-  approver        User?    @relation("ApprovalStepAssignee", fields: [approverId], references: [id])
+  approverId String?
+  approver   User?   @relation("ApprovalStepAssignee", fields: [approverId], references: [id])
 
-  decision        String?  // "APPROVED" | "REJECTED" | "TRANSFERRED" — null = pending
-  note            String?
-  decidedAt       DateTime?
-  superseded      Boolean  @default(false)
+  decision   String? // "APPROVED" | "REJECTED" | "TRANSFERRED" — null = pending
+  note       String?
+  decidedAt  DateTime?
+  superseded Boolean   @default(false)
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([instanceId, nodeId])
   @@index([approverId, decision])
@@ -528,7 +549,7 @@ model ProjectBoard {
   name        String
   iframeUrl   String
   description String?
-  icon        String?  // emoji or short code
+  icon        String? // emoji or short code
   order       Int      @default(0)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -539,34 +560,34 @@ model ProjectBoard {
 // paid out, by whom, when, and the recipient's acknowledgement. Double-entry
 // audit trail for the "任务 → 奖励发放" lifecycle.
 model RewardIssuance {
-  id             String   @id @default(cuid())
-  taskId         String
-  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  recipientId    String
-  recipient      User     @relation("RewardRecipient", fields: [recipientId], references: [id])
+  id          String @id @default(cuid())
+  taskId      String
+  task        Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User   @relation("RewardRecipient", fields: [recipientId], references: [id])
 
   // Mirrors the task's reward/points at approval time. Editable after the fact
   // (e.g. admin negotiates a bigger bonus for exceptional work) without
   // mutating the original task record.
-  rewardText     String?  // "¥500" / "奶茶一杯" / "项目奖金 10%"
-  points         Int      @default(0)
-  method         String   @default("CASH")
+  rewardText String? // "¥500" / "奶茶一杯" / "项目奖金 10%"
+  points     Float   @default(0) // mirror Submission.awardedPoints when partial credit granted
+  method     String  @default("CASH")
 
-  status         String   @default("PENDING") // see RewardStatus enum comment
+  status         String    @default("PENDING") // see RewardStatus enum comment
   issuedAt       DateTime?
   issuedById     String?
-  issuedBy       User?    @relation("RewardIssuer", fields: [issuedById], references: [id])
+  issuedBy       User?     @relation("RewardIssuer", fields: [issuedById], references: [id])
   acknowledgedAt DateTime?
   note           String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Required when status = CANCELLED / DISPUTED so a rejection is always
   // auditable. Shown to the recipient in their /rewards page.
-  rejectReason   String?
+  rejectReason String?
 
-  receipts       Attachment[] @relation("RewardReceipts")
+  receipts Attachment[] @relation("RewardReceipts")
 
   @@unique([taskId, recipientId])
   @@index([recipientId, status])
@@ -578,22 +599,22 @@ model RewardIssuance {
 // Deducted from leaderboard net score; visible to all members so peers can
 // see who is racking up failed attempts (soft social accountability).
 model Penalty {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation("PenaltyTarget", fields: [userId], references: [id])
-  issuedById    String
-  issuedBy      User     @relation("PenaltyIssuer", fields: [issuedById], references: [id])
-  taskId        String?
-  task          Task?    @relation(fields: [taskId], references: [id])
-  reason        String        // required — why the penalty was issued
-  points        Int           // positive number; how many points deducted
-  status        String   @default("ACTIVE") // "ACTIVE" | "REVOKED"
-  revokedAt     DateTime?
-  revokedById   String?
-  revokedBy     User?    @relation("PenaltyRevoker", fields: [revokedById], references: [id])
-  revokeReason  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation("PenaltyTarget", fields: [userId], references: [id])
+  issuedById   String
+  issuedBy     User      @relation("PenaltyIssuer", fields: [issuedById], references: [id])
+  taskId       String?
+  task         Task?     @relation(fields: [taskId], references: [id])
+  reason       String // required — why the penalty was issued
+  points       Int // positive number; how many points deducted
+  status       String    @default("ACTIVE") // "ACTIVE" | "REVOKED"
+  revokedAt    DateTime?
+  revokedById  String?
+  revokedBy    User?     @relation("PenaltyRevoker", fields: [revokedById], references: [id])
+  revokeReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([userId, status])
   @@index([createdAt])
@@ -604,31 +625,31 @@ model Penalty {
 // bodyJson stores TipTap's JSON document; bodyText is a flattened searchable
 // copy regenerated on each save. Visibility mirrors the folder sharing model.
 model Doc {
-  id           String   @id @default(cuid())
-  title        String   @default("无标题文档")
-  bodyJson     String   @default("{}")  // TipTap ProseMirror JSON
-  bodyText     String   @default("")    // flattened plain text for search
-  icon         String?  // optional emoji the user picks
-  parentId     String?
-  parent       Doc?     @relation("DocHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children     Doc[]    @relation("DocHierarchy")
+  id       String  @id @default(cuid())
+  title    String  @default("无标题文档")
+  bodyJson String  @default("{}") // TipTap ProseMirror JSON
+  bodyText String  @default("") // flattened plain text for search
+  icon     String? // optional emoji the user picks
+  parentId String?
+  parent   Doc?    @relation("DocHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Doc[]   @relation("DocHierarchy")
 
-  visibility   String   @default("PUBLIC")   // "PUBLIC" | "DEPARTMENT" | "PRIVATE" | "INHERIT"
+  visibility   String      @default("PUBLIC") // "PUBLIC" | "DEPARTMENT" | "PRIVATE" | "INHERIT"
   departmentId String?
   department   Department? @relation("DepartmentDocs", fields: [departmentId], references: [id], onDelete: SetNull)
 
   creatorId    String
-  creator      User     @relation("DocCreator", fields: [creatorId], references: [id])
+  creator      User    @relation("DocCreator", fields: [creatorId], references: [id])
   lastEditorId String?
-  lastEditor   User?    @relation("DocLastEditor", fields: [lastEditorId], references: [id])
+  lastEditor   User?   @relation("DocLastEditor", fields: [lastEditorId], references: [id])
 
-  members      DocMember[]
-  versions     DocVersion[]
+  members  DocMember[]
+  versions DocVersion[]
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // Soft-delete: trashed docs disappear from nav but stay 30d for recovery.
-  deletedAt    DateTime?
+  deletedAt DateTime?
 
   @@index([parentId])
   @@index([visibility])
@@ -661,4 +682,259 @@ model DocVersion {
   createdAt   DateTime @default(now())
 
   @@index([docId, createdAt])
+}
+
+// =============================================================================
+// 财务模块 (Finance Module)
+// =============================================================================
+// 设计原则：
+// - 复用 Department / User / ApprovalInstance / Attachment（不重造轮子）
+// - AI 通过 ApiKey 认证调用（与 NextAuth 用户 session 并存）
+// - 凭证审批走现有 ApprovalInstance（关联 Voucher.approvalInstanceId）
+// - 所有 AI 写入默认 status="AI_DRAFT"，老板审批后转 "POSTED"
+// - vault_path 字段保留与 Obsidian markdown 双向链接
+
+// ---- AI/外部服务认证 ----
+// 让 Coze/n8n/外部脚本通过 x-api-key header 调 /api/finance/* 接口
+// hashedKey 存 sha256，明文只在创建时返回一次（NEVER stored in plaintext）
+model ApiKey {
+  id          String    @id @default(cuid())
+  name        String // 人类可读名字，如 "凭证编制员-Coze-Plugin"
+  hashedKey   String    @unique
+  keyPrefix   String // 前 8 位明文（用于在审计日志中识别哪个 key，不会泄露完整 key）
+  scope       String // "FINANCE_AI:voucher_clerk" | "FINANCE_AI:chain_bookkeeper" | ... | "FINANCE_ADMIN"
+  active      Boolean   @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedById String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  activityLogs AiActivityLog[]
+
+  @@index([scope, active])
+}
+
+// ---- 财务主数据：钱包 ----
+model CryptoWallet {
+  id           String  @id @default(cuid())
+  label        String // "老板主钱包"、"出纳ERC钱包"、"Aave存款户"
+  chain        String // "ETH" | "TRON" | "SOL" | ...
+  address      String
+  holderType   String // "BOSS" | "COMPANY_CASHIER" | "EMPLOYEE" | "TREASURY" | "EXTERNAL"
+  holderUserId String? // 若 holderType=EMPLOYEE 关联到 User
+  holderUser   User?   @relation("WalletHolder", fields: [holderUserId], references: [id])
+  purpose      String? // 自由文本描述用途
+  vaultPath    String? // Obsidian wiki 链接，如 "wiki/entities/wallet_老板_主钱包.md"
+  isActive     Boolean @default(true)
+  notes        String?
+
+  departmentId String?
+  department   Department? @relation("FinanceWallets", fields: [departmentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  txAsFrom ChainTransaction[] @relation("TxFromWallet")
+  txAsTo   ChainTransaction[] @relation("TxToWallet")
+
+  @@unique([chain, address])
+  @@index([holderType, isActive])
+}
+
+// ---- 财务主数据：银行账户 ----
+model BankAccount {
+  id            String  @id @default(cuid())
+  label         String // "工商基本户" / "宁波基本户"
+  bankName      String
+  accountType   String // "BASIC" | "CAPITAL" | "GENERAL" | "PAYROLL" | "FX"
+  accountNumber String
+  currency      String // "RMB" | "HKD" | "USD"
+  vaultPath     String?
+  isActive      Boolean @default(true)
+  notes         String?
+
+  departmentId String?
+  department   Department? @relation("FinanceBankAccounts", fields: [departmentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bankName, accountNumber])
+}
+
+// ---- 员工工资档案（扩展 User，不重复存基础信息）----
+model EmployeePayrollProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("PayrollProfile", fields: [userId], references: [id], onDelete: Cascade)
+
+  // 员工 USDT 冷钱包地址（独立于 CryptoWallet 主数据，因为可能员工不是 User）
+  cryptoAddress String?
+  cryptoChain   String? @default("ETH")
+
+  salaryCurrency      String? // "USD" | "CNY" | null=未约定
+  monthlySalaryAmount Decimal? @db.Decimal(18, 2)
+
+  signatureConfirmed Boolean   @default(false) // 老板签字确认钱包地址正确
+  effectiveFrom      DateTime?
+  effectiveUntil     DateTime? // 离职日
+
+  bankAccountNumber String? // RMB 工资发放用
+  bankName          String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---- 会计凭证 ----
+model Voucher {
+  id            String   @id @default(cuid())
+  voucherNumber String?  @unique // 老板审批后赋值，如 "V20260428-001"
+  date          DateTime
+  summary       String // 摘要
+
+  debitAccount  String // 借方科目
+  creditAccount String // 贷方科目
+  amount        Decimal @db.Decimal(18, 2)
+  currency      String // "USD" | "USDT" | "RMB" | "HKD"
+
+  status String @default("AI_DRAFT") // "AI_DRAFT" | "BOSS_REVIEWING" | "POSTED" | "REJECTED" | "VOIDED"
+
+  // 创建者（任一必填）
+  createdByAi String? // AI role: "voucher_clerk" 等
+  createdById String?
+  createdBy   User?   @relation("VoucherCreator", fields: [createdById], references: [id])
+
+  // 审批关联（复用现有 ApprovalInstance）
+  approvalInstanceId String?
+  approvalInstance   ApprovalInstance? @relation("VoucherApproval", fields: [approvalInstanceId], references: [id])
+
+  postedAt   DateTime?
+  postedById String?
+  postedBy   User?     @relation("VoucherPoster", fields: [postedById], references: [id])
+
+  // 与 Obsidian wiki 双向链接
+  vaultPath String?
+
+  // JSON 数组：相关链上交易 ID / 银行流水 ID（弱关联，不强约束）
+  relatedTxIds  String? // "[\"tx_id_1\",\"tx_id_2\"]"
+  attachmentIds String? // 同上
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, date])
+  @@index([createdAt])
+}
+
+// ---- 链上交易归集 ----
+model ChainTransaction {
+  id        String   @id @default(cuid())
+  chain     String // "ETH" | "TRON" ...
+  txHash    String
+  timestamp DateTime
+
+  fromWalletId String?
+  fromWallet   CryptoWallet? @relation("TxFromWallet", fields: [fromWalletId], references: [id])
+  fromAddress  String // 冗余存原始地址，便于查未登记钱包
+
+  toWalletId String?
+  toWallet   CryptoWallet? @relation("TxToWallet", fields: [toWalletId], references: [id])
+  toAddress  String
+
+  amount        Decimal @db.Decimal(36, 18)
+  token         String // "USDT" | "USDC" | "ETH" | ...
+  tokenContract String?
+
+  tag   String? // "MC_MARKETS_INVOICE" | "PAYROLL" | "AAVE_DEPOSIT" | ...
+  notes String?
+
+  isReconciled     Boolean         @default(false)
+  reconciliationId String?
+  reconciliation   Reconciliation? @relation("ReconciliationTxs", fields: [reconciliationId], references: [id])
+
+  vaultPath   String?
+  createdByAi String?
+  createdAt   DateTime @default(now())
+
+  @@unique([chain, txHash])
+  @@index([timestamp])
+  @@index([tag])
+}
+
+// ---- 汇率快照 ----
+model FxRate {
+  id          String   @id @default(cuid())
+  date        DateTime
+  pair        String // "USDT/HKD" | "USD/CNY" | ...
+  rate        Decimal  @db.Decimal(18, 8)
+  source      String // "COINGECKO" | "OKX" | "BINANCE" | "MSO" | "HKMA" | ...
+  isOfficial  Boolean  @default(false) // HKMA 之类官方
+  notes       String?
+  createdByAi String?
+  createdAt   DateTime @default(now())
+
+  @@unique([date, pair, source])
+  @@index([pair, date])
+}
+
+// ---- 三方对账 ----
+model Reconciliation {
+  id     String @id @default(cuid())
+  period String // "2026-04"
+  scope  String // "MONTHLY" | "WEEKLY" | "ADHOC"
+
+  bankTotal   Decimal? @db.Decimal(18, 2)
+  chainTotal  Decimal? @db.Decimal(36, 18)
+  ledgerTotal Decimal? @db.Decimal(18, 2)
+
+  diffAmount   Decimal? @db.Decimal(18, 2)
+  diffCurrency String?
+
+  status         String  @default("OPEN") // "OPEN" | "RESOLVED" | "ESCALATED"
+  resolutionNote String?
+
+  vaultPath   String?
+  createdByAi String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  closedAt    DateTime?
+
+  txs ChainTransaction[] @relation("ReconciliationTxs")
+
+  @@unique([period, scope])
+}
+
+// ---- AI 活动日志（审计 + 看板活动流） ----
+model AiActivityLog {
+  id           String  @id @default(cuid())
+  aiRole       String // "voucher_clerk" | "chain_bookkeeper" | ...
+  action       String // "create_voucher" | "log_chain_tx" | "update_fx_rate" | "send_to_telegram" | ...
+  status       String  @default("success") // "success" | "failed" | "pending"
+  payload      String? // JSON 字符串（输入/输出摘要）
+  errorMessage String?
+
+  // 关联（任意一个，弱约束）
+  voucherId          String?
+  chainTransactionId String?
+  reconciliationId   String?
+  fxRateId           String?
+
+  // 认证主体
+  apiKeyId String?
+  apiKey   ApiKey? @relation(fields: [apiKeyId], references: [id])
+
+  // 三向分发追踪
+  telegramSent     Boolean @default(false)
+  vaultWritten     Boolean @default(false)
+  dashboardWritten Boolean @default(true) // 自身就是看板写入
+
+  createdAt DateTime @default(now())
+
+  @@index([aiRole, createdAt])
+  @@index([action, createdAt])
 }

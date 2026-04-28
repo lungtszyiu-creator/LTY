@@ -15,6 +15,7 @@ const PUBLIC_LINKS = [
   { href: '/reports',       label: '汇报' },
   { href: '/docs',          label: '文档' },
   { href: '/files',         label: '文件' },
+  { href: '/finance',       label: '财务' },
 ];
 
 const MORE_LINKS = [
@@ -37,6 +38,7 @@ const ADMIN_LINKS = [
   { href: '/admin/rewards',              label: '奖励发放' },
   { href: '/admin/penalties',            label: '扣罚登记' },
   { href: '/admin/users',                label: '用户管理' },
+  { href: '/admin/finance/api-keys',     label: '财务 API Key 管理' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
 ];
@@ -100,6 +102,11 @@ export default function Nav() {
   const isAdmin = isSuper || user.role === 'ADMIN';
   const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
 
+  // 总览仅对 SUPER_ADMIN 开放。拼到公共链接最前以保持一致的 nav 顺序。
+  const publicLinks = isSuper
+    ? [{ href: '/overview', label: '总览' }, ...PUBLIC_LINKS]
+    : PUBLIC_LINKS;
+
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
 
@@ -124,7 +131,7 @@ export default function Nav() {
 
         {/* Desktop nav: fixed-sized pill row so items stay aligned regardless of label length */}
         <nav className="hidden items-center gap-1 md:flex">
-          {PUBLIC_LINKS.map((l) => {
+          {publicLinks.map((l) => {
             const badge = badgeForHref(l.href, badges);
             return (
               <NavLink key={l.href} href={l.href} active={pathname === l.href || (l.href !== '/dashboard' && !!pathname?.startsWith(l.href))} badge={badge}>
@@ -250,7 +257,7 @@ export default function Nav() {
         <div className="border-t border-slate-900/5 bg-white/95 backdrop-blur-xl md:hidden">
           <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
-              {PUBLIC_LINKS.map((l) => {
+              {publicLinks.map((l) => {
                 const badge = badgeForHref(l.href, badges);
                 return (
                   <MobileLink key={l.href} href={l.href} active={pathname === l.href} badge={badge}>{l.label}</MobileLink>
