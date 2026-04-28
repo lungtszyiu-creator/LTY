@@ -153,15 +153,22 @@ export default async function FinancePage() {
                   <th className="px-4 py-2 text-left">贷</th>
                   <th className="px-4 py-2 text-right">金额</th>
                   <th className="px-4 py-2 text-left">来源</th>
+                  <th className="px-4 py-2 text-right">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {pendingVouchers.map((v) => (
-                  <tr key={v.id} className="border-t border-slate-100 hover:bg-amber-50/40">
+                  <tr key={v.id} className="border-t border-slate-100 transition hover:bg-amber-50/40">
                     <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                      {v.date.toISOString().slice(0, 10)}
+                      <Link href={`/finance/vouchers/${v.id}`} className="block">
+                        {v.date.toISOString().slice(0, 10)}
+                      </Link>
                     </td>
-                    <td className="px-4 py-2 text-slate-800">{v.summary}</td>
+                    <td className="px-4 py-2 text-slate-800">
+                      <Link href={`/finance/vouchers/${v.id}`} className="block">
+                        {v.summary}
+                      </Link>
+                    </td>
                     <td className="px-4 py-2 whitespace-nowrap text-slate-600">{v.debitAccount}</td>
                     <td className="px-4 py-2 whitespace-nowrap text-slate-600">{v.creditAccount}</td>
                     <td className="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
@@ -169,6 +176,14 @@ export default async function FinancePage() {
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
                       {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap text-right">
+                      <Link
+                        href={`/finance/vouchers/${v.id}`}
+                        className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
+                      >
+                        审核 →
+                      </Link>
                     </td>
                   </tr>
                 ))}
