@@ -51,9 +51,12 @@ body {
   font-feature-settings: "ss01", "cv11", "cv02";
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
-  /* Prevent any child from triggering horizontal scroll that'd lock vertical
-     swipe on mobile. Vertical scroll is unaffected. */
-  overflow-x: hidden;
+  /* Prevent any child from triggering horizontal scroll. We use `clip`
+     instead of `hidden` because `overflow-x: hidden` creates a scroll
+     container in Safari, which breaks `position: sticky` on the nav
+     (manifests as "顶部留白 / nav 不贴顶"). `overflow: clip` clips
+     overflow visually without creating a scroll context. */
+  overflow-x: clip;
 }
 /* Guarantee the very first child of body (our sticky <header>) has zero
    top offset. Belt-and-suspenders against odd margin-collapse cases. */
