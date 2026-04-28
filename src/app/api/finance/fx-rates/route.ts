@@ -34,9 +34,10 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   date: z.string().datetime(),
   pair: z.string().min(3).max(20),       // "USDT/HKD" / "USD/CNY"
-  rate: z.string(),                       // string for Decimal precision
+  // rate 用 coerce 接受 number 或 string；string 入 Decimal 避免精度损失
+  rate: z.coerce.string(),
   source: z.string().min(1).max(20),     // "COINGECKO" | "OKX" | "MSO" | "HKMA"
-  isOfficial: z.boolean().optional(),
+  isOfficial: z.coerce.boolean().optional(),
   notes: z.string().optional().nullable(),
 });
 
@@ -46,7 +47,19 @@ export async function POST(req: NextRequest) {
     'FINANCE_AI:cfo',
   ], 'EDIT');
 
-  const data = createSchema.parse(await req.json());
+  const body = await req.json();
+  const parseResult = createSchema.safeParse(body);
+  if (!parseResult.success) {
+    return NextResponse.json(
+      {
+        error: 'VALIDATION_FAILED',
+        issues: parseResult.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        received: body,
+      },
+      { status: 400 },
+    );
+  }
+  const data = parseResult.data;
 
   // upsert：同一日同一 pair 同一 source 只有一条
   const rate = await prisma.fxRate.upsert({

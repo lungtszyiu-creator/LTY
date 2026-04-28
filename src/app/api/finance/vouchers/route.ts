@@ -39,12 +39,15 @@ export async function GET(req: NextRequest) {
 }
 
 // ---- POST：创建草稿 ----
+// 注意：所有 number 字段用 z.coerce.number()，因为 Coze plugin 默认把所有参数
+// 当字符串发（即使在 tool spec 里声明为 Number 类型也偶尔不准）。coerce 让我们
+// 同时接受 0.01 和 "0.01"，对外部调用方更宽容。
 const createSchema = z.object({
   date: z.string().datetime(),
   summary: z.string().min(1).max(500),
   debitAccount: z.string().min(1).max(100),
   creditAccount: z.string().min(1).max(100),
-  amount: z.number().positive(),
+  amount: z.coerce.number().positive(),
   currency: z.string().min(1).max(10),
   notes: z.string().max(1000).optional().nullable(),
   vaultPath: z.string().optional().nullable(),
@@ -59,7 +62,18 @@ export async function POST(req: NextRequest) {
   ], 'EDIT');
 
   const body = await req.json();
-  const data = createSchema.parse(body);
+  const parseResult = createSchema.safeParse(body);
+  if (!parseResult.success) {
+    return NextResponse.json(
+      {
+        error: 'VALIDATION_FAILED',
+        issues: parseResult.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        received: body,
+      },
+      { status: 400 },
+    );
+  }
+  const data = parseResult.data;
 
   const voucher = await prisma.voucher.create({
     data: {

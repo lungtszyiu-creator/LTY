@@ -45,7 +45,8 @@ const createSchema = z.object({
   timestamp: z.string().datetime(),
   fromAddress: z.string().min(1),
   toAddress: z.string().min(1),
-  amount: z.string(),               // 用 string 避免 JS 浮点损失，DB 存 Decimal
+  // amount 用 coerce 接受 number 或 string；最终再 toString 进 Decimal 避免精度损失
+  amount: z.coerce.string(),
   token: z.string().min(1).max(20),
   tokenContract: z.string().optional().nullable(),
   tag: z.string().optional().nullable(),
@@ -60,7 +61,18 @@ export async function POST(req: NextRequest) {
   ], 'EDIT');
 
   const body = await req.json();
-  const data = createSchema.parse(body);
+  const parseResult = createSchema.safeParse(body);
+  if (!parseResult.success) {
+    return NextResponse.json(
+      {
+        error: 'VALIDATION_FAILED',
+        issues: parseResult.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        received: body,
+      },
+      { status: 400 },
+    );
+  }
+  const data = parseResult.data;
 
   // 自动匹配已注册的钱包（fromAddress / toAddress）
   const [fromWallet, toWallet] = await Promise.all([
