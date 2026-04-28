@@ -5,20 +5,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-// Keep the nav tight and symmetrical: just 4 top-level links for everyone.
-// Admin-only destinations live under a "管理" dropdown so they don't push the
-// layout around and labels stay perfectly aligned on the row.
+// Top-level row kept to ~6 high-frequency items so labels never wrap.
+// Lower-frequency stuff lives behind "更多". Width budget is the killer:
+// each Chinese label needs whitespace-nowrap or it stacks per-character.
 const PUBLIC_LINKS = [
   { href: '/dashboard',     label: '任务' },
   { href: '/approvals',     label: '审批' },
   { href: '/announcements', label: '公告' },
   { href: '/reports',       label: '汇报' },
   { href: '/docs',          label: '文档' },
-  { href: '/files',         label: '文件' },
-  // 财务入口仅对有 financeRole 的人或 SUPER_ADMIN 显示，下面动态拼接
+  // 文件 / 财务 / 总览 — 动态拼接，按角色来；少数情况才会同时出现
 ];
 
 const MORE_LINKS = [
+  { href: '/files',       label: '文件' },
   { href: '/projects',    label: '项目' },
   { href: '/leaderboard', label: '战功榜' },
   { href: '/rewards',     label: '我的奖励' },
@@ -134,8 +134,9 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Desktop nav: fixed-sized pill row so items stay aligned regardless of label length */}
-        <nav className="hidden items-center gap-1 md:flex">
+        {/* Desktop nav: tight pill row, all labels whitespace-nowrap so 2-char
+            Chinese labels stay on one line even when many items are visible. */}
+        <nav className="hidden items-center gap-0.5 md:flex">
           {publicLinks.map((l) => {
             const badge = badgeForHref(l.href, badges);
             return (
@@ -149,7 +150,7 @@ export default function Nav() {
               type="button"
               onClick={() => setMoreOpen((v) => !v)}
               aria-expanded={moreOpen}
-              className={`relative inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-sm transition ${
+              className={`relative inline-flex items-center gap-0.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition ${
                 moreActive
                   ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
                   : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
@@ -188,7 +189,7 @@ export default function Nav() {
                 type="button"
                 onClick={() => setAdminOpen((v) => !v)}
                 aria-expanded={adminOpen}
-                className={`relative inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-sm transition ${
+                className={`relative inline-flex items-center gap-0.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition ${
                   adminActive
                     ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
                     : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
@@ -324,7 +325,7 @@ function NavLink({ href, children, active, badge = 0 }: { href: string; children
   return (
     <Link
       href={href}
-      className={`relative rounded-lg px-3.5 py-1.5 text-sm transition ${
+      className={`relative whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition ${
         active
           ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
           : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
