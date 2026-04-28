@@ -1,0 +1,10 @@
+-- AlterTable: support decimal points + new revision flow + reviewer undo
+ALTER TABLE "Task"
+  ALTER COLUMN "points" SET DATA TYPE DOUBLE PRECISION USING "points"::DOUBLE PRECISION;
+
+ALTER TABLE "RewardIssuance"
+  ALTER COLUMN "points" SET DATA TYPE DOUBLE PRECISION USING "points"::DOUBLE PRECISION;
+
+ALTER TABLE "Submission"
+  ADD COLUMN "awardedPoints" DOUBLE PRECISION,
+  ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

@@ -75,6 +75,13 @@ model User {
   emailVerified      DateTime?
   image              String?
   role               String    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "MEMBER"
+  // 财务模块独立权限（与 role 正交）：
+  //   null     = 无任何财务权限（默认 · 大多数员工 · /finance 入口对其隐藏）
+  //   "VIEWER" = 出纳：可查看财务页 / 凭证 / 钱包 / 银行 / 活动流（只读）
+  //   "EDITOR" = 财务管理员：可读写所有财务数据
+  // SUPER_ADMIN 自动等同 EDITOR（无需在此字段设值）。
+  // 修改本字段：仅 SUPER_ADMIN（即老板）可在 /admin/finance/access 操作。
+  financeRole        String?
   active             Boolean   @default(true)
   // 假期余额（单位：天，允许 0.5 步进）。年假 = HR 每年初设定；调休 = 加班
   // 审批通过后 1:1 累积。请假类型为"年假"/"调休"时从这里扣减，其他类型

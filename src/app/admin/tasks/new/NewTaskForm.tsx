@@ -194,10 +194,15 @@ export default function NewTaskForm() {
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-800">积分</label>
             <input
-              type="number" min={0} max={999}
-              value={points} onChange={(e) => setPoints(Math.max(0, Math.min(999, Number(e.target.value))))}
+              type="number" min={0} max={99999} step="0.5"
+              value={points}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isFinite(n)) setPoints(Math.max(0, Math.min(99999, n)));
+              }}
               className="input"
             />
+            <p className="mt-1 text-[11px] text-slate-500">支持小数（如 7.5）。这是该任务"满分"，审核时可按完成度给部分分。</p>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-800">奖励描述</label>

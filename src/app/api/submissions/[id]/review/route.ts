@@ -4,18 +4,22 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { notifySubmissionReviewed, notifyPenaltyIssued } from '@/lib/email';
 
+// Three-way decision so reviewers can ask for revisions instead of being
+// stuck with binary approve/reject. REVISION_REQUESTED keeps the work in
+// the user's court — they edit + re-submit and the row flips back to
+// PENDING. APPROVED can also carry a partial-credit amount in
+// `awardedPoints` (decimal) so "你做了一半" gets rewarded correctly.
 const schema = z.object({
-  decision: z.enum(['APPROVED', 'REJECTED']),
+  decision: z.enum(['APPROVED', 'REJECTED', 'REVISION_REQUESTED']),
   note: z.string().max(2000).optional(),
-  // When rejecting, admin can atomically record a "failure penalty" (e.g.
-  // claimed-then-never-delivered). Default deduction is 2× task points.
+  awardedPoints: z.number().finite().min(0).max(99999).optional(),
   recordAsFailure: z.boolean().optional(),
-  penaltyPoints: z.number().int().min(0).max(9999).optional(),
+  penaltyPoints: z.number().min(0).max(99999).optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const admin = await requireAdmin();
-  const { decision, note, recordAsFailure, penaltyPoints } = schema.parse(await req.json());
+  const { decision, note, awardedPoints, recordAsFailure, penaltyPoints } = schema.parse(await req.json());
 
   const submission = await prisma.submission.findUnique({
     where: { id: params.id },
@@ -25,17 +29,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (submission.status !== 'PENDING')
     return NextResponse.json({ error: 'ALREADY_REVIEWED' }, { status: 409 });
 
-  // Conflict of interest: the reviewer cannot approve / reject their own
-  // submission. Task creator reviewing someone else's submission is fine.
   if (submission.userId === admin.id) {
     return NextResponse.json({ error: 'SELF_REVIEW_NOT_ALLOWED' }, { status: 403 });
   }
+
+  // Compute the actual award. Default to the task's nominal points so
+  // reviewers who don't touch the input get the old behaviour.
+  const finalPoints = decision === 'APPROVED'
+    ? round2(awardedPoints != null ? awardedPoints : submission.task.points)
+    : null;
 
   const result = await prisma.$transaction(async (tx) => {
     const updatedSub = await tx.submission.update({
       where: { id: submission.id },
       data: {
         status: decision,
+        awardedPoints: finalPoints,
         reviewerId: admin.id,
         reviewNote: note ?? null,
         reviewedAt: new Date(),
@@ -61,7 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             claimedAt: submission.createdAt,
           },
         });
-      } else {
+      } else if (decision === 'REJECTED') {
         const remaining = await tx.submission.count({
           where: { taskId: submission.taskId, status: 'PENDING' },
         });
@@ -69,9 +78,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           where: { id: submission.taskId },
           data: { status: remaining > 0 ? 'SUBMITTED' : 'OPEN' },
         });
+      } else {
+        // REVISION_REQUESTED — task stays SUBMITTED so reviewer keeps
+        // visibility on the inbox until the user resubmits.
+        await tx.task.update({
+          where: { id: submission.taskId },
+          data: { status: 'SUBMITTED' },
+        });
       }
     } else {
-      const nextTaskStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+      const nextTaskStatus =
+        decision === 'APPROVED'           ? 'APPROVED'
+        : decision === 'REJECTED'         ? 'REJECTED'
+        : /* REVISION_REQUESTED */          'CLAIMED';
       await tx.task.update({
         where: { id: submission.taskId },
         data: { status: nextTaskStatus },
@@ -89,19 +108,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             taskId: submission.taskId,
             recipientId: submission.userId,
             rewardText: submission.task.reward,
-            points: submission.task.points,
+            // Mirror the actual awarded amount, not the nominal task.points.
+            points: finalPoints ?? 0,
             method: inferredMethod,
             status: 'PENDING',
           },
         });
+      } else {
+        // If a RewardIssuance already existed (e.g. earlier undo left a
+        // dangling pre-filled record), sync its points to the new award.
+        await tx.rewardIssuance.update({
+          where: { id: existing.id },
+          data: { points: finalPoints ?? existing.points },
+        });
       }
     }
 
-    // Optional auto-penalty when REJECTED with "记录为失败浪费" checkbox.
-    // Deducts 2× task.points by default but admin can override amount.
     let penaltyCreated: any = null;
     if (decision === 'REJECTED' && recordAsFailure) {
-      const deduction = penaltyPoints ?? submission.task.points * 2;
+      // Penalty.points is integer; round in case task.points is decimal.
+      const rawDeduction = penaltyPoints ?? submission.task.points * 2;
+      const deduction = Math.round(rawDeduction);
       if (deduction > 0) {
         penaltyCreated = await tx.penalty.create({
           data: {
@@ -121,14 +148,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return { updatedSub, penaltyCreated };
   });
 
-  // Send notifications out-of-transaction (retry logic is inside notify*).
   notifySubmissionReviewed({
     taskId: submission.taskId,
     taskTitle: submission.task.title,
     recipientEmail: submission.user.email ?? '',
-    decision,
+    decision: decision === 'REVISION_REQUESTED' ? 'REJECTED' : decision,
     reviewerName: admin.name ?? admin.email ?? '管理员',
-    note: note ?? null,
+    note: decision === 'REVISION_REQUESTED'
+      ? `${note ?? ''}\n\n（审核结果：要求修改后再次提交）`
+      : (note ?? null),
   }).catch((e) => console.error('[review] notify submitter failed', e));
 
   if (result.penaltyCreated) {
@@ -144,4 +172,56 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   return NextResponse.json(result.updatedSub);
+}
+
+// Undo a review. Resets submission to PENDING + cleans up auto-created
+// reward / penalty when they're still in their initial state. Task goes
+// back to SUBMITTED so it shows up in the review queue again.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin();
+  const submission = await prisma.submission.findUnique({
+    where: { id: params.id },
+    include: { task: true },
+  });
+  if (!submission) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  if (submission.status === 'PENDING') {
+    return NextResponse.json({ error: 'NOT_REVIEWED' }, { status: 409 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.submission.update({
+      where: { id: submission.id },
+      data: {
+        status: 'PENDING',
+        awardedPoints: null,
+        reviewerId: null,
+        reviewNote: null,
+        reviewedAt: null,
+      },
+    });
+    // Roll back the RewardIssuance only if nothing's been paid yet — once
+    // it's ISSUED/ACKNOWLEDGED the books are written, admin must undo
+    // manually so audit isn't silently rewritten.
+    const reward = await tx.rewardIssuance.findUnique({
+      where: { taskId_recipientId: { taskId: submission.taskId, recipientId: submission.userId } },
+    });
+    if (reward && reward.status === 'PENDING') {
+      await tx.rewardIssuance.delete({ where: { id: reward.id } });
+    }
+    // Same for penalty — only auto-revoke ACTIVE penalties tied to this task.
+    await tx.penalty.updateMany({
+      where: { taskId: submission.taskId, userId: submission.userId, status: 'ACTIVE' },
+      data: { status: 'REVOKED', revokedAt: new Date(), revokedById: admin.id },
+    });
+    await tx.task.update({
+      where: { id: submission.taskId },
+      data: { status: 'SUBMITTED', claimantId: submission.userId },
+    });
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }

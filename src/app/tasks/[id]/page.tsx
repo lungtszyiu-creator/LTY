@@ -9,6 +9,8 @@ import Countdown from '@/components/Countdown';
 import TaskActions from './TaskActions';
 import ReviewFormClient from './ReviewFormClient';
 import AdminTaskMenu from './AdminTaskMenu';
+import ReviseSubmissionClient from './ReviseSubmissionClient';
+import UndoReviewButton from './UndoReviewButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -250,13 +252,23 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                     ))}
                   </ul>
                 )}
-                {s.reviewNote && (
-                  <div className={`mt-4 rounded-xl p-3.5 text-sm ${s.status === 'APPROVED' ? 'bg-emerald-50 ring-1 ring-emerald-200' : s.status === 'REJECTED' ? 'bg-rose-50 ring-1 ring-rose-200' : 'bg-slate-50 ring-1 ring-slate-200'}`}>
-                    <div className="mb-1 flex items-center gap-2 text-xs">
-                      <span className="font-medium">{s.status === 'APPROVED' ? '✓ 通过' : s.status === 'REJECTED' ? '× 驳回' : '审核意见'}</span>
+                {(s.reviewNote || s.status !== 'PENDING') && (
+                  <div className={`mt-4 rounded-xl p-3.5 text-sm ${
+                    s.status === 'APPROVED' ? 'bg-emerald-50 ring-1 ring-emerald-200'
+                    : s.status === 'REJECTED' ? 'bg-rose-50 ring-1 ring-rose-200'
+                    : s.status === 'REVISION_REQUESTED' ? 'bg-amber-50 ring-1 ring-amber-200'
+                    : 'bg-slate-50 ring-1 ring-slate-200'
+                  }`}>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium">
+                        {s.status === 'APPROVED' && `✓ 通过 · 给 ${s.awardedPoints ?? task.points} 分`}
+                        {s.status === 'REJECTED' && '× 驳回'}
+                        {s.status === 'REVISION_REQUESTED' && '🔄 要求修改'}
+                        {s.status === 'PENDING' && '审核意见'}
+                      </span>
                       <span className="text-slate-500">· {s.reviewer?.name ?? s.reviewer?.email} · {fmt(s.reviewedAt)}</span>
                     </div>
-                    <div className="text-slate-700">{s.reviewNote}</div>
+                    {s.reviewNote && <div className="text-slate-700">{s.reviewNote}</div>}
                   </div>
                 )}
                 {isAdmin && s.status === 'PENDING' && (
@@ -264,8 +276,20 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                     submissionId={s.id}
                     submitterId={s.user.id}
                     meId={me.id}
+                    taskPoints={task.points}
                     suggestedPenaltyPoints={Math.max(1, (task.points ?? 0) * 2)}
                   />
+                )}
+                {/* Revise / resubmit when this is my submission and reviewer asked for changes */}
+                {s.user.id === me.id && s.status === 'REVISION_REQUESTED' && (
+                  <ReviseSubmissionClient
+                    submissionId={s.id}
+                    initialNote={s.note}
+                  />
+                )}
+                {/* Undo button — admins can roll back a finalised review back to PENDING */}
+                {isAdmin && s.status !== 'PENDING' && (
+                  <UndoReviewButton submissionId={s.id} />
                 )}
               </li>
             ))}
