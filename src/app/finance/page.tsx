@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { CleanupTestsButton } from './cleanup-tests-button';
+import { VaultIngestButton } from './vault-ingest-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -263,7 +264,8 @@ export default async function FinancePage() {
             </Link>
             。
           </div>
-          <div className="border-t border-amber-200/60 pt-3">
+          <div className="border-t border-amber-200/60 pt-3 space-y-2">
+            <VaultIngestButton />
             <CleanupTestsButton />
           </div>
         </footer>
