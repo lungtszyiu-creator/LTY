@@ -31,9 +31,19 @@
 /* NB: don't set html/body to height:100% — that kills natural document scroll
    on iOS Safari when content exceeds the viewport, producing "can't scroll"
    bug reports. Use min-height so content can grow past the fold normally. */
-html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Defensive: kill any UA-injected top margin/padding so the nav truly
+     sits at viewport-top. Reports of "顶部空了一片" trace back to a stray
+     margin that appears in some browser/extension combos. */
+  margin: 0;
+  padding: 0;
+}
 body {
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
   background: var(--bg-0);
   color: var(--fg-0);
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC",
@@ -45,6 +55,9 @@ body {
      swipe on mobile. Vertical scroll is unaffected. */
   overflow-x: hidden;
 }
+/* Guarantee the very first child of body (our sticky <header>) has zero
+   top offset. Belt-and-suspenders against odd margin-collapse cases. */
+body > header:first-child { margin-top: 0; }
 
 /* Warm ambient gradient underneath all authenticated pages */
 body::before {
