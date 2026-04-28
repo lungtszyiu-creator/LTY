@@ -204,20 +204,22 @@ export default async function FinancePage() {
           ) : (
             <ul className="space-y-2">
               {wallets.map((w) => (
-                <li
-                  key={w.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-slate-800">{w.label}</div>
-                    <div className="font-mono text-xs text-slate-500">
-                      {w.address.slice(0, 6)}…{w.address.slice(-4)}{' '}
-                      <span className="text-slate-400">· {w.chain}</span>
+                <li key={w.id}>
+                  <Link
+                    href={`/finance/wallets/${w.id}`}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-amber-300 hover:bg-amber-50/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-800">{w.label}</div>
+                      <div className="font-mono text-xs text-slate-500">
+                        {w.address.slice(0, 6)}…{w.address.slice(-4)}{' '}
+                        <span className="text-slate-400">· {w.chain}</span>
+                      </div>
                     </div>
-                  </div>
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200">
-                    {holderTypeLabel(w.holderType)}
-                  </span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200">
+                      {holderTypeLabel(w.holderType)}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -231,19 +233,21 @@ export default async function FinancePage() {
           ) : (
             <ul className="space-y-2">
               {bankAccounts.map((b) => (
-                <li
-                  key={b.id}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-slate-800">{b.label}</div>
-                    <div className="text-xs text-slate-500">
-                      {b.bankName} · {b.accountNumber.slice(0, 4)}…{b.accountNumber.slice(-4)}
+                <li key={b.id}>
+                  <Link
+                    href={`/finance/bank-accounts/${b.id}`}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-800">{b.label}</div>
+                      <div className="text-xs text-slate-500">
+                        {b.bankName} · {b.accountNumber.slice(0, 4)}…{b.accountNumber.slice(-4)}
+                      </div>
                     </div>
-                  </div>
-                  <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
-                    {b.currency}
-                  </span>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
+                      {b.currency}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
