@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
+  if (auth instanceof NextResponse) return auth;
 
   const tag = req.nextUrl.searchParams.get('tag');
   const isReconciled = req.nextUrl.searchParams.get('reconciled');
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
     'FINANCE_AI:chain_bookkeeper',
     'FINANCE_AI:cfo',
   ], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
 
   const body = await req.json();
   const parseResult = createSchema.safeParse(body);

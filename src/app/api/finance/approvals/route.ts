@@ -113,6 +113,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, ['FINANCE_AI:cfo'], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
 
   const body = await req.json();
   const parseResult = createSchema.safeParse(body);

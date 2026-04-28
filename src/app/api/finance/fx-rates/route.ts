@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
+  if (auth instanceof NextResponse) return auth;
 
   const pair = req.nextUrl.searchParams.get('pair');
   const since = req.nextUrl.searchParams.get('since');
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     'FINANCE_AI:forex_lookout',
     'FINANCE_AI:cfo',
   ], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
 
   const body = await req.json();
   const parseResult = createSchema.safeParse(body);

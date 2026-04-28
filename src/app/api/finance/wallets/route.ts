@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
+  if (auth instanceof NextResponse) return auth;
 
   const wallets = await prisma.cryptoWallet.findMany({
     where: { isActive: true },
@@ -39,6 +40,7 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   // 创建钱包仅老板（FINANCE_ADMIN scope 或 EDITOR session）
   const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN'], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
   const data = createSchema.parse(await req.json());
 
   const wallet = await prisma.cryptoWallet.create({ data });

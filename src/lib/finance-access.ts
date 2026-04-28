@@ -66,14 +66,16 @@ export async function requireFinanceEdit(): Promise<{ userId: string }> {
 }
 
 /**
- * Route handler 用：返回响应或 throw NextResponse 错误（与项目其他 require* 风格一致）。
+ * Route handler 用：成功返回 {userId, level}，失败返回 NextResponse（**不再 throw**）。
  *
  * 注意：本 helper 只针对 session 路径。API Key 路径已在 requireApiKey 内通过 scope 限制。
  */
-export async function requireFinanceViewSession(): Promise<{ userId: string; level: 'VIEWER' | 'EDITOR' }> {
+export async function requireFinanceViewSession(): Promise<
+  { userId: string; level: 'VIEWER' | 'EDITOR' } | NextResponse
+> {
   const session = await getSession();
   if (!session?.user) {
-    throw NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
   const dbUser = await prisma.user.findUnique({
@@ -81,20 +83,21 @@ export async function requireFinanceViewSession(): Promise<{ userId: string; lev
     select: { id: true, role: true, financeRole: true, active: true },
   });
   if (!dbUser?.active) {
-    throw NextResponse.json({ error: 'INACTIVE' }, { status: 403 });
+    return NextResponse.json({ error: 'INACTIVE' }, { status: 403 });
   }
 
   const level = financeAccessLevel(dbUser);
   if (level === 'NONE') {
-    throw NextResponse.json({ error: 'FINANCE_FORBIDDEN' }, { status: 404 }); // 404 而非 403：不暴露存在
+    return NextResponse.json({ error: 'FINANCE_FORBIDDEN' }, { status: 404 }); // 404 而非 403：不暴露存在
   }
   return { userId: dbUser.id, level: level as 'VIEWER' | 'EDITOR' };
 }
 
-export async function requireFinanceEditSession(): Promise<{ userId: string }> {
-  const { userId, level } = await requireFinanceViewSession();
-  if (level !== 'EDITOR') {
-    throw NextResponse.json({ error: 'WRITE_FORBIDDEN' }, { status: 403 });
+export async function requireFinanceEditSession(): Promise<{ userId: string } | NextResponse> {
+  const result = await requireFinanceViewSession();
+  if (result instanceof NextResponse) return result;
+  if (result.level !== 'EDITOR') {
+    return NextResponse.json({ error: 'WRITE_FORBIDDEN' }, { status: 403 });
   }
-  return { userId };
+  return { userId: result.userId };
 }

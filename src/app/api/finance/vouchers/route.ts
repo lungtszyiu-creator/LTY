@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
+  if (auth instanceof NextResponse) return auth;
 
   const status = req.nextUrl.searchParams.get('status'); // AI_DRAFT / POSTED / ...
   const limit = Number(req.nextUrl.searchParams.get('limit') ?? '50');
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     'FINANCE_AI:voucher_clerk',
     'FINANCE_AI:cfo',
   ], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
 
   const body = await req.json();
   const parseResult = createSchema.safeParse(body);
