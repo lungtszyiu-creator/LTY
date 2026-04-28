@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
+  if (auth instanceof NextResponse) return auth;
 
   const accounts = await prisma.bankAccount.findMany({
     where: { isActive: true },
@@ -33,6 +34,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN'], 'EDIT');
+  if (auth instanceof NextResponse) return auth;
   const data = createSchema.parse(await req.json());
   const account = await prisma.bankAccount.create({ data });
   return NextResponse.json(account, { status: 201 });

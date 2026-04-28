@@ -46,36 +46,40 @@ export function generateApiKey(): { plaintext: string; hashed: string; prefix: s
 
 /**
  * 校验请求中的 x-api-key header。
- * 返回 ApiKeyContext 或抛出 NextResponse 错误。
+ * 成功返回 ApiKeyContext，失败返回 NextResponse 错误（**不再 throw**）。
+ *
+ * 改 return 不 throw 的原因：Next.js App Router 不认 `throw NextResponse`，
+ * throw 会被当成未捕获异常 → 500 空 body，掩盖真实的 401/403。
  *
  * 用法（在 route.ts 内）：
- *   const ctx = await requireApiKey(req, ['FINANCE_AI:voucher_clerk', 'FINANCE_ADMIN']);
- *   // ctx.scope, ctx.apiKeyId 可用
+ *   const result = await requireApiKey(req, ['FINANCE_AI:voucher_clerk']);
+ *   if (result instanceof NextResponse) return result;
+ *   // result 自动收窄为 ApiKeyContext
  */
 export async function requireApiKey(
   req: NextRequest,
   allowedScopes: string[],
-): Promise<ApiKeyContext> {
+): Promise<ApiKeyContext | NextResponse> {
   const headerKey = req.headers.get('x-api-key');
   if (!headerKey) {
-    throw NextResponse.json({ error: 'API_KEY_MISSING' }, { status: 401 });
+    return NextResponse.json({ error: 'API_KEY_MISSING' }, { status: 401 });
   }
 
   const hashed = hashApiKey(headerKey);
   const apiKey = await prisma.apiKey.findUnique({ where: { hashedKey: hashed } });
 
   if (!apiKey || !apiKey.active || apiKey.revokedAt) {
-    throw NextResponse.json({ error: 'API_KEY_INVALID_OR_REVOKED' }, { status: 401 });
+    return NextResponse.json({ error: 'API_KEY_INVALID_OR_REVOKED' }, { status: 401 });
   }
 
   if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-    throw NextResponse.json({ error: 'API_KEY_EXPIRED' }, { status: 401 });
+    return NextResponse.json({ error: 'API_KEY_EXPIRED' }, { status: 401 });
   }
 
   // Scope 校验：允许列表里要么含本 key 的精确 scope，要么含 "FINANCE_ADMIN"（superuser scope）
   const scopeAllowed = allowedScopes.includes(apiKey.scope) || apiKey.scope === 'FINANCE_ADMIN';
   if (!scopeAllowed) {
-    throw NextResponse.json(
+    return NextResponse.json(
       { error: 'API_KEY_SCOPE_DENIED', required: allowedScopes, actual: apiKey.scope },
       { status: 403 },
     );
@@ -97,7 +101,14 @@ export async function requireApiKey(
  * 双轨认证：要么 NextAuth session（人类），要么 API Key（AI）。
  * 用于既要给老板看也要给 AI 写的端点（如 /api/finance/vouchers）。
  *
+ * 成功返回认证信息，失败返回 NextResponse（**不再 throw**）。
+ *
  * @param requiredLevel - session 路径下的最低权限。'VIEW' 允许出纳读，'EDIT' 仅老板/EDITOR 可写。
+ *
+ * 用法：
+ *   const auth = await requireAuthOrApiKey(req, [...]);
+ *   if (auth instanceof NextResponse) return auth;
+ *   // auth 自动收窄
  */
 export async function requireAuthOrApiKey(
   req: NextRequest,
@@ -106,19 +117,23 @@ export async function requireAuthOrApiKey(
 ): Promise<
   | { kind: 'session'; userId: string; level: 'VIEWER' | 'EDITOR' }
   | { kind: 'apikey'; ctx: ApiKeyContext }
+  | NextResponse
 > {
   const headerKey = req.headers.get('x-api-key');
   if (headerKey) {
-    const ctx = await requireApiKey(req, allowedScopes);
-    return { kind: 'apikey', ctx };
+    const result = await requireApiKey(req, allowedScopes);
+    if (result instanceof NextResponse) return result;
+    return { kind: 'apikey', ctx: result };
   }
 
   // 没有 API Key → 走 session + financeRole 校验
   const { requireFinanceViewSession, requireFinanceEditSession } = await import('./finance-access');
   if (requiredLevel === 'EDIT') {
-    const { userId } = await requireFinanceEditSession();
-    return { kind: 'session', userId, level: 'EDITOR' };
+    const result = await requireFinanceEditSession();
+    if (result instanceof NextResponse) return result;
+    return { kind: 'session', userId: result.userId, level: 'EDITOR' };
   }
-  const { userId, level } = await requireFinanceViewSession();
-  return { kind: 'session', userId, level };
+  const result = await requireFinanceViewSession();
+  if (result instanceof NextResponse) return result;
+  return { kind: 'session', userId: result.userId, level: result.level };
 }
