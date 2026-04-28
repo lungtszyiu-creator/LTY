@@ -6,7 +6,7 @@ import { notifyRewardStatusChanged } from '@/lib/email';
 
 const adminPatch = z.object({
   rewardText: z.string().max(200).nullable().optional(),
-  points: z.number().int().min(0).max(99999).optional(),
+  points: z.number().finite().min(0).max(99999).optional(),
   method: z.enum(['CASH', 'TRANSFER', 'VOUCHER', 'IN_KIND', 'POINTS_ONLY', 'OTHER']).optional(),
   status: z.enum(['PENDING', 'ISSUED', 'ACKNOWLEDGED', 'DISPUTED', 'CANCELLED']).optional(),
   note: z.string().max(2000).nullable().optional(),
@@ -79,6 +79,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             rewardId: null,
           },
           data: { rewardId: r.id },
+        });
+      }
+      // Mirror the points edit back onto the Submission so 战功榜
+      // (which reads Submission.awardedPoints) reflects the new number.
+      if (typeof data.points === 'number' && data.points !== existing.points) {
+        await tx.submission.updateMany({
+          where: {
+            taskId: existing.taskId,
+            userId: existing.recipientId,
+            status: 'APPROVED',
+          },
+          data: { awardedPoints: Math.round(data.points * 100) / 100 },
         });
       }
       return r;

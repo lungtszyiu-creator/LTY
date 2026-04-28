@@ -271,12 +271,17 @@ function RewardRow({
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">积分</label>
               <input
                 type="number"
+                step="0.1"
                 min={0}
                 max={99999}
                 value={points}
-                onChange={(e) => setPoints(Math.max(0, Math.min(99999, Number(e.target.value))))}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n)) setPoints(Math.max(0, Math.min(99999, n)));
+                }}
                 className="input"
               />
+              <p className="mt-1 text-[11px] text-slate-500">支持小数（如 13.4）。改这里会同步到战功榜。</p>
             </div>
           </div>
 

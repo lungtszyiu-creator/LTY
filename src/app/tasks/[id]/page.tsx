@@ -11,6 +11,7 @@ import ReviewFormClient from './ReviewFormClient';
 import AdminTaskMenu from './AdminTaskMenu';
 import ReviseSubmissionClient from './ReviseSubmissionClient';
 import UndoReviewButton from './UndoReviewButton';
+import EditAwardedPointsButton from './EditAwardedPointsButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -261,7 +262,18 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   }`}>
                     <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-medium">
-                        {s.status === 'APPROVED' && `✓ 通过 · 给 ${s.awardedPoints ?? task.points} 分`}
+                        {s.status === 'APPROVED' && (
+                          <>
+                            ✓ 通过 · 给 {s.awardedPoints ?? task.points} 分
+                            {isAdmin && (
+                              <EditAwardedPointsButton
+                                submissionId={s.id}
+                                initial={s.awardedPoints}
+                                taskPoints={task.points}
+                              />
+                            )}
+                          </>
+                        )}
                         {s.status === 'REJECTED' && '× 驳回'}
                         {s.status === 'REVISION_REQUESTED' && '🔄 要求修改'}
                         {s.status === 'PENDING' && '审核意见'}
