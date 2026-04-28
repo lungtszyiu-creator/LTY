@@ -12,6 +12,9 @@ declare module 'next-auth' {
       id: string;
       role: Role;
       active: boolean;
+      // 财务模块权限：null = 无权限（多数员工）/ "VIEWER" = 出纳 / "EDITOR" = 财务管理
+      // 注意：role === 'SUPER_ADMIN' 自动等同 'EDITOR'，无需在此设值
+      financeRole: 'VIEWER' | 'EDITOR' | null;
     } & DefaultSession['user'];
   }
 }
@@ -48,6 +51,9 @@ export const authOptions: AuthOptions = {
       const role = (dbUser.role as Role) ?? 'MEMBER';
       session.user.role = role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MEMBER' ? role : 'MEMBER';
       session.user.active = dbUser.active;
+      // financeRole 同步进 session，让客户端 Nav / 页面能据此显隐入口
+      const fr = dbUser.financeRole;
+      session.user.financeRole = fr === 'EDITOR' || fr === 'VIEWER' ? fr : null;
       return session;
     },
   },

@@ -11,15 +11,15 @@
  * - 银行账户总览
  */
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireFinanceView } from '@/lib/finance-access';
 
 export const dynamic = 'force-dynamic';
 
 export default async function FinancePage() {
-  const session = await getSession();
-  if (!session?.user) redirect('/login?next=/finance');
+  // 三重门禁：未登录 → /login；已登录但 financeRole=null → 跳回 /dashboard（不暴露页面存在）；
+  // 通过后返回访问级别（VIEWER 或 EDITOR），决定 UI 上是否显示写入操作
+  const access = await requireFinanceView();
 
   // 并行抓数据
   const [
@@ -63,11 +63,17 @@ export default async function FinancePage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <header className="mb-6 flex items-baseline justify-between">
-        <div>
+        <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">财务</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            5 个 AI 员工的实时工作面板。所有数字直接从数据库读，无须开 AI 或 TG。
-          </p>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${
+              access.level === 'EDITOR'
+                ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                : 'bg-sky-50 text-sky-700 ring-sky-200'
+            }`}
+          >
+            {access.level === 'EDITOR' ? '👑 全权' : '👁 只读'}
+          </span>
         </div>
         <span className="text-xs text-slate-400">数据每次刷新页面即更新</span>
       </header>
@@ -228,10 +234,24 @@ export default async function FinancePage() {
         </div>
       </section>
 
-      <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
-        💡 想让 AI 写到这里？联系 IT 在 <Link href="/admin/finance/api-keys" className="underline">管理 → 财务
-        API Key 管理</Link> 创建对应角色的 API Key，发给 Coze / n8n 用。
-      </footer>
+      {access.level === 'EDITOR' && (
+        <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
+          💡 仅老板可见 · 想让 AI 写到这里？在{' '}
+          <Link href="/admin/finance/api-keys" className="underline">
+            管理 → 财务 API Key 管理
+          </Link>{' '}
+          创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
+          <Link href="/admin/finance/access" className="underline">
+            管理 → 财务访问授权
+          </Link>
+          。
+        </footer>
+      )}
+      {access.level === 'VIEWER' && (
+        <footer className="mt-10 rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
+          👁 你是只读账号。只能查看，不能修改。需要写权限请联系老板。
+        </footer>
+      )}
     </main>
   );
 }

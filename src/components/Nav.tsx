@@ -15,7 +15,7 @@ const PUBLIC_LINKS = [
   { href: '/reports',       label: '汇报' },
   { href: '/docs',          label: '文档' },
   { href: '/files',         label: '文件' },
-  { href: '/finance',       label: '财务' },
+  // 财务入口仅对有 financeRole 的人或 SUPER_ADMIN 显示，下面动态拼接
 ];
 
 const MORE_LINKS = [
@@ -38,6 +38,7 @@ const ADMIN_LINKS = [
   { href: '/admin/rewards',              label: '奖励发放' },
   { href: '/admin/penalties',            label: '扣罚登记' },
   { href: '/admin/users',                label: '用户管理' },
+  { href: '/admin/finance/access',       label: '财务访问授权' },
   { href: '/admin/finance/api-keys',     label: '财务 API Key 管理' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
@@ -103,9 +104,13 @@ export default function Nav() {
   const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
 
   // 总览仅对 SUPER_ADMIN 开放。拼到公共链接最前以保持一致的 nav 顺序。
-  const publicLinks = isSuper
-    ? [{ href: '/overview', label: '总览' }, ...PUBLIC_LINKS]
-    : PUBLIC_LINKS;
+  // 财务入口需 SUPER_ADMIN 或 financeRole !== null（出纳/编辑者）
+  const hasFinanceAccess = isSuper || !!user.financeRole;
+  const publicLinks = [
+    ...(isSuper ? [{ href: '/overview', label: '总览' }] : []),
+    ...PUBLIC_LINKS,
+    ...(hasFinanceAccess ? [{ href: '/finance', label: '财务' }] : []),
+  ];
 
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));

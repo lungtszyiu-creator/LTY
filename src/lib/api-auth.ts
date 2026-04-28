@@ -96,22 +96,29 @@ export async function requireApiKey(
 /**
  * 双轨认证：要么 NextAuth session（人类），要么 API Key（AI）。
  * 用于既要给老板看也要给 AI 写的端点（如 /api/finance/vouchers）。
+ *
+ * @param requiredLevel - session 路径下的最低权限。'VIEW' 允许出纳读，'EDIT' 仅老板/EDITOR 可写。
  */
 export async function requireAuthOrApiKey(
   req: NextRequest,
   allowedScopes: string[],
-): Promise<{ kind: 'session'; userId: string } | { kind: 'apikey'; ctx: ApiKeyContext }> {
+  requiredLevel: 'VIEW' | 'EDIT' = 'VIEW',
+): Promise<
+  | { kind: 'session'; userId: string; level: 'VIEWER' | 'EDITOR' }
+  | { kind: 'apikey'; ctx: ApiKeyContext }
+> {
   const headerKey = req.headers.get('x-api-key');
   if (headerKey) {
     const ctx = await requireApiKey(req, allowedScopes);
     return { kind: 'apikey', ctx };
   }
 
-  // 没有 API Key → 走 session
-  const { getSession } = await import('./auth');
-  const session = await getSession();
-  if (!session?.user || !session.user.active) {
-    throw NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  // 没有 API Key → 走 session + financeRole 校验
+  const { requireFinanceViewSession, requireFinanceEditSession } = await import('./finance-access');
+  if (requiredLevel === 'EDIT') {
+    const { userId } = await requireFinanceEditSession();
+    return { kind: 'session', userId, level: 'EDITOR' };
   }
-  return { kind: 'session', userId: session.user.id };
+  const { userId, level } = await requireFinanceViewSession();
+  return { kind: 'session', userId, level };
 }

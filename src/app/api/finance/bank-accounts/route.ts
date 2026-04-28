@@ -32,7 +32,7 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN']);
+  const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN'], 'EDIT');
   const data = createSchema.parse(await req.json());
   const account = await prisma.bankAccount.create({ data });
   return NextResponse.json(account, { status: 201 });

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
     'FINANCE_AI:forex_lookout',
     'FINANCE_AI:cfo',
-  ]);
+  ], 'EDIT');
 
   const data = createSchema.parse(await req.json());
 
