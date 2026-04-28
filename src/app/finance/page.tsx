@@ -13,6 +13,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
+import { CleanupTestsButton } from './cleanup-tests-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -250,16 +251,21 @@ export default async function FinancePage() {
       </section>
 
       {access.level === 'EDITOR' && (
-        <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
-          💡 仅老板可见 · 想让 AI 写到这里？在{' '}
-          <Link href="/admin/finance/api-keys" className="underline">
-            管理 → 财务 API Key 管理
-          </Link>{' '}
-          创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
-          <Link href="/admin/finance/access" className="underline">
-            管理 → 财务访问授权
-          </Link>
-          。
+        <footer className="mt-10 space-y-3 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
+          <div>
+            💡 仅老板可见 · 想让 AI 写到这里？在{' '}
+            <Link href="/admin/finance/api-keys" className="underline">
+              管理 → 财务 API Key 管理
+            </Link>{' '}
+            创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
+            <Link href="/admin/finance/access" className="underline">
+              管理 → 财务访问授权
+            </Link>
+            。
+          </div>
+          <div className="border-t border-amber-200/60 pt-3">
+            <CleanupTestsButton />
+          </div>
         </footer>
       )}
       {access.level === 'VIEWER' && (
