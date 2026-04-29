@@ -46,7 +46,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         const meta = clientPayload ? JSON.parse(clientPayload) : {};
 
         return {
-          allowedContentTypes: ['*/*'],
+          // allowedContentTypes 故意不设 = 任意类型放行
+          // （之前误填 '*/*' 触发 Vercel SDK literal 字符串匹配，zip 被拒）
           maximumSizeInBytes: MAX_BYTES,
           tokenPayload: JSON.stringify({
             uploaderId: dbUser.id,
