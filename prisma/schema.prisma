@@ -237,25 +237,25 @@ model NotificationLog {
 }
 
 model Submission {
-  id         String    @id @default(cuid())
-  taskId     String
-  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User      @relation(fields: [userId], references: [id])
-  note       String // submitter's description of work done
+  id            String    @id @default(cuid())
+  taskId        String
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  note          String // submitter's description of work done
   // PENDING | APPROVED | REJECTED | REVISION_REQUESTED (退回让对方修改后重交)
-  status     String    @default("PENDING")
+  status        String    @default("PENDING")
   // Actual points granted by reviewer at approval time. Decimal-aware so
   // admins can hand out partial credit (e.g. 12.5 / 20). Null when
   // pending or rejected. Falls back to task.points if reviewer didn't
   // touch the slider — preserves old behaviour.
   awardedPoints Float?
-  reviewerId String?
-  reviewer   User?     @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
-  reviewNote String?
-  reviewedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  reviewerId    String?
+  reviewer      User?     @relation("SubmissionReviewer", fields: [reviewerId], references: [id])
+  reviewNote    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   attachments Attachment[] @relation("SubmissionAttachments")
 }
@@ -944,4 +944,25 @@ model AiActivityLog {
 
   @@index([aiRole, createdAt])
   @@index([action, createdAt])
+}
+
+// ---- 知识管理部 · 看板上传 → vault 中转 ----
+// 老板手机上传文件 → Vercel Blob → Mac worker (bot.py 内的 BlobSync 线程) 拉到 raw/_inbox/from_dashboard/
+// 下载后立刻删 blob 节约存储费用。
+model PendingUpload {
+  id           String    @id @default(cuid())
+  blobUrl      String // Vercel Blob 公开 URL
+  blobPathname String // Blob 内部路径，删 blob 时用
+  filename     String // 原始文件名（前端上传时显示给老板的）
+  contentType  String?
+  sizeBytes    Int
+  uploaderId   String // 上传人 User.id（弱关联，无 FK 避免删用户连带删上传）
+  status       String    @default("pending") // "pending" | "downloaded" | "failed"
+  downloadedAt DateTime?
+  vaultPath    String? // 落到 vault 的相对路径，downloaded 时填
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, createdAt])
 }

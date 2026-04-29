@@ -17,22 +17,51 @@
  */
 import Link from 'next/link';
 import { requireKnowledgeView } from '@/lib/knowledge-access';
+import { prisma } from '@/lib/db';
 import {
   getVaultDashboard,
   getVaultInboxQueue,
   type DashboardJson,
   type InboxQueueJson,
 } from '@/lib/vault-client';
+import UploadButton from './upload-button';
 
 export const dynamic = 'force-dynamic';
+
+type RecentUpload = {
+  id: string;
+  filename: string;
+  contentType: string | null;
+  sizeBytes: number;
+  status: string;
+  vaultPath: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  downloadedAt: Date | null;
+};
 
 export default async function KnowledgePage() {
   await requireKnowledgeView();
 
-  // 并行拉两份 JSON（任一失败 / 缺失 → 返回 null，页面降级显示）
-  const [dashboard, inboxQueue] = await Promise.all([
+  // 并行拉数据（vault JSON + 看板上传记录）
+  const [dashboard, inboxQueue, recentUploads] = await Promise.all([
     getVaultDashboard(),
     getVaultInboxQueue(),
+    prisma.pendingUpload.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        filename: true,
+        contentType: true,
+        sizeBytes: true,
+        status: true,
+        vaultPath: true,
+        errorMessage: true,
+        createdAt: true,
+        downloadedAt: true,
+      },
+    }) as Promise<RecentUpload[]>,
   ]);
 
   return (
@@ -62,6 +91,9 @@ export default async function KnowledgePage() {
 
       {/* 团队三角色状态行 */}
       <RoleStrip dashboard={dashboard} />
+
+      {/* 上传文件入口（手机随时扔，Mac worker 拉走） */}
+      <UploadSection recentUploads={recentUploads} />
 
       {/* 待审待办 */}
       <PendingSection inboxQueue={inboxQueue} />
@@ -150,6 +182,66 @@ function RoleStrip({ dashboard }: { dashboard: DashboardJson | null }) {
         }
       />
     </section>
+  );
+}
+
+function UploadSection({ recentUploads }: { recentUploads: RecentUpload[] }) {
+  return (
+    <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="rounded-xl border border-violet-200/60 bg-violet-50/30 p-5">
+        <SectionTitle>上传文件到 vault</SectionTitle>
+        <p className="mb-3 text-xs text-slate-500">
+          手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
+          drudge 09:50 自动归档，或召唤管家立刻处理。
+        </p>
+        <UploadButton />
+      </div>
+
+      <div>
+        <SectionTitle>
+          最近上传
+          {recentUploads.length > 0 && (
+            <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+              {recentUploads.length}
+            </span>
+          )}
+        </SectionTitle>
+        {recentUploads.length === 0 ? (
+          <EmptyHint text="还没上传过。点左侧按钮试试。" />
+        ) : (
+          <ul className="space-y-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            {recentUploads.map((u) => (
+              <li key={u.id} className="flex items-start justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs last:border-b-0">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-slate-700">{u.filename}</div>
+                  {u.vaultPath && (
+                    <div className="truncate font-mono text-[10px] text-slate-400">→ {u.vaultPath}</div>
+                  )}
+                  {u.errorMessage && (
+                    <div className="text-[10px] text-rose-600">{u.errorMessage}</div>
+                  )}
+                </div>
+                <UploadStatusBadge status={u.status} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UploadStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pending: { label: '⏳ 等 Mac 拉', cls: 'bg-amber-50 text-amber-700 ring-amber-200' },
+    downloaded: { label: '✅ 已落地', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    failed: { label: '❌ 失败', cls: 'bg-rose-50 text-rose-700 ring-rose-200' },
+  };
+  const m = map[status] ?? { label: status, cls: 'bg-slate-50 text-slate-600 ring-slate-200' };
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${m.cls}`}>
+      {m.label}
+    </span>
   );
 }
 
