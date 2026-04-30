@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { CopyButton } from '../../copy-button';
+import { AutoMonitorToggle } from './auto-monitor-toggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export default async function WalletDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireFinanceView();
+  const access = await requireFinanceView();
   const { id } = await params;
 
   const wallet = await prisma.cryptoWallet.findUnique({
@@ -89,6 +90,29 @@ export default async function WalletDetailPage({
           </code>
           <CopyButton text={wallet.address} label="复制地址" />
         </div>
+      </section>
+
+      {/* 自动监控开关（仅 EDITOR 可改，VIEWER 只读显示） */}
+      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+          Cron 自动监控
+        </div>
+        {access.level === 'EDITOR' ? (
+          <AutoMonitorToggle walletId={wallet.id} initial={wallet.autoMonitor} />
+        ) : (
+          <div className="text-sm text-slate-700">
+            <span
+              className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ${
+                wallet.autoMonitor
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                  : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${wallet.autoMonitor ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              {wallet.autoMonitor ? '已开启' : '已关闭'}
+            </span>
+          </div>
+        )}
       </section>
 
       {/* 字段表 */}

@@ -144,9 +144,14 @@ async function runSnapshot(req: NextRequest) {
     );
   }
 
-  // 只跑 ETH 链上的 active wallets（其他链未实现）
+  // 只跑：active + autoMonitor=true + ETH 链
+  // autoMonitor=false 通常是老板个人钱包（混私人/公司流水，不能无差别监控）
   const wallets = await prisma.cryptoWallet.findMany({
-    where: { isActive: true, chain: { in: ['ETH', 'eth', 'ethereum'] } },
+    where: {
+      isActive: true,
+      autoMonitor: true,
+      chain: { in: ['ETH', 'eth', 'ethereum'] },
+    },
     select: { id: true, address: true, label: true },
   });
 
