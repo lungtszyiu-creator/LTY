@@ -226,11 +226,13 @@ body::before {
     0 10px 40px -10px rgba(185, 28, 63, 0.35);
 }
 
-/* Generic light card */
+/* Generic light card —— 注意：曾经用 backdrop-filter blur(8px) 做磨砂玻璃，
+   但 .card 类被 37 个页面大量复用，每张卡滚动时 GPU 都要对其后内容实时
+   模糊采样 → 主屏滚动场景下 N 张卡 × 每帧 blur 重算撑爆合成器 →
+   滚动条 GPU 层继续动但内容 paint 排不上 = "滚动条顺滑、内容停"现象。
+   解法：直接用足够不透明的纯白底，视觉差几乎无感、滚动 paint 成本归零。 */
 .card {
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: saturate(120%) blur(8px);
-  -webkit-backdrop-filter: saturate(120%) blur(8px);
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--stroke);
   border-radius: 16px;
   box-shadow:
@@ -350,9 +352,9 @@ body::before {
 
 .btn-ghost {
   color: var(--fg-1);
-  background: rgba(255, 255, 255, 0.55);
+  /* 不透明度提升 + 去掉 backdrop-filter，理由同 .card —— 滚动场景 paint 成本太高 */
+  background: rgba(255, 255, 255, 0.92);
   border-color: rgba(60, 30, 10, 0.12);
-  backdrop-filter: blur(8px);
 }
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.85);

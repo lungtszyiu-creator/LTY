@@ -121,9 +121,10 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   return (
     <header
-      // 移动端 sticky + backdrop-blur-xl 在 iOS Safari 每帧重算模糊，导致触摸滑动要刷几次才响应。
-      // 解法：移动端用更轻的 backdrop-blur（8px）+ 抬高 bg 不透明度（85%）补偿；桌面端保留原 frosted glass 效果。
-      className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/85 backdrop-blur md:bg-white/75 md:backdrop-blur-xl"
+      // 移动端 sticky + 任何 backdrop-blur 都会在 iOS Safari 每帧重算模糊，
+      // 导致"滚动条 GPU 层顺滑、内容 paint 跟不上"。8px 也不够轻 ——
+      // 干脆移动端不透明白底零 blur，桌面端因功率充足保留 frosted glass。
+      className="sticky top-0 z-40 border-b border-slate-900/5 bg-white md:bg-white/75 md:backdrop-blur-xl"
       // PWA mode (added to iOS home screen) with statusBarStyle=black-translucent
       // lets content render under the status bar by default, so the nav ends up
       // behind the time/battery and is untappable. env(safe-area-inset-top) is
