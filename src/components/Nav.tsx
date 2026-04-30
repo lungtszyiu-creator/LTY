@@ -61,6 +61,22 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); }, [pathname]);
 
+  // Body scroll lock while mobile drawer is open ——
+  // 即使 drawer 自己 overflow-y-auto，背景的 body 仍可被触摸滚动，
+  // 在 iOS 上抽屉打开时背景被滑会让人误以为是抽屉在卡。lock 住背景，
+  // 抽屉里所有触摸只在 drawer 内消化，体感最干净。
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouch;
+    };
+  }, [open]);
+
   // Poll badges every 60s + refresh on nav change so returning from an email
   // link reflects the current state without a full page reload. Also listens
   // for a `badges:refresh` window event so components that just marked
@@ -270,18 +286,15 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
       </div>
 
       {/* Mobile drawer ——
-         之前 drawer 是 sticky <header> 内的普通 div，没有自己的 overflow，
-         加上 30+ 个 admin/public/more 链接 → 抽屉总高度远超 viewport，
-         iOS Safari sticky 高度 > viewport 时 sticky 失效切 absolute，
-         整个抽屉随 body 一起滚 → 用户看到滚动条已动但要"滑过整个抽屉"
-         才能真正下移到主内容。
-         解法：drawer 自己 overflow-y-auto + max-h 限到视口剩余高度 +
-         overscroll-contain 防止滚到底/顶时把 scroll 传给 body。
-         同时去 backdrop-blur-xl —— 滚动容器上挂 blur 是经典 paint 杀手。 */}
+         不嵌在 sticky <header> 内（sticky 父元素的 max-height 在 iOS Safari
+         不稳，曾试过 max-h + overflow-y-auto 仍被 body 拖走）。
+         改成 position: fixed 全屏覆盖 header bar 之下：drawer 完全脱离
+         document flow，自己 overflow-y-auto，body 由 useEffect 同步 lock 住。
+         backdrop-blur 也去掉 —— 滚动容器挂 blur 是经典 paint 杀手。 */}
       {open && (
         <div
-          className="border-t border-slate-900/5 bg-white overflow-y-auto overscroll-contain md:hidden"
-          style={{ maxHeight: 'calc(100dvh - 72px - env(safe-area-inset-top))' }}
+          className="fixed inset-x-0 bottom-0 z-30 overflow-y-auto overscroll-contain border-t border-slate-900/5 bg-white md:hidden"
+          style={{ top: 'calc(72px + env(safe-area-inset-top))' }}
         >
           <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
