@@ -25,11 +25,16 @@ const schema = z.object({
     .optional(),
 });
 
-const HKMA_BASE =
-  'https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity';
-// HKMA 实际的"汇率"endpoint：
+// HKMA 实际汇率 endpoint：6.1.3 Exchange rates – Daily
+// 一条记录包含所有币种字段（usd, gbp, jpy, cad, aud, sgd, eur, cny, ...），
+// end_of_day 为日期。返回的 rate 是 "1 unit of <ccy> = N HKD" 的中间价。
 const HKMA_FX_ENDPOINT =
-  'https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-spot-exchange-rates';
+  'https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/er-eeri-daily';
+
+const SUPPORTED_CCY = [
+  'usd', 'gbp', 'jpy', 'cad', 'aud', 'sgd', 'twd', 'chf',
+  'cny', 'krw', 'thb', 'myr', 'eur', 'php', 'inr', 'idr', 'zar',
+] as const;
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
@@ -51,22 +56,33 @@ export async function POST(req: NextRequest) {
     );
   }
   const { currency, date } = parsed.data;
+  const lower = currency.toLowerCase();
   const upper = currency.toUpperCase();
 
-  // HKMA 用 from / to 限定日期；不传就拉最近 7 天再选最新
+  if (!SUPPORTED_CCY.includes(lower as (typeof SUPPORTED_CCY)[number])) {
+    return NextResponse.json(
+      {
+        error: 'CURRENCY_NOT_SUPPORTED',
+        message: `HKMA only publishes daily rates for: ${SUPPORTED_CCY.map((c) => c.toUpperCase()).join(', ')}.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // HKMA 用 from / to 限定日期；不传就拉最近 14 天兜住周末/假期
   const params = new URLSearchParams();
   if (date) {
     params.set('from', date);
     params.set('to', date);
   } else {
     const today = new Date();
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 3600 * 1000);
-    params.set('from', weekAgo.toISOString().slice(0, 10));
+    const twoWeeksAgo = new Date(today.getTime() - 14 * 24 * 3600 * 1000);
+    params.set('from', twoWeeksAgo.toISOString().slice(0, 10));
     params.set('to', today.toISOString().slice(0, 10));
   }
   params.set('pagesize', '50');
-  params.set('sortby', 'end_of_date');
-  params.set('sortorder', 'desc');
+  params.set('sortby', 'end_of_day.desc');
+  params.set('fields', `end_of_day,${lower}`);
 
   const url = `${HKMA_FX_ENDPOINT}?${params.toString()}`;
   const hkmaRes = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -83,43 +99,58 @@ export async function POST(req: NextRequest) {
   }
 
   const hkmaJson = (await hkmaRes.json()) as {
+    header?: { success?: boolean; err_code?: string; err_msg?: string };
     result?: {
-      records?: Array<{ end_of_date: string; currency: string; rate: number | string }>;
+      records?: Array<Record<string, string | number | null>>;
     };
   };
+  if (hkmaJson?.header?.success === false) {
+    return NextResponse.json(
+      {
+        error: 'HKMA_BUSINESS_ERROR',
+        err_code: hkmaJson.header.err_code,
+        err_msg: hkmaJson.header.err_msg,
+      },
+      { status: 502 },
+    );
+  }
   const records = hkmaJson?.result?.records ?? [];
 
-  // 找匹配 currency 的最新一条
-  const match = records.find((r) => (r.currency ?? '').toUpperCase() === upper);
+  // 找最新一条 currency 字段非空的记录（HKMA 周末 / 假期不公布，会缺数据）
+  const match = records.find((r) => r[lower] != null && r[lower] !== '');
 
   if (!match) {
     return NextResponse.json(
       {
-        error: 'CURRENCY_NOT_FOUND',
-        message: `HKMA records didn't contain currency "${upper}" in the requested window. Common values: USD / EUR / GBP / JPY / CNY / SGD.`,
-        availableInWindow: Array.from(new Set(records.map((r) => r.currency))).slice(0, 20),
+        error: 'NO_DATA_IN_WINDOW',
+        message: `HKMA didn't publish ${upper} rate in the requested window. Try widening date range, or weekends/holidays may have no data.`,
+        windowStart: params.get('from'),
+        windowEnd: params.get('to'),
       },
       { status: 404 },
     );
   }
 
-  const rate = typeof match.rate === 'string' ? parseFloat(match.rate) : match.rate;
+  const rawRate = match[lower];
+  const rate = typeof rawRate === 'string' ? parseFloat(rawRate) : (rawRate as number);
+  const asOf = match.end_of_day as string;
 
   if (auth.kind === 'apikey') {
     await logAiActivity({
       aiRole: auth.ctx.scope.split(':')[1] ?? 'unknown',
       action: 'query_hkma_fx_rate',
       apiKeyId: auth.ctx.apiKeyId,
-      payload: { currency: upper, date: match.end_of_date, rate },
+      payload: { currency: upper, asOf, rate },
     });
   }
 
   return NextResponse.json({
     currency: upper,
     rate,
-    asOf: match.end_of_date,
+    asOf,
     source: 'HKMA',
     isOfficial: true,
+    note: 'Rate represents 1 unit of foreign currency = N HKD (HKMA daily mid-rate).',
     fetchedAt: new Date().toISOString(),
   });
 }
