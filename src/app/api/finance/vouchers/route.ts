@@ -14,6 +14,7 @@ import { logAiActivity } from '@/lib/ai-log';
 export async function GET(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
     'FINANCE_AI:voucher_clerk',
+    'FINANCE_AI:reconciler', // 对账员要能读 vouchers 做账面对账
     'FINANCE_AI:cfo',
     'FINANCE_READONLY',
   ]);
