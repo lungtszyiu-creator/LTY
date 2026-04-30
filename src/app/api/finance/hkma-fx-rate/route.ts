@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     params.set('to', today.toISOString().slice(0, 10));
   }
   params.set('pagesize', '50');
-  params.set('sortby', 'end_of_day.desc');
+  // HKMA 默认就是按 end_of_day 降序（最新在前），手动 sortby 反而报错。
   params.set('fields', `end_of_day,${lower}`);
 
   const url = `${HKMA_FX_ENDPOINT}?${params.toString()}`;
