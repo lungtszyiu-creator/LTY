@@ -735,6 +735,10 @@ model CryptoWallet {
   purpose      String? // 自由文本描述用途
   vaultPath    String? // Obsidian wiki 链接，如 "wiki/entities/wallet_老板_主钱包.md"
   isActive     Boolean @default(true)
+  // 是否允许 cron 自动归集余额 / 监控交易。
+  // 老板个人钱包混着私人和公司流水 → 设 false，避免污染公司账。
+  // 出纳 / 储备 / 员工工资钱包 → 默认 true，纯公司资产可放心监控。
+  autoMonitor  Boolean @default(true)
   notes        String?
 
   departmentId String?
