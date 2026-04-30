@@ -946,6 +946,25 @@ model AiActivityLog {
   @@index([action, createdAt])
 }
 
+// ---- 知识管理部 · 看板召唤管家 ingest 任务 ----
+// 老板手机点 [🤖 召唤管家] → 看板写一行 → Mac IngestWorker 轮询拉走
+// → 跑 `claude -p` headless ingest → 把 result 回写 → 看板轮询读到 → 显示
+model IngestRequest {
+  id            String    @id @default(cuid())
+  scope         String // "all_inbox" | "specific_path:..." 等
+  status        String    @default("pending") // "pending" | "claimed" | "running" | "done" | "error"
+  result        String? // markdown 报告（claude stdout 摘要）
+  commitSha     String? // 若 claude 自己 commit 了
+  errorMessage  String?
+  requestedById String // User.id（弱关联）
+  requestedAt   DateTime  @default(now())
+  claimedAt     DateTime?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  @@index([status, requestedAt])
+}
+
 // ---- 知识管理部 · 看板上传 → vault 中转 ----
 // 老板手机上传文件 → Vercel Blob → Mac worker (bot.py 内的 BlobSync 线程) 拉到 raw/_inbox/from_dashboard/
 // 下载后立刻删 blob 节约存储费用。
