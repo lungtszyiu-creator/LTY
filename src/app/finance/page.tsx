@@ -33,6 +33,9 @@ export default async function FinancePage() {
     recentActivity,
     wallets,
     bankAccounts,
+    totalSnapshotCount,
+    latestSnapshotMeta,
+    recentSnapshots,
   ] = await Promise.all([
     prisma.voucher.count({ where: { status: 'AI_DRAFT' } }),
     prisma.cryptoWallet.count({ where: { isActive: true } }),
@@ -61,7 +64,38 @@ export default async function FinancePage() {
       orderBy: { createdAt: 'asc' },
       take: 10,
     }),
+    prisma.walletBalanceSnapshot.count(),
+    prisma.walletBalanceSnapshot.findFirst({
+      orderBy: { asOf: 'desc' },
+      select: { asOf: true },
+    }),
+    // 取过去 36h 的快照（cron 每天跑一次，36h 兜住跨日 + 偶发延迟），
+    // 客户端 group by (walletId, token) 取最新一条
+    prisma.walletBalanceSnapshot.findMany({
+      where: { asOf: { gte: new Date(Date.now() - 36 * 3600 * 1000) } },
+      orderBy: { asOf: 'desc' },
+      include: { wallet: { select: { id: true, label: true, chain: true } } },
+    }),
   ]);
+
+  // 构造每个 (walletId, token) 最新一条快照
+  const latestSnapPerKey = new Map<string, (typeof recentSnapshots)[number]>();
+  for (const s of recentSnapshots) {
+    const key = `${s.walletId}:${s.token}`;
+    if (!latestSnapPerKey.has(key)) latestSnapPerKey.set(key, s);
+  }
+  // 按 wallet 分组
+  const snapshotsByWallet = new Map<
+    string,
+    { wallet: { id: string; label: string; chain: string }; tokens: typeof recentSnapshots }
+  >();
+  for (const s of latestSnapPerKey.values()) {
+    const k = s.walletId;
+    if (!snapshotsByWallet.has(k)) {
+      snapshotsByWallet.set(k, { wallet: s.wallet, tokens: [] });
+    }
+    snapshotsByWallet.get(k)!.tokens.push(s);
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -101,6 +135,63 @@ export default async function FinancePage() {
           accent="emerald"
           hint="所有 AI 调 API 的次数"
         />
+      </section>
+
+      {/* 钱包余额快照（cron 每日 UTC 00:00 跑） */}
+      <section className="mb-8">
+        <SectionTitle>
+          钱包余额快照
+          {latestSnapshotMeta && (
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              · 共 {totalSnapshotCount} 条 · 最近 {formatTime(latestSnapshotMeta.asOf)}
+            </span>
+          )}
+        </SectionTitle>
+        {snapshotsByWallet.size === 0 ? (
+          <EmptyHint
+            text={
+              totalSnapshotCount === 0
+                ? '暂无快照。Cron 每天 UTC 00:00（HK 8:00）自动跑，跑完会出现在这里。'
+                : '过去 36h 没新快照 —— cron 可能没正常跑，去 Vercel 查 Function Logs。'
+            }
+          />
+        ) : (
+          <ul className="space-y-2">
+            {Array.from(snapshotsByWallet.values()).map(({ wallet, tokens }) => (
+              <li
+                key={wallet.id}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+              >
+                <div className="mb-2 flex items-baseline justify-between">
+                  <Link
+                    href={`/finance/wallets/${wallet.id}`}
+                    className="text-sm font-medium text-slate-800 hover:text-amber-700"
+                  >
+                    {wallet.label}
+                  </Link>
+                  <span className="text-xs text-slate-400">
+                    {wallet.chain} · {formatTime(tokens[0].asOf)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {tokens.map((t) => (
+                    <div
+                      key={t.token}
+                      className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100"
+                    >
+                      <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                        {t.token}
+                      </div>
+                      <div className="mt-0.5 font-mono tabular-nums text-slate-900">
+                        {t.amount}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* AI 活动流 */}
