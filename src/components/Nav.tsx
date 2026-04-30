@@ -269,9 +269,20 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
         </div>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer ——
+         之前 drawer 是 sticky <header> 内的普通 div，没有自己的 overflow，
+         加上 30+ 个 admin/public/more 链接 → 抽屉总高度远超 viewport，
+         iOS Safari sticky 高度 > viewport 时 sticky 失效切 absolute，
+         整个抽屉随 body 一起滚 → 用户看到滚动条已动但要"滑过整个抽屉"
+         才能真正下移到主内容。
+         解法：drawer 自己 overflow-y-auto + max-h 限到视口剩余高度 +
+         overscroll-contain 防止滚到底/顶时把 scroll 传给 body。
+         同时去 backdrop-blur-xl —— 滚动容器上挂 blur 是经典 paint 杀手。 */}
       {open && (
-        <div className="border-t border-slate-900/5 bg-white/95 backdrop-blur-xl md:hidden">
+        <div
+          className="border-t border-slate-900/5 bg-white overflow-y-auto overscroll-contain md:hidden"
+          style={{ maxHeight: 'calc(100dvh - 72px - env(safe-area-inset-top))' }}
+        >
           <nav className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
             <ul className="space-y-1">
               {publicLinks.map((l) => {
