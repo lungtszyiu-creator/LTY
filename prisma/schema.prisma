@@ -745,9 +745,31 @@ model CryptoWallet {
 
   txAsFrom ChainTransaction[] @relation("TxFromWallet")
   txAsTo   ChainTransaction[] @relation("TxToWallet")
+  balanceSnapshots WalletBalanceSnapshot[]
 
   @@unique([chain, address])
   @@index([holderType, isActive])
+}
+
+// ---- 钱包余额定时快照（cron 每日跑） ----
+// 每个 (wallet, token) 一行；多 token 一条 wallet 一次 snapshot 产生 N 行。
+// amount 用 string 避免 Decimal 精度损失（USDT 6 位小数、ETH 18 位）。
+model WalletBalanceSnapshot {
+  id            String       @id @default(cuid())
+  walletId      String
+  wallet        CryptoWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  token         String       // "ETH" | "USDT" | "USDC"
+  tokenContract String?      // ERC20 合约地址（ETH 主链原生币时为 null）
+  amount        String       // 已格式化为人类可读小数串，例如 "0.5" / "5000.123456"
+
+  asOf          DateTime     @default(now())
+  source        String       @default("ETHERSCAN")
+
+  createdAt     DateTime     @default(now())
+
+  @@index([walletId, token, asOf])
+  @@index([asOf])
 }
 
 // ---- 财务主数据：银行账户 ----
