@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useNow } from '@/lib/use-now';
 
 type Props = {
   /** If provided, shows a live countdown TO this date. */
@@ -26,13 +26,15 @@ function split(ms: number) {
 }
 
 export default function Countdown({ deadline, since, size = 'md', compact = false }: Props) {
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // 智能频率：远期 deadline 一分钟刷新一次（数字差别看不出来），
+  // 进入最后 1 小时才秒级刷新。配合 useNow 的全局共享 timer，
+  // dashboard N 张卡只会有 1 个 setInterval 而不是 N 个。
+  const dl = toMs(deadline);
+  const sc = toMs(since);
+  const target = dl ?? sc ?? null;
+  const distance = target !== null ? Math.abs(target - Date.now()) : Infinity;
+  const granularity: 'second' | 'minute' = distance <= 3600_000 ? 'second' : 'minute';
+  const now = useNow(granularity);
 
   if (now === null) {
     return <span className="inline-flex items-center gap-1 text-slate-400">…</span>;

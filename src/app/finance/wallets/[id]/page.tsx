@@ -56,7 +56,7 @@ export default async function WalletDetailPage({
   });
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex items-baseline justify-between">
         <Link href="/finance" className="text-sm text-slate-500 transition hover:text-slate-800">
           ← 返回财务总览
@@ -190,15 +190,18 @@ export default async function WalletDetailPage({
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  // Mobile：label 顶部小字 + value 占满宽度，避开 140px 固定列在窄屏挤压；sm 以上回到双列对齐
   return (
-    <div className="grid grid-cols-[140px_1fr] gap-4 px-4 py-3 text-sm">
-      <dt className="font-medium text-slate-500">{label}</dt>
-      <dd className="text-slate-900">{children}</dd>
+    <div className="flex flex-col gap-0.5 px-4 py-3 text-sm sm:grid sm:grid-cols-[140px_1fr] sm:gap-4">
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-500 sm:text-sm sm:normal-case sm:tracking-normal">
+        {label}
+      </dt>
+      <dd className="min-w-0 text-slate-900">{children}</dd>
     </div>
   );
 }

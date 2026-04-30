@@ -3,12 +3,13 @@
  *
  * 老板的"被动可视化"入口 —— 不用打开 AI、不用看 TG，直接看到 AI 都干了什么。
  *
- * 内容：
- * - KPI 块（待审凭证 / 在用钱包 / 当月活动数）
- * - AI 活动流（时间倒序，最近 50 条）
- * - 待审凭证表
- * - 钱包总览
- * - 银行账户总览
+ * 布局（mobile-first）：
+ * - 顶部 KPI 三连（始终可见，作为快速扫读区）
+ * - Tabs（概览 / 余额快照 / AI 活动）—— 用 ?tab=... URL 参数驱动，RSC 友好
+ *   - 概览：待审凭证（mobile 卡片 / desktop 表格）+ 钱包/银行总览
+ *   - 余额快照：钱包余额最新切片
+ *   - AI 活动：5 个 AI 调 API 的时间流
+ * - 工具按钮（仅 EDITOR）收进 footer 的 <details>，默认折叠，避免 3 个 admin 按钮散在底部
  */
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
@@ -19,12 +20,21 @@ import { VaultIngestButton } from './vault-ingest-button';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FinancePage() {
+type TabKey = 'overview' | 'snapshots' | 'activity';
+
+export default async function FinancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   // 三重门禁：未登录 → /login；已登录但 financeRole=null → 跳回 /dashboard（不暴露页面存在）；
   // 通过后返回访问级别（VIEWER 或 EDITOR），决定 UI 上是否显示写入操作
   const access = await requireFinanceView();
+  const sp = await searchParams;
+  const tab: TabKey =
+    sp.tab === 'snapshots' ? 'snapshots' : sp.tab === 'activity' ? 'activity' : 'overview';
 
-  // 并行抓数据
+  // 并行抓数据（不管哪个 tab 都跑完，admin 页面流量低，简化优先）
   const [
     pendingVouchersCount,
     walletsCount,
@@ -84,7 +94,6 @@ export default async function FinancePage() {
     const key = `${s.walletId}:${s.token}`;
     if (!latestSnapPerKey.has(key)) latestSnapPerKey.set(key, s);
   }
-  // 按 wallet 分组
   const snapshotsByWallet = new Map<
     string,
     { wallet: { id: string; label: string; chain: string }; tokens: typeof recentSnapshots }
@@ -98,8 +107,8 @@ export default async function FinancePage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex items-baseline justify-between">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">财务</h1>
           <span
@@ -115,119 +124,152 @@ export default async function FinancePage() {
         <span className="text-xs text-slate-400">数据每次刷新页面即更新</span>
       </header>
 
-      {/* KPI 三连 */}
-      <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <KpiCard
-          label="待审凭证"
-          value={pendingVouchersCount}
-          accent="rose"
-          hint="AI_DRAFT 状态，待你点确认"
-        />
-        <KpiCard
-          label="在用钱包"
-          value={walletsCount}
-          accent="amber"
-          hint="主数据，链上记账员监控对象"
-        />
-        <KpiCard
-          label="近 30 天 AI 活动"
-          value={monthActivityCount}
-          accent="emerald"
-          hint="所有 AI 调 API 的次数"
-        />
+      {/* KPI 三连 —— 移动端三列紧凑显示 */}
+      <section className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <KpiCard label="待审凭证" value={pendingVouchersCount} accent="rose" />
+        <KpiCard label="在用钱包" value={walletsCount} accent="amber" />
+        <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
       </section>
 
-      {/* 钱包余额快照（cron 每日 UTC 00:00 跑） */}
-      <section className="mb-8">
-        <SectionTitle>
-          钱包余额快照
-          {latestSnapshotMeta && (
-            <span className="ml-2 text-xs font-normal text-slate-400">
-              · 共 {totalSnapshotCount} 条 · 最近 {formatTime(latestSnapshotMeta.asOf)}
-            </span>
-          )}
-        </SectionTitle>
-        {snapshotsByWallet.size === 0 ? (
-          <EmptyHint
-            text={
-              totalSnapshotCount === 0
-                ? '暂无快照。Cron 每天 UTC 00:00（HK 8:00）自动跑，跑完会出现在这里。'
-                : '过去 36h 没新快照 —— cron 可能没正常跑，去 Vercel 查 Function Logs。'
-            }
+      {/* Tabs */}
+      <TabBar current={tab} pendingCount={pendingVouchersCount} />
+
+      {/* Tab 内容 */}
+      <div className="mt-5">
+        {tab === 'overview' && (
+          <OverviewTab
+            pendingVouchers={pendingVouchers}
+            wallets={wallets}
+            bankAccounts={bankAccounts}
           />
-        ) : (
-          <ul className="space-y-2">
-            {Array.from(snapshotsByWallet.values()).map(({ wallet, tokens }) => (
-              <li
-                key={wallet.id}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+        )}
+        {tab === 'snapshots' && (
+          <SnapshotsTab
+            snapshotsByWallet={snapshotsByWallet}
+            totalSnapshotCount={totalSnapshotCount}
+            latestSnapshotMeta={latestSnapshotMeta}
+          />
+        )}
+        {tab === 'activity' && <ActivityTab recentActivity={recentActivity} />}
+      </div>
+
+      {/* Footer */}
+      {access.level === 'EDITOR' ? (
+        <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
+          <div>
+            💡 仅老板可见 · 想让 AI 写到这里？在{' '}
+            <Link href="/admin/finance/api-keys" className="underline">
+              管理 → 财务 API Key 管理
+            </Link>{' '}
+            创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
+            <Link href="/admin/finance/access" className="underline">
+              管理 → 财务访问授权
+            </Link>
+            。
+          </div>
+          <details className="group mt-3 border-t border-amber-200/60 pt-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-1.5 text-xs font-medium text-amber-900 transition hover:bg-amber-100/40">
+              <span>🛠 工具箱（3 项）</span>
+              <span className="text-base opacity-60 transition group-open:rotate-180">▾</span>
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <VaultIngestButton />
+              <CleanupTestsButton />
+              <CleanupVaultTestsButton />
+            </div>
+          </details>
+        </footer>
+      ) : (
+        <footer className="mt-10 rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
+          👁 你是只读账号。只能查看，不能修改。需要写权限请联系老板。
+        </footer>
+      )}
+    </div>
+  );
+}
+
+// ===== Tabs =====
+function TabBar({ current, pendingCount }: { current: TabKey; pendingCount: number }) {
+  const tabs: { key: TabKey; label: string; badge?: number }[] = [
+    { key: 'overview', label: '概览', badge: pendingCount },
+    { key: 'snapshots', label: '余额快照' },
+    { key: 'activity', label: 'AI 活动' },
+  ];
+  return (
+    <nav
+      role="tablist"
+      aria-label="财务看板分区"
+      className="-mx-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-4 sm:mx-0 sm:rounded-xl sm:border sm:bg-white sm:px-1.5 sm:py-1"
+    >
+      {tabs.map((t) => {
+        const active = current === t.key;
+        const href = t.key === 'overview' ? '/finance' : `/finance?tab=${t.key}`;
+        return (
+          <Link
+            key={t.key}
+            href={href}
+            role="tab"
+            aria-selected={active}
+            scroll={false}
+            className={`relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition sm:rounded-lg sm:border-b-0 sm:py-1.5 ${
+              active
+                ? 'border-rose-500 text-rose-700 sm:bg-rose-50 sm:text-rose-800'
+                : 'border-transparent text-slate-500 hover:text-slate-800 sm:hover:bg-slate-50'
+            }`}
+          >
+            <span>{t.label}</span>
+            {t.badge ? (
+              <span
+                className={`inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                  active ? 'bg-rose-600 text-white' : 'bg-rose-500 text-white'
+                }`}
               >
-                <div className="mb-2 flex items-baseline justify-between">
-                  <Link
-                    href={`/finance/wallets/${wallet.id}`}
-                    className="text-sm font-medium text-slate-800 hover:text-amber-700"
-                  >
-                    {wallet.label}
-                  </Link>
-                  <span className="text-xs text-slate-400">
-                    {wallet.chain} · {formatTime(tokens[0].asOf)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  {tokens.map((t) => (
-                    <div
-                      key={t.token}
-                      className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100"
-                    >
-                      <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                        {t.token}
-                      </div>
-                      <div className="mt-0.5 font-mono tabular-nums text-slate-900">
-                        {t.amount}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                {t.badge > 99 ? '99+' : t.badge}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
-      {/* AI 活动流 */}
-      <section className="mb-8">
-        <SectionTitle>AI 活动流</SectionTitle>
-        {recentActivity.length === 0 ? (
-          <EmptyHint text="暂无 AI 活动。等 5 个 AI 开始干活就会出现在这里。" />
-        ) : (
-          <ul className="divide-y divide-slate-200/60 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {recentActivity.map((log) => (
-              <li key={log.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
-                <div className="flex min-w-0 items-baseline gap-2">
-                  <RoleBadge role={log.aiRole} />
-                  <span className="truncate text-slate-700">{log.action}</span>
-                  {log.errorMessage && (
-                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-rose-200">
-                      失败
-                    </span>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
-                  <ChannelDots
-                    tg={log.telegramSent}
-                    vault={log.vaultWritten}
-                    db={log.dashboardWritten}
-                  />
-                  <time>{formatTime(log.createdAt)}</time>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
+// ===== Tab: 概览（待审凭证 + 钱包/银行）=====
+function OverviewTab({
+  pendingVouchers,
+  wallets,
+  bankAccounts,
+}: {
+  pendingVouchers: Array<{
+    id: string;
+    date: Date;
+    summary: string;
+    debitAccount: string;
+    creditAccount: string;
+    amount: { toString(): string };
+    currency: string;
+    createdByAi: string | null;
+    createdBy: { name: string | null } | null;
+  }>;
+  wallets: Array<{
+    id: string;
+    label: string;
+    address: string;
+    chain: string;
+    holderType: string;
+  }>;
+  bankAccounts: Array<{
+    id: string;
+    label: string;
+    bankName: string;
+    accountNumber: string;
+    currency: string;
+  }>;
+}) {
+  return (
+    <>
       {/* 待审凭证 */}
-      <section className="mb-8">
+      <section className="mb-6">
         <SectionTitle>
           待审凭证（{pendingVouchers.length}）
           {pendingVouchers.length > 0 && (
@@ -235,55 +277,102 @@ export default async function FinancePage() {
           )}
         </SectionTitle>
         {pendingVouchers.length === 0 ? (
-          <EmptyHint text="无待审凭证。" />
+          <EmptyHint text="无待审凭证 ✅" />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 text-left">日期</th>
-                  <th className="px-4 py-2 text-left">摘要</th>
-                  <th className="px-4 py-2 text-left">借</th>
-                  <th className="px-4 py-2 text-left">贷</th>
-                  <th className="px-4 py-2 text-right">金额</th>
-                  <th className="px-4 py-2 text-left">来源</th>
-                  <th className="px-4 py-2 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingVouchers.map((v) => (
-                  <tr key={v.id} className="border-t border-slate-100 transition hover:bg-amber-50/40">
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                      <Link href={`/finance/vouchers/${v.id}`} className="block">
-                        {v.date.toISOString().slice(0, 10)}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 text-slate-800">
-                      <Link href={`/finance/vouchers/${v.id}`} className="block">
+          <>
+            {/* Mobile：卡片堆 —— 7 列表格在 375px 屏会横向溢出，卡片更易扫读 */}
+            <ul className="space-y-2 md:hidden">
+              {pendingVouchers.map((v) => (
+                <li key={v.id}>
+                  <Link
+                    href={`/finance/vouchers/${v.id}`}
+                    className="block rounded-xl border border-slate-200 bg-white p-3 transition active:bg-amber-50/40"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                         {v.summary}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-600">{v.debitAccount}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-600">{v.creditAccount}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
-                      {v.amount.toString()} {v.currency}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
-                      {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right">
-                      <Link
-                        href={`/finance/vouchers/${v.id}`}
-                        className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
-                      >
+                      </div>
+                      <div className="shrink-0 font-mono text-sm font-semibold tabular-nums text-slate-900">
+                        {v.amount.toString()}{' '}
+                        <span className="text-xs font-normal text-slate-500">{v.currency}</span>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-slate-500">
+                      <span className="truncate">
+                        {v.debitAccount} → {v.creditAccount}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {v.date.toISOString().slice(0, 10)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                      <span className="truncate">
+                        {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
+                      </span>
+                      <span className="shrink-0 rounded-md bg-rose-600 px-2 py-0.5 text-[11px] font-medium text-white">
                         审核 →
-                      </Link>
-                    </td>
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {/* Desktop：表格 */}
+            <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 text-left">日期</th>
+                    <th className="px-4 py-2 text-left">摘要</th>
+                    <th className="px-4 py-2 text-left">借</th>
+                    <th className="px-4 py-2 text-left">贷</th>
+                    <th className="px-4 py-2 text-right">金额</th>
+                    <th className="px-4 py-2 text-left">来源</th>
+                    <th className="px-4 py-2 text-right">操作</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pendingVouchers.map((v) => (
+                    <tr
+                      key={v.id}
+                      className="border-t border-slate-100 transition hover:bg-amber-50/40"
+                    >
+                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
+                        <Link href={`/finance/vouchers/${v.id}`} className="block">
+                          {v.date.toISOString().slice(0, 10)}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2 text-slate-800">
+                        <Link href={`/finance/vouchers/${v.id}`} className="block">
+                          {v.summary}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
+                        {v.debitAccount}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
+                        {v.creditAccount}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
+                        {v.amount.toString()} {v.currency}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
+                        {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-right">
+                        <Link
+                          href={`/finance/vouchers/${v.id}`}
+                          className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
+                        >
+                          审核 →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
@@ -299,16 +388,16 @@ export default async function FinancePage() {
                 <li key={w.id}>
                   <Link
                     href={`/finance/wallets/${w.id}`}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-amber-300 hover:bg-amber-50/40"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-amber-300 hover:bg-amber-50/40"
                   >
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-800">{w.label}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-slate-800">{w.label}</div>
                       <div className="font-mono text-xs text-slate-500">
                         {w.address.slice(0, 6)}…{w.address.slice(-4)}{' '}
                         <span className="text-slate-400">· {w.chain}</span>
                       </div>
                     </div>
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200">
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700 ring-1 ring-amber-200">
                       {holderTypeLabel(w.holderType)}
                     </span>
                   </Link>
@@ -328,15 +417,15 @@ export default async function FinancePage() {
                 <li key={b.id}>
                   <Link
                     href={`/finance/bank-accounts/${b.id}`}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50/40"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50/40"
                   >
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-800">{b.label}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-slate-800">{b.label}</div>
                       <div className="text-xs text-slate-500">
                         {b.bankName} · {b.accountNumber.slice(0, 4)}…{b.accountNumber.slice(-4)}
                       </div>
                     </div>
-                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
+                    <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 ring-1 ring-sky-200">
                       {b.currency}
                     </span>
                   </Link>
@@ -346,40 +435,145 @@ export default async function FinancePage() {
           )}
         </div>
       </section>
-
-      {access.level === 'EDITOR' && (
-        <footer className="mt-10 space-y-3 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
-          <div>
-            💡 仅老板可见 · 想让 AI 写到这里？在{' '}
-            <Link href="/admin/finance/api-keys" className="underline">
-              管理 → 财务 API Key 管理
-            </Link>{' '}
-            创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
-            <Link href="/admin/finance/access" className="underline">
-              管理 → 财务访问授权
-            </Link>
-            。
-          </div>
-          <div className="border-t border-amber-200/60 pt-3 space-y-2">
-            <VaultIngestButton />
-            <CleanupTestsButton />
-            <CleanupVaultTestsButton />
-          </div>
-        </footer>
-      )}
-      {access.level === 'VIEWER' && (
-        <footer className="mt-10 rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
-          👁 你是只读账号。只能查看，不能修改。需要写权限请联系老板。
-        </footer>
-      )}
-    </main>
+    </>
   );
 }
 
-// ---- helpers ----
+// ===== Tab: 余额快照 =====
+function SnapshotsTab({
+  snapshotsByWallet,
+  totalSnapshotCount,
+  latestSnapshotMeta,
+}: {
+  snapshotsByWallet: Map<
+    string,
+    {
+      wallet: { id: string; label: string; chain: string };
+      tokens: Array<{ token: string; amount: { toString(): string }; asOf: Date }>;
+    }
+  >;
+  totalSnapshotCount: number;
+  latestSnapshotMeta: { asOf: Date } | null;
+}) {
+  return (
+    <section>
+      <SectionTitle>
+        钱包余额快照
+        {latestSnapshotMeta && (
+          <span className="ml-2 text-xs font-normal text-slate-400">
+            · 共 {totalSnapshotCount} 条 · 最近 {formatTime(latestSnapshotMeta.asOf)}
+          </span>
+        )}
+      </SectionTitle>
+      {snapshotsByWallet.size === 0 ? (
+        <EmptyHint
+          text={
+            totalSnapshotCount === 0
+              ? '暂无快照。Cron 每天 UTC 00:00（HK 8:00）自动跑，跑完会出现在这里。'
+              : '过去 36h 没新快照 —— cron 可能没正常跑，去 Vercel 查 Function Logs。'
+          }
+        />
+      ) : (
+        <ul className="space-y-2">
+          {Array.from(snapshotsByWallet.values()).map(({ wallet, tokens }) => (
+            <li
+              key={wallet.id}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+            >
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <Link
+                  href={`/finance/wallets/${wallet.id}`}
+                  className="min-w-0 truncate text-sm font-medium text-slate-800 hover:text-amber-700"
+                >
+                  {wallet.label}
+                </Link>
+                <span className="shrink-0 text-xs text-slate-400">
+                  {wallet.chain} · {formatTime(tokens[0].asOf)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                {tokens.map((t) => (
+                  <div
+                    key={t.token}
+                    className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-100"
+                  >
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                      {t.token}
+                    </div>
+                    <div className="mt-0.5 font-mono tabular-nums text-slate-900">
+                      {t.amount.toString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// ===== Tab: AI 活动流 =====
+function ActivityTab({
+  recentActivity,
+}: {
+  recentActivity: Array<{
+    id: string;
+    aiRole: string;
+    action: string;
+    errorMessage: string | null;
+    telegramSent: boolean;
+    vaultWritten: boolean;
+    dashboardWritten: boolean;
+    createdAt: Date;
+  }>;
+}) {
+  return (
+    <section>
+      <SectionTitle>AI 活动流（最近 {recentActivity.length} 条）</SectionTitle>
+      {recentActivity.length === 0 ? (
+        <EmptyHint text="暂无 AI 活动。等 5 个 AI 开始干活就会出现在这里。" />
+      ) : (
+        <ul className="divide-y divide-slate-200/60 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {recentActivity.map((log) => (
+            <li
+              key={log.id}
+              className="flex flex-col gap-1.5 px-3 py-2.5 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:px-4"
+            >
+              <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                <RoleBadge role={log.aiRole} />
+                <span className="min-w-0 break-words text-slate-700 sm:truncate">
+                  {log.action}
+                </span>
+                {log.errorMessage && (
+                  <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-rose-200">
+                    失败
+                  </span>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                <ChannelDots
+                  tg={log.telegramSent}
+                  vault={log.vaultWritten}
+                  db={log.dashboardWritten}
+                />
+                <time>{formatTime(log.createdAt)}</time>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// ===== helpers =====
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-500">{children}</h2>
+    <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
+      {children}
+    </h2>
   );
 }
 
@@ -395,12 +589,10 @@ function KpiCard({
   label,
   value,
   accent,
-  hint,
 }: {
   label: string;
   value: number;
   accent: 'rose' | 'amber' | 'emerald';
-  hint?: string;
 }) {
   const accentMap = {
     rose: 'from-rose-50 to-rose-100/40 ring-rose-200/60 text-rose-700',
@@ -408,12 +600,11 @@ function KpiCard({
     emerald: 'from-emerald-50 to-emerald-100/40 ring-emerald-200/60 text-emerald-700',
   } as const;
   return (
-    <div
-      className={`rounded-xl bg-gradient-to-br p-4 ring-1 ${accentMap[accent]}`}
-    >
-      <div className="text-xs font-medium uppercase tracking-wider opacity-80">{label}</div>
-      <div className="mt-1 text-3xl font-semibold tabular-nums">{value}</div>
-      {hint && <div className="mt-1 text-xs opacity-70">{hint}</div>}
+    <div className={`rounded-xl bg-gradient-to-br p-3 ring-1 sm:p-4 ${accentMap[accent]}`}>
+      <div className="text-[10px] font-medium uppercase tracking-wider opacity-80 sm:text-xs">
+        {label}
+      </div>
+      <div className="mt-0.5 text-2xl font-semibold tabular-nums sm:mt-1 sm:text-3xl">{value}</div>
     </div>
   );
 }
@@ -429,7 +620,7 @@ function RoleBadge({ role }: { role: string }) {
   const m = map[role] ?? { label: role, cls: 'bg-slate-50 text-slate-600 ring-slate-200' };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${m.cls}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${m.cls}`}
     >
       {m.label}
     </span>

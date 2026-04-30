@@ -62,7 +62,10 @@ body {
    top offset. Belt-and-suspenders against odd margin-collapse cases. */
 body > header:first-child { margin-top: 0; }
 
-/* Warm ambient gradient underneath all authenticated pages */
+/* Warm ambient gradient underneath all authenticated pages.
+   提到独立 GPU layer：fixed 全屏 radial-gradient 不加 will-change 时，每次 scroll
+   浏览器都要重绘整张光晕；GPU 在低端 / iOS Safari 上跟不上，就会"滚动条已动、内容
+   还没动"。translateZ(0) 强制 compositing layer，scroll 只做合成、不重绘。 */
 body::before {
   content: '';
   position: fixed; inset: 0;
@@ -72,6 +75,8 @@ body::before {
     radial-gradient(60vmax 45vmax at 12% -10%, rgba(212, 165, 116, 0.35), transparent 60%),
     radial-gradient(55vmax 45vmax at 90% 10%, rgba(232, 201, 143, 0.3), transparent 60%),
     radial-gradient(70vmax 50vmax at 50% 110%, rgba(185, 28, 63, 0.08), transparent 60%);
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* Noise overlay */

@@ -2,6 +2,8 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import Providers from '@/components/Providers';
 import Nav from '@/components/Nav';
+import { FONT_SCALE_ZOOM } from '@/lib/font-scale';
+import { getFontScale } from '@/lib/font-scale.server';
 
 export const metadata: Metadata = {
   title: {
@@ -13,12 +15,15 @@ export const metadata: Metadata = {
   // home-screen tile; Android uses the manifest's icon array.
   manifest: '/manifest.json',
   icons: {
+    // 浏览器 tab favicon —— 透明背景的纯 logo 在浏览器深/浅主题下都贴合
     icon: [
-      { url: '/logo.png', type: 'image/png', sizes: '512x512' },
       { url: '/logo.svg', type: 'image/svg+xml' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
-    shortcut: '/logo.png',
-    apple: [{ url: '/logo.png', sizes: '180x180', type: 'image/png' }],
+    shortcut: '/icon-512.png',
+    // iOS 主屏幕 / "添加到主屏幕" —— iOS 不支持透明 icon（会自动填白底），
+    // 必须用预带酒红渐变底的预渲染图，否则桌面图标会变成白底纯金色 logo
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   appleWebApp: {
     title: 'LTY 旭珑',
@@ -27,9 +32,8 @@ export const metadata: Metadata = {
     // the page under it. 'black-translucent' caused the nav to sit under the
     // time/battery and be untappable in PWA mode.
     statusBarStyle: 'default',
-    // iOS splash: single logo as a safe default. Replace with per-device
-    // 1125x2436 / 1170x2532 PNGs when the design team produces them.
-    startupImage: [{ url: '/logo.png' }],
+    // iOS splash: 用酒红底版本，保持品牌视觉一致
+    startupImage: [{ url: '/icon-512.png' }],
   },
 };
 
@@ -44,11 +48,14 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // 读 cookie 设全局 zoom —— 等比缩放整个文档（含硬编码 px），无 FOUC
+  const fontScale = getFontScale();
+  const zoom = FONT_SCALE_ZOOM[fontScale];
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" style={{ zoom }}>
       <body className="min-h-screen">
         <Providers>
-          <Nav />
+          <Nav fontScale={fontScale} />
           <main
             className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-6"
             style={{ paddingBottom: 'max(6rem, env(safe-area-inset-bottom))' }}

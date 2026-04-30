@@ -4,6 +4,8 @@ import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { FontScaler } from './FontScaler';
+import type { FontScale } from '@/lib/font-scale';
 
 // Top-level row kept to ~6 high-frequency items so labels never wrap.
 // Lower-frequency stuff lives behind "更多". Width budget is the killer:
@@ -46,7 +48,7 @@ const ADMIN_LINKS = [
 
 type Badges = { unreadAnnouncements: number; pendingApprovals: number; incomingReports: number };
 
-export default function Nav() {
+export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   const { data } = useSession();
   const user = data?.user;
   const pathname = usePathname();
@@ -119,7 +121,9 @@ export default function Nav() {
 
   return (
     <header
-      className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/75 backdrop-blur-xl"
+      // 移动端 sticky + backdrop-blur-xl 在 iOS Safari 每帧重算模糊，导致触摸滑动要刷几次才响应。
+      // 解法：移动端用更轻的 backdrop-blur（8px）+ 抬高 bg 不透明度（85%）补偿；桌面端保留原 frosted glass 效果。
+      className="sticky top-0 z-40 border-b border-slate-900/5 bg-white/85 backdrop-blur md:bg-white/75 md:backdrop-blur-xl"
       // PWA mode (added to iOS home screen) with statusBarStyle=black-translucent
       // lets content render under the status bar by default, so the nav ends up
       // behind the time/battery and is untappable. env(safe-area-inset-top) is
@@ -230,6 +234,7 @@ export default function Nav() {
 
         {/* Desktop user area */}
         <div className="hidden items-center gap-3 md:flex">
+          <FontScaler current={fontScale} />
           <Avatar name={user.name || user.email || '?'} />
           <div className="flex items-baseline gap-2 whitespace-nowrap text-sm">
             <span className="max-w-[120px] truncate font-medium text-slate-800">{user.name || user.email}</span>
@@ -245,19 +250,22 @@ export default function Nav() {
           </button>
         </div>
 
-        {/* Mobile toggle */}
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-label="菜单"
-          aria-expanded={open}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 transition hover:bg-amber-100/30 md:hidden"
-        >
-          {open ? (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 18L18 6M6 6l12 12" /></svg>
-          ) : (
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 7h16M4 12h16M4 17h16" /></svg>
-          )}
-        </button>
+        {/* Mobile：字体调节器 + 菜单切换并排，前者随时可改字号不用进抽屉 */}
+        <div className="flex items-center gap-1 md:hidden">
+          <FontScaler current={fontScale} />
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-label="菜单"
+            aria-expanded={open}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 transition hover:bg-amber-100/30"
+          >
+            {open ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 18L18 6M6 6l12 12" /></svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 7h16M4 12h16M4 17h16" /></svg>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}
