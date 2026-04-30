@@ -24,7 +24,10 @@ const schema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
-const ETHERSCAN_BASE = 'https://api.etherscan.io/api';
+// Etherscan V2（V1 已弃用，2026 强制迁 V2）：
+// 不同 chain 共用同 base path，chainid=1 = Ethereum mainnet
+const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
+const ETH_CHAIN_ID = '1';
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
 
   // 按 action 装 query
   const params = new URLSearchParams();
+  params.set('chainid', ETH_CHAIN_ID); // V2 必填
   params.set('apikey', apiKey);
   if (action === 'balance') {
     params.set('module', 'account');
