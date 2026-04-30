@@ -25,6 +25,7 @@ import {
   type InboxQueueJson,
 } from '@/lib/vault-client';
 import UploadButton from './upload-button';
+import IngestButton from './ingest-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -188,13 +189,24 @@ function RoleStrip({ dashboard }: { dashboard: DashboardJson | null }) {
 function UploadSection({ recentUploads }: { recentUploads: RecentUpload[] }) {
   return (
     <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div className="rounded-xl border border-violet-200/60 bg-violet-50/30 p-5">
-        <SectionTitle>上传文件到 vault</SectionTitle>
-        <p className="mb-3 text-xs text-slate-500">
-          手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
-          drudge 09:50 自动归档，或召唤管家立刻处理。
-        </p>
-        <UploadButton />
+      <div className="space-y-4">
+        <div className="rounded-xl border border-violet-200/60 bg-violet-50/30 p-5">
+          <SectionTitle>上传文件到 vault</SectionTitle>
+          <p className="mb-3 text-xs text-slate-500">
+            手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
+            drudge 09:50 自动归档，或召唤管家立刻处理。
+          </p>
+          <UploadButton />
+        </div>
+
+        <div className="rounded-xl border border-amber-200/60 bg-amber-50/30 p-5">
+          <SectionTitle>召唤管家 ingest</SectionTitle>
+          <p className="mb-3 text-xs text-slate-500">
+            一键让管家（Claude headless）读 _inbox 全部资料 → 一次性写 wiki/ + commit + push。
+            首次需 Mac 装 <code className="rounded bg-white px-1">npm install -g @anthropic-ai/claude-code</code> + 登录。
+          </p>
+          <IngestButton />
+        </div>
       </div>
 
       <div>
