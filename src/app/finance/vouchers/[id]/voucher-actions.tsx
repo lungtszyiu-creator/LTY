@@ -11,7 +11,16 @@ import { useState, useTransition } from 'react';
 
 type Status = 'AI_DRAFT' | 'BOSS_REVIEWING' | 'POSTED' | 'REJECTED' | 'VOIDED';
 
-export function VoucherActions({ voucherId, status }: { voucherId: string; status: Status }) {
+export function VoucherActions({
+  voucherId,
+  status,
+  isSuperAdmin = false,
+}: {
+  voucherId: string;
+  status: Status;
+  /** 仅总管理者（SUPER_ADMIN）能看到永久删除按钮，财务出纳设了 EDITOR 也不行 */
+  isSuperAdmin?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +30,8 @@ export function VoucherActions({ voucherId, status }: { voucherId: string; statu
 
   const canApproveOrReject = status === 'AI_DRAFT' || status === 'BOSS_REVIEWING';
   const canVoid = status === 'POSTED';
+  // 删除：POSTED 不可（要先 VOID 留痕），其它状态都可删
+  const canDelete = isSuperAdmin && status !== 'POSTED';
 
   async function call(body: object) {
     setError(null);
@@ -35,6 +46,21 @@ export function VoucherActions({ voucherId, status }: { voucherId: string; statu
       return false;
     }
     return true;
+  }
+
+  function onDelete() {
+    if (!confirm('永久删除这张凭证？\n\n该操作不可恢复，仅用于清理早期/无标记的测试残留数据。\n（已过账的凭证请先作废，留下审计痕迹后再删。）')) return;
+    startTransition(async () => {
+      setError(null);
+      const res = await fetch(`/api/finance/vouchers/${voucherId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.hint ?? j.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      router.push('/finance');
+      router.refresh();
+    });
   }
 
   function onApprove() {
@@ -75,7 +101,8 @@ export function VoucherActions({ voucherId, status }: { voucherId: string; statu
     });
   }
 
-  if (!canApproveOrReject && !canVoid) {
+  // 老板永久删按钮即便其他 action 都不能用也要露出（清理测试残留）
+  if (!canApproveOrReject && !canVoid && !canDelete) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-500">
         当前状态 <strong>{status}</strong> 不可再操作。
@@ -122,6 +149,17 @@ export function VoucherActions({ voucherId, status }: { voucherId: string; statu
             className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-200 disabled:opacity-50"
           >
             🗑 作废（VOIDED）
+          </button>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            className="ml-auto rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+            title="永久删除（仅总管理者，POSTED 凭证须先作废）"
+          >
+            🗑️ 永久删除
           </button>
         )}
       </div>

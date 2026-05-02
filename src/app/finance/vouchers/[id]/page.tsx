@@ -133,7 +133,11 @@ export default async function VoucherDetailPage({
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600">
             老板操作
           </h2>
-          <VoucherActions voucherId={voucher.id} status={voucher.status as never} />
+          <VoucherActions
+            voucherId={voucher.id}
+            status={voucher.status as never}
+            isSuperAdmin={access.isSuperAdmin}
+          />
         </section>
       )}
       {access.level === 'VIEWER' && (

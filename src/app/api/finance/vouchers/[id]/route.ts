@@ -1,13 +1,16 @@
 /**
  * 单张凭证 API
  *
- * GET   /api/finance/vouchers/[id]  — 详情
- * PATCH /api/finance/vouchers/[id]  — 老板审批：approve / reject / void
+ * GET    /api/finance/vouchers/[id]  — 详情
+ * PATCH  /api/finance/vouchers/[id]  — 老板审批：approve / reject / void
+ * DELETE /api/finance/vouchers/[id]  — 总管理者物理删除（仅清理早期/无标记的测试残留；
+ *                                       POSTED 不可删，必须先 VOID 留痕；不接 API Key）
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
+import { getSession } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
@@ -145,4 +148,51 @@ export async function PATCH(
     },
   });
   return NextResponse.json(updated);
+}
+
+// ---- DELETE：仅 SUPER_ADMIN 物理删除 ----
+//
+// Why：自动清理 button 用正则匹配 summary/txHash 关键词，识别不到没标 TEST
+// 的早期残留测试数据。给老板一个手动逐条删的入口，比扩匹配规则安全。
+// 边界：
+// - 仅 session 路径 + role === 'SUPER_ADMIN'，API Key 永远碰不到（含 FINANCE_ADMIN scope）
+// - POSTED 凭证不可删 → 强制走 VOID 留痕（VOIDED 之后才能再删）
+// - AiActivityLog 引用置 SET NULL（schema 已配），删 voucher 不阻塞历史日志
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 });
+  }
+  if (session.user.role !== 'SUPER_ADMIN') {
+    return NextResponse.json(
+      { error: 'SUPER_ADMIN_ONLY', hint: '仅总管理者可删凭证' },
+      { status: 403 },
+    );
+  }
+
+  const { id } = await params;
+  const voucher = await prisma.voucher.findUnique({ where: { id } });
+  if (!voucher) {
+    return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  }
+
+  if (voucher.status === 'POSTED') {
+    return NextResponse.json(
+      {
+        error: 'CANNOT_DELETE_POSTED',
+        status: voucher.status,
+        hint: '已过账（POSTED）凭证不可直接删除，请先作废（VOIDED）后再删，留下审计痕迹。',
+      },
+      { status: 409 },
+    );
+  }
+
+  await prisma.voucher.delete({ where: { id } });
+  return NextResponse.json({
+    ok: true,
+    deleted: { id, voucherNumber: voucher.voucherNumber, summary: voucher.summary, status: voucher.status },
+  });
 }

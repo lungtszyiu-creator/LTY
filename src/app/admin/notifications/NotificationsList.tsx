@@ -84,9 +84,11 @@ export default function NotificationsList({ initial }: { initial: Log[] }) {
               const meta = STATUS_META[l.status] ?? STATUS_META.FAILED;
               return (
                 <tr key={l.id} className="transition hover:bg-slate-50/60">
-                  <td className="px-5 py-3 text-slate-600">{new Date(l.createdAt).toLocaleString('zh-CN')}</td>
-                  <td className="px-5 py-3">{KIND_META[l.kind] ?? l.kind}</td>
-                  <td className="max-w-xs px-5 py-3">
+                  {/* 失败行因为状态列下方挂错误信息会变两行高，所有 td 顶对齐
+                      避免单行 cell（时间/类型/收件人/操作）落在 row 中点显得错位 */}
+                  <td className="px-5 py-3 align-top text-slate-600">{new Date(l.createdAt).toLocaleString('zh-CN')}</td>
+                  <td className="px-5 py-3 align-top">{KIND_META[l.kind] ?? l.kind}</td>
+                  <td className="max-w-xs px-5 py-3 align-top">
                     {l.taskId ? (
                       <Link href={`/tasks/${l.taskId}`} className="truncate text-slate-800 underline-offset-2 hover:underline">
                         {l.subject}
@@ -94,15 +96,20 @@ export default function NotificationsList({ initial }: { initial: Log[] }) {
                     ) : (
                       <span className="truncate text-slate-700">{l.subject}</span>
                     )}
-                    {l.error && <div className="mt-0.5 truncate text-xs text-rose-600">{l.error}</div>}
                   </td>
-                  <td className="px-5 py-3 text-slate-600">{l.recipients}</td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 align-top text-slate-600">{l.recipients}</td>
+                  <td className="px-5 py-3 align-top">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${meta.cls}`}>
                       {meta.label} {l.attempts > 1 && `· ${l.attempts} 次`}
                     </span>
+                    {/* 错误原因（如 Timeout）属状态域，挂在 chip 下方而非主题列下方 */}
+                    {l.error && (
+                      <div className="mt-1 max-w-[180px] truncate text-xs text-rose-600" title={l.error}>
+                        {l.error}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 py-3 align-top text-right">
                     {l.kind === 'TASK_PUBLISHED' && l.taskId && l.status !== 'SENT' && (
                       <button
                         onClick={() => resend(l)}
