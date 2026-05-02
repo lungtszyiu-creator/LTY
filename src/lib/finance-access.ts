@@ -31,10 +31,14 @@ export function financeAccessLevel(user: SessionUserMin | null | undefined): Fin
 /**
  * 服务端组件 / Page 用：要求至少 VIEWER 权限。
  * 不够 → 直接 redirect 到首页（不暴露页面存在）。
+ *
+ * 返回 isSuperAdmin 让 page 决定是否给"删除"等高危按钮显示
+ * （SUPER_ADMIN = 总管/老板本人；财务出纳设了 EDITOR 也不算）。
  */
 export async function requireFinanceView(): Promise<{
   userId: string;
   level: 'VIEWER' | 'EDITOR';
+  isSuperAdmin: boolean;
 }> {
   const session = await getSession();
   if (!session?.user) redirect('/login?next=/finance');
@@ -51,7 +55,11 @@ export async function requireFinanceView(): Promise<{
     // 不暴露页面存在 — 跳回任务首页（看起来像菜单根本没"财务"项）
     redirect('/dashboard');
   }
-  return { userId: dbUser.id, level: level as 'VIEWER' | 'EDITOR' };
+  return {
+    userId: dbUser.id,
+    level: level as 'VIEWER' | 'EDITOR',
+    isSuperAdmin: dbUser.role === 'SUPER_ADMIN',
+  };
 }
 
 /**

@@ -17,6 +17,7 @@ import { requireFinanceView } from '@/lib/finance-access';
 import { CleanupTestsButton } from './cleanup-tests-button';
 import { CleanupVaultTestsButton } from './cleanup-vault-tests-button';
 import { VaultIngestButton } from './vault-ingest-button';
+import { VoucherDeleteButton } from './voucher-delete-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,6 +142,7 @@ export default async function FinancePage({
             pendingVouchers={pendingVouchers}
             wallets={wallets}
             bankAccounts={bankAccounts}
+            isSuperAdmin={access.isSuperAdmin}
           />
         )}
         {tab === 'snapshots' && (
@@ -239,6 +241,7 @@ function OverviewTab({
   pendingVouchers,
   wallets,
   bankAccounts,
+  isSuperAdmin,
 }: {
   pendingVouchers: Array<{
     id: string;
@@ -265,6 +268,7 @@ function OverviewTab({
     accountNumber: string;
     currency: string;
   }>;
+  isSuperAdmin: boolean;
 }) {
   return (
     <>
@@ -283,13 +287,13 @@ function OverviewTab({
             {/* Mobile：卡片堆 —— 7 列表格在 375px 屏会横向溢出，卡片更易扫读 */}
             <ul className="space-y-2 md:hidden">
               {pendingVouchers.map((v) => (
-                <li key={v.id}>
+                <li key={v.id} className="relative rounded-xl border border-slate-200 bg-white">
                   <Link
                     href={`/finance/vouchers/${v.id}`}
-                    className="block rounded-xl border border-slate-200 bg-white p-3 transition active:bg-amber-50/40"
+                    className="block p-3 transition active:bg-amber-50/40"
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <div className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                      <div className="min-w-0 flex-1 truncate pr-2 text-sm font-medium text-slate-800">
                         {v.summary}
                       </div>
                       <div className="shrink-0 font-mono text-sm font-semibold tabular-nums text-slate-900">
@@ -309,9 +313,14 @@ function OverviewTab({
                       <span className="truncate">
                         {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
                       </span>
-                      <span className="shrink-0 rounded-md bg-rose-600 px-2 py-0.5 text-[11px] font-medium text-white">
-                        审核 →
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {isSuperAdmin && (
+                          <VoucherDeleteButton voucherId={v.id} summary={v.summary} size="sm" />
+                        )}
+                        <span className="rounded-md bg-rose-600 px-2 py-0.5 text-[11px] font-medium text-white">
+                          审核 →
+                        </span>
+                      </div>
                     </div>
                   </Link>
                 </li>
@@ -360,12 +369,17 @@ function OverviewTab({
                         {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap text-right">
-                        <Link
-                          href={`/finance/vouchers/${v.id}`}
-                          className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
-                        >
-                          审核 →
-                        </Link>
+                        <div className="inline-flex items-center gap-2">
+                          {isSuperAdmin && (
+                            <VoucherDeleteButton voucherId={v.id} summary={v.summary} size="sm" />
+                          )}
+                          <Link
+                            href={`/finance/vouchers/${v.id}`}
+                            className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
+                          >
+                            审核 →
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
