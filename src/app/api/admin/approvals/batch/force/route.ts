@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { adminForceDecide } from '@/lib/approvalRuntime';
 import { applyBalanceEffects } from '@/lib/approvalTerminal';
+import { applyFinanceHook } from '@/lib/approvalFinanceHook';
 import { notifyApprovalFinalised } from '@/lib/email';
 
 // Batch backend override — let the admin clear a backlog of in-progress
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
       if (data.decision === 'APPROVED') {
         await applyBalanceEffects(id).catch((e) => console.error('[approval] batch balance effects failed', id, e));
       }
+      await applyFinanceHook(id).catch((e) => console.error('[approval] batch finance hook failed', id, e));
       results.push({ id, ok: true });
 
       // Fire-and-forget per-instance notification. Keeps the response fast

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
 import { applyDecision } from '@/lib/approvalRuntime';
 import { applyBalanceEffects } from '@/lib/approvalTerminal';
+import { applyFinanceHook } from '@/lib/approvalFinanceHook';
 import { notifyApprovalPending, notifyApprovalFinalised } from '@/lib/email';
 
 const schema = z.object({
@@ -51,6 +52,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // a normal approval won't double-apply.
       if (result.status === 'APPROVED') {
         await applyBalanceEffects(params.id).catch((e) => console.error('[approval] balance effects failed', e));
+      }
+
+      // Finance-specific hook: APPROVED → write WAITING_PAYMENT + send TG notice;
+      // REJECTED → send TG notice. No-op for non-finance templates.
+      if (result.status === 'APPROVED' || result.status === 'REJECTED') {
+        await applyFinanceHook(params.id).catch((e) => console.error('[approval] finance hook failed', e));
       }
 
       // Notify initiator on terminal.
