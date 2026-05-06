@@ -520,8 +520,16 @@ model ApprovalInstance {
   attachments Attachment[]   @relation("ApprovalAttachments")
   vouchers    Voucher[]      @relation("VoucherApproval")
 
+  // 财务报销自动化（A1，2026-05-06）—— 仅 template.slug='finance-large-payment' 时使用
+  // 状态机：IN_PROGRESS → APPROVED+aiPaymentStatus=WAITING_PAYMENT → 付款凭证关联 → POSTED
+  aiPaymentStatus String? // null|WAITING_PAYMENT|POSTED
+  paymentProofs   String? // JSON array: [{type, hash?, txUrl?, amount, currency, recipient, txAt, attachedAt, voucherId?}]
+  tgAckMessageId  Int? // bridge 发审批挂载 ack 时记下，用于老板 reply"批"/"驳"反查
+
   @@index([initiatorId, status])
   @@index([status, submittedAt])
+  @@index([aiPaymentStatus, completedAt]) // CFO 催办用：查 WAITING_PAYMENT > 72h
+  @@index([tgAckMessageId]) // bridge reply 反查
 }
 
 // One row per (node, required-approver). For a multi-approver node in "ALL"

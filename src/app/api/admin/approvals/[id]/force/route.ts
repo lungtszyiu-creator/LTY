@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
 import { adminForceDecide } from '@/lib/approvalRuntime';
 import { applyBalanceEffects } from '@/lib/approvalTerminal';
+import { applyFinanceHook } from '@/lib/approvalFinanceHook';
 import { notifyApprovalFinalised } from '@/lib/email';
 
 // Admin backend: force-decide an in-progress approval from the management
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (result.status === 'APPROVED') {
       await applyBalanceEffects(params.id).catch((e) => console.error('[approval] balance effects failed', e));
+    }
+
+    if (result.status === 'APPROVED' || result.status === 'REJECTED') {
+      await applyFinanceHook(params.id).catch((e) => console.error('[approval] finance hook failed', e));
     }
 
     if (inst && (result.status === 'APPROVED' || result.status === 'REJECTED')) {
