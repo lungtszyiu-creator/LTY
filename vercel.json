@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/cron/wallet-monitor-tx",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 2 * * *"
     }
   ]
 }
