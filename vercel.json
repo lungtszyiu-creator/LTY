@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/wallet-balance-snapshot",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/wallet-monitor-tx",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
