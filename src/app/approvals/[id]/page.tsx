@@ -45,6 +45,12 @@ export default async function ApprovalInstancePage({
         include: { approver: { select: { id: true, name: true, email: true, image: true } } },
         orderBy: { createdAt: 'asc' },
       },
+      // 财务报销自动化（A1）：审批落账后由链上记账员 attach-payment-proof 创建的凭证
+      // 通过 Voucher.approvalInstanceId 反查，UI 在「付款 & 凭证」区块展示
+      vouchers: {
+        select: { id: true, voucherNumber: true, status: true, amount: true, currency: true, summary: true, date: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      },
     },
   });
   if (!inst) notFound();
@@ -83,6 +89,43 @@ export default async function ApprovalInstancePage({
     CANCELLED:   { label: '已撤销', cls: 'bg-slate-100 text-slate-500 ring-slate-200' },
   };
   const sm = statusMeta[inst.status] ?? statusMeta.IN_PROGRESS;
+
+  // 财务报销自动化（A1，2026-05-06）：仅 finance-large-payment 模板显示「付款 & 凭证」区块
+  const isFinance = inst.template.slug === 'finance-large-payment';
+  type PaymentProof = {
+    type?: string;
+    chain?: string;
+    hash?: string;
+    txUrl?: string;
+    from?: string;
+    to?: string;
+    amount?: number;
+    currency?: string;
+    txAt?: string;
+    attachedAt?: string;
+    voucherId?: string;
+  };
+  let paymentProofs: PaymentProof[] = [];
+  if (inst.paymentProofs) {
+    try {
+      const parsed = JSON.parse(inst.paymentProofs);
+      if (Array.isArray(parsed)) paymentProofs = parsed as PaymentProof[];
+    } catch {
+      paymentProofs = [];
+    }
+  }
+  const aiPaymentMeta: Record<string, { label: string; cls: string; hint: string }> = {
+    WAITING_PAYMENT: {
+      label: '⏳ 等待老板付款',
+      cls: 'bg-amber-50 text-amber-800 ring-amber-200',
+      hint: '审批已通过。请老板转账后在 TG 群里 reply 那条审批 ack 消息并附上链上 hash —— 链上记账员将自动验证金额与收款人后落账。',
+    },
+    POSTED: {
+      label: '✅ 已落账',
+      cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+      hint: '链上 hash 已校验通过，凭证已自动生成（见下方关联凭证）。',
+    },
+  };
 
   return (
     <div className="space-y-6 pt-6 sm:pt-8">
@@ -209,6 +252,102 @@ export default async function ApprovalInstancePage({
           ))}
         </div>
       </section>
+
+      {/* 财务报销自动化（A1）：付款 & 凭证。仅 finance-large-payment 模板显示。
+          状态机：null（旧数据 / 非财务）→ WAITING_PAYMENT（已批等付款）→ POSTED（已落账）。 */}
+      {isFinance && (inst.aiPaymentStatus || paymentProofs.length > 0 || inst.vouchers.length > 0) && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">💸 付款 &amp; 凭证</h2>
+
+          {inst.aiPaymentStatus && aiPaymentMeta[inst.aiPaymentStatus] && (
+            <div className={`card mb-3 p-4 ring-1 ${aiPaymentMeta[inst.aiPaymentStatus].cls}`}>
+              <div className="text-sm font-medium">{aiPaymentMeta[inst.aiPaymentStatus].label}</div>
+              <div className="mt-1 text-xs">{aiPaymentMeta[inst.aiPaymentStatus].hint}</div>
+              {inst.tgAckMessageId && (
+                <div className="mt-2 text-[11px] text-slate-500">
+                  TG ack message_id: <code>{inst.tgAckMessageId}</code> · reply 这条消息说"批"/"驳" 或附 hash 触发后续动作
+                </div>
+              )}
+            </div>
+          )}
+
+          {paymentProofs.length > 0 && (
+            <div className="card mb-3 overflow-hidden">
+              <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">
+                付款凭证（{paymentProofs.length}）
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {paymentProofs.map((p, i) => (
+                  <li key={i} className="px-4 py-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200">
+                        {p.type === 'hash' ? '🔗 链上' : p.type === 'screenshot' ? '🏦 银行截图' : (p.type ?? '?')}
+                      </span>
+                      {p.chain && <span className="text-slate-500">{p.chain}</span>}
+                      {p.amount != null && p.currency && (
+                        <span className="font-semibold text-slate-800">{p.amount} {p.currency}</span>
+                      )}
+                      {p.txAt && <span className="text-slate-500">{fmt(new Date(p.txAt))}</span>}
+                    </div>
+                    {p.hash && (
+                      <div className="mt-1.5 break-all">
+                        <span className="text-slate-400">hash: </span>
+                        {p.txUrl ? (
+                          <a className="text-sky-700 hover:underline" href={p.txUrl} target="_blank" rel="noreferrer">
+                            <code>{p.hash}</code>
+                          </a>
+                        ) : (
+                          <code>{p.hash}</code>
+                        )}
+                      </div>
+                    )}
+                    {(p.from || p.to) && (
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        {p.from && <span>from <code>{p.from.slice(0, 6)}...{p.from.slice(-4)}</code></span>}
+                        {p.from && p.to && <span> → </span>}
+                        {p.to && <span>to <code>{p.to.slice(0, 6)}...{p.to.slice(-4)}</code></span>}
+                      </div>
+                    )}
+                    {p.voucherId && (
+                      <div className="mt-1 text-[11px]">
+                        <span className="text-slate-400">关联凭证: </span>
+                        <Link href={`/finance/vouchers/${p.voucherId}`} className="text-sky-700 hover:underline">
+                          <code>{p.voucherId.slice(0, 8)}...</code>
+                        </Link>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {inst.vouchers.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">
+                关联凭证（{inst.vouchers.length}）
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {inst.vouchers.map((v) => (
+                  <li key={v.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
+                    <Link href={`/finance/vouchers/${v.id}`} className="font-medium text-sky-700 hover:underline">
+                      {v.voucherNumber ?? v.id.slice(0, 8)}
+                    </Link>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200">
+                      {v.status}
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      {String(v.amount)} {v.currency}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-slate-500">{v.summary}</span>
+                    <span className="text-slate-400">{fmt(v.date)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Timeline by node */}
       <section>
