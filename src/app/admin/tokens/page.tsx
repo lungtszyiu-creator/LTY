@@ -23,15 +23,28 @@ import {
   callCountByRange,
   topEmployeesByRange,
   modelBreakdownByRange,
+  type RangeKey,
 } from '@/lib/budget';
 import { getCompanyDailyBudgetHkd } from '@/lib/pricing';
+import { HistoricalSection } from './_components/HistoricalSection';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TokensPage() {
+const VALID_RANGES: RangeKey[] = ['today', '7d', '30d', 'month', 'year'];
+
+export default async function TokensPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   const session = await getSession();
   if (!session?.user) redirect('/login');
   if (session.user.role !== 'SUPER_ADMIN') redirect('/dashboard');
+
+  const sp = await searchParams;
+  const range: RangeKey = (VALID_RANGES as string[]).includes(sp.range ?? '')
+    ? (sp.range as RangeKey)
+    : 'today';
 
   const todayStart = startOfTodayHk();
   const todayEnd = endOfTodayHk();
@@ -76,11 +89,11 @@ export default async function TokensPage() {
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Token 监控</h1>
           <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200">
-            Step 2 · 今日 hero
+            Step 3 · 历史 + 趋势图
           </span>
         </div>
         <span className="text-xs text-slate-400">
-          时区 HK · 历史 / 趋势图 / 撞顶暂停 后续 Step 上线
+          时区 HK · 撞顶暂停 / 解锁审批 留 Step 5
         </span>
       </header>
 
@@ -133,9 +146,9 @@ export default async function TokensPage() {
         <ModelBreakdownCard rows={modelBreakdown} todaySpend={todaySpend} />
       </section>
 
-      {/* 空状态指引 */}
+      {/* 空状态指引 — 仅当今日 0 调用时显示在 hero 下方；历史区还是有意义 */}
       {todayCalls === 0 && pausedEmployees.length === 0 && (
-        <section className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-8 text-center text-sm text-slate-500">
+        <section className="mb-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-6 text-center text-sm text-slate-500">
           <div className="text-2xl">📡</div>
           <p className="mt-2">今日 0 次 AI 调用 — 等 AI 员工开始上报 token 用量。</p>
           <p className="mt-1 text-xs text-slate-400">
@@ -144,6 +157,9 @@ export default async function TokensPage() {
           </p>
         </section>
       )}
+
+      {/* Step 3: 历史范围 + 趋势图 + 每日明细 */}
+      <HistoricalSection range={range} />
     </div>
   );
 }
