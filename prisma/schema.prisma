@@ -141,6 +141,14 @@ model User {
   adminItTicketsHandled    AdminItTicket[]           @relation("AdminItTicketHandler")
   adminEmergencyDrills     AdminEmergencyDrill[]     @relation("AdminEmergencyDrillConductor")
   adminInspections         AdminInspection[]         @relation("AdminInspectionInspector")
+
+  // LTY 法务部反向关系
+  ltyLegalRequestsCreated  LtyLegalRequest[] @relation("LtyLegalRequestRequester")
+  ltyLegalRequestsAssigned LtyLegalRequest[] @relation("LtyLegalRequestAssignee")
+
+  // MC 法务部反向关系（物理隔离 — MC Markets 数据红线，绝不与 LTY 共表）
+  mcLegalRequestsCreated  McLegalRequest[] @relation("McLegalRequestRequester")
+  mcLegalRequestsAssigned McLegalRequest[] @relation("McLegalRequestAssignee")
 }
 
 // Audit trail for every change to a user's leave balances. Each entry is one
@@ -1188,4 +1196,68 @@ model AdminInspection {
   updatedAt      DateTime @updatedAt
 
   @@index([month, inspectionType])
+}
+
+// =====================================================
+// 法务部 · LTY 自家
+// =====================================================
+//
+// 跟 MC 法务部 schema 完全镜像，但物理隔离两套表 ——
+// MC Markets 数据红线：绝不与 LTY 自家数据共表/混库。
+//
+// 字段灵感来自 dist-two-beta-41.vercel.app（旭珑法务合规管理看板）：
+// 需求 = 业务部门发起的法务工单，要 LTY 法务团队处理。
+// PR D 范围只做 Request CRUD；服务目录 / 通知 / AI 问答留 PR E。
+
+model LtyLegalRequest {
+  id             String    @id @default(cuid())
+  title          String
+  description    String?
+  category       String? // "CONTRACT_REVIEW" | "IP" | "COMPLIANCE" | "DISPUTE" | "OTHER"
+  priority       String    @default("NORMAL") // "LOW" | "NORMAL" | "HIGH" | "URGENT"
+  status         String    @default("OPEN") // "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CANCELLED"
+  requesterId    String
+  requester      User      @relation("LtyLegalRequestRequester", fields: [requesterId], references: [id])
+  assigneeId     String?
+  assignee       User?     @relation("LtyLegalRequestAssignee", fields: [assigneeId], references: [id])
+  resolvedAt     DateTime?
+  resolutionNote String?
+  vaultPath      String? // GitHub vault 路径
+  notes          String?
+  createdByAi    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, priority])
+  @@index([requesterId])
+  @@index([assigneeId])
+}
+
+// =====================================================
+// 法务部 · MC Markets 外包业务（物理隔离）
+// =====================================================
+
+model McLegalRequest {
+  id             String    @id @default(cuid())
+  title          String
+  description    String?
+  category       String?
+  priority       String    @default("NORMAL")
+  status         String    @default("OPEN")
+  requesterId    String
+  requester      User      @relation("McLegalRequestRequester", fields: [requesterId], references: [id])
+  assigneeId     String?
+  assignee       User?     @relation("McLegalRequestAssignee", fields: [assigneeId], references: [id])
+  resolvedAt     DateTime?
+  resolutionNote String?
+  // 注意：vaultPath 不与 LTY vault 共享 —— MC Markets 数据走单独 vault 通道
+  vaultPath      String?
+  notes          String?
+  createdByAi    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, priority])
+  @@index([requesterId])
+  @@index([assigneeId])
 }
