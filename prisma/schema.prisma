@@ -819,11 +819,49 @@ model AiEmployee {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
+  // 反向：所有 token 调用历史
+  tokenUsages  TokenUsage[]
+
   @@index([active, paused])
   @@index([deptSlug])
   @@index([lastActiveAt])
   @@index([isSupervisor])
   @@index([reportsToId])
+}
+
+// ==========================================================================
+// AI Token 监控 — Step 2
+// ==========================================================================
+//
+// 任何 AI 员工调 LLM 后回传 token 用量，**看板服务端自己算成本**（不信任
+// AI 自报金额）。一行 = 一次 API 调用记录，永久留痕。
+//
+// 写路径：POST /api/v1/token-usage（X-Api-Key 鉴权 → apiKey → AiEmployee）
+//   1. 算 costHkd = pricing[model] × tokens × HKD_USD_RATE
+//   2. 写本表
+//   3. 顺手 update AiEmployee.lastActiveAt = now()
+//   4. Step 5 加：累加员工今日已花，撞顶 dailyLimitHkd → paused=true
+//
+// 读路径（看板）：按 createdAt 范围聚合 — 公司日预算进度 / 周期总花 /
+// Top 员工 / 模型分布 / 趋势图。
+//
+// 金额一律 Decimal 防精度丢失（JS Number 在 0.1+0.2≠0.3 的世界里花钱要严谨）。
+model TokenUsage {
+  id           String     @id @default(cuid())
+  employee     AiEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  model        String     // "claude-sonnet-4-6" / "gpt-5" / "gpt-4o" / etc
+  inputTokens  Int
+  outputTokens Int
+  // 服务端 computeCostHkd() 算出来的金额（HKD）
+  costHkd      Decimal    @db.Decimal(12, 6)
+  // 自由附加字段：{ cardId, taskType, vaultPath, ... }
+  meta         Json?
+  createdAt    DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([employeeId, createdAt])
+  @@index([model])
 }
 
 // ---- 财务主数据：钱包 ----

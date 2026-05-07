@@ -42,6 +42,7 @@ const ADMIN_LINKS = [
   { href: '/admin/users',                label: '用户管理' },
   { href: '/admin/finance/access',       label: '财务访问授权' },
   { href: '/employees',                  label: 'AI 员工档案' },
+  { href: '/admin/tokens',               label: 'AI Token 监控' },
   { href: '/admin/api-keys',             label: 'API Key 管理（全部门）' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
@@ -156,8 +157,10 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   // /admin/api-keys 总管理仅 SUPER_ADMIN（避免跨部门越权 —— 部门 LEAD 应该
   // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
+  // /admin/tokens 公司日预算敏感，也仅 SUPER_ADMIN。
+  const SUPER_ONLY_LINKS = new Set(['/admin/api-keys', '/admin/tokens']);
   const visibleAdminLinks = ADMIN_LINKS.filter(
-    (l) => l.href !== '/admin/api-keys' || isSuper,
+    (l) => !SUPER_ONLY_LINKS.has(l.href) || isSuper,
   );
   const adminActive = visibleAdminLinks.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
