@@ -41,7 +41,7 @@ const ADMIN_LINKS = [
   { href: '/admin/penalties',            label: '扣罚登记' },
   { href: '/admin/users',                label: '用户管理' },
   { href: '/admin/finance/access',       label: '财务访问授权' },
-  { href: '/admin/finance/api-keys',     label: '财务 API Key 管理' },
+  { href: '/admin/api-keys',             label: 'API Key 管理（全部门）' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
 ];

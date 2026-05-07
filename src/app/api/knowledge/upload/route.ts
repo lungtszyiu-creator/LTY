@@ -38,8 +38,10 @@ export async function POST(request: Request): Promise<NextResponse> {
           where: { id: session.user.id },
           select: { id: true, role: true, active: true },
         });
-        if (!dbUser?.active || dbUser.role !== 'SUPER_ADMIN') {
-          throw new Error('FORBIDDEN: 仅 SUPER_ADMIN 可上传');
+        // 老板要求：所有 active 员工都可上传文档（PendingUpload）。
+        // 召唤管家（IngestRequest）仍仅 SUPER_ADMIN，那道闸在 /api/knowledge/ingest。
+        if (!dbUser?.active) {
+          throw new Error('FORBIDDEN: 账号未激活');
         }
 
         // 解析前端 payload（含原始 filename）

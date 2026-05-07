@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { LEGAL_DEPT_META, type LegalRequestRow } from '@/lib/legal-shared';
 import { LegalRequestList } from '@/components/legal/LegalRequestList';
+import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,15 @@ export default async function McLegalPage({
         {tab === 'requests' && <LegalRequestList requests={rows} deptSlug={META.slug} canEdit={canEdit} />}
         {tab !== 'requests' && <StubTab tabKey={tab} />}
       </div>
+
+      {ctx.isSuperAdmin && (
+        <DeptApiKeysCard
+          deptName="MC 法务部（隔离）"
+          scopePrefix="MC_LEGAL_"
+          presetForGenerate="MC_LEGAL_AI:legal_clerk"
+          accent="purple"
+        />
+      )}
     </div>
   );
 }
