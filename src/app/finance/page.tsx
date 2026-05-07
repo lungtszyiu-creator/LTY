@@ -143,10 +143,10 @@ export default async function FinancePage({
           accent="rose"
         />
         <SubPageCard
-          href="/finance/monthly-reports"
+          href="/finance/reports"
           emoji="📅"
-          label="月报"
-          hint="每月一次"
+          label="财务报告"
+          hint="月 / 季 / 年 / 运营"
           accent="amber"
         />
         <SubPageCard
