@@ -48,6 +48,8 @@ const ADMIN_LINKS = [
 
 type Badges = { unreadAnnouncements: number; pendingApprovals: number; incomingReports: number };
 
+type DeptListItem = { id: string; name: string; slug: string; description: string | null };
+
 export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   const { data } = useSession();
   const user = data?.user;
@@ -55,11 +57,29 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   const [open, setOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [departments, setDepartments] = useState<DeptListItem[]>([]);
   const [badges, setBadges] = useState<Badges>({ unreadAnnouncements: 0, pendingApprovals: 0, incomingReports: 0 });
   const adminRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
+  const deptRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setAdminOpen(false); setMoreOpen(false); setDeptOpen(false); }, [pathname]);
+
+  // 拉用户可访问的部门 —— SUPER_ADMIN 全部，其他按 DepartmentMembership
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/me/departments', { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (alive && Array.isArray(j.departments)) setDepartments(j.departments);
+      } catch { /* nav loads lazily, ignore */ }
+    })();
+    return () => { alive = false; };
+  }, [user]);
 
   // Body scroll lock while mobile drawer is open ——
   // 即使 drawer 自己 overflow-y-auto，背景的 body 仍可被触摸滚动，
@@ -108,12 +128,13 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
     function onDoc(e: MouseEvent) {
       if (!adminRef.current?.contains(e.target as Node)) setAdminOpen(false);
       if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
+      if (!deptRef.current?.contains(e.target as Node)) setDeptOpen(false);
     }
-    if (adminOpen || moreOpen) {
+    if (adminOpen || moreOpen || deptOpen) {
       document.addEventListener('mousedown', onDoc);
       return () => document.removeEventListener('mousedown', onDoc);
     }
-  }, [adminOpen, moreOpen]);
+  }, [adminOpen, moreOpen, deptOpen]);
 
   if (!user) return null;
 
@@ -134,6 +155,7 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
+  const deptActive = !!pathname?.startsWith('/dept/');
 
   return (
     <header
@@ -168,6 +190,50 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
               </NavLink>
             );
           })}
+          {departments.length > 0 && (
+            <div ref={deptRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDeptOpen((v) => !v)}
+                aria-expanded={deptOpen}
+                className={`relative inline-flex items-center gap-0.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition ${
+                  deptActive
+                    ? 'text-amber-50 shadow-[0_6px_16px_-6px_rgba(139,30,42,0.55),inset_0_1px_0_rgba(245,230,200,0.3)]'
+                    : 'text-slate-600 hover:bg-amber-100/30 hover:text-slate-900'
+                }`}
+                style={deptActive ? { background: 'linear-gradient(135deg, #6b1028 0%, #3a0a14 55%, #1a0f0a 100%)' } : undefined}
+              >
+                部门
+                <svg className={`h-3 w-3 transition ${deptOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {deptOpen && (
+                <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur-xl rise">
+                  <ul className="py-1">
+                    {departments.map((d) => {
+                      const href = `/dept/${d.slug}`;
+                      const active = pathname === href || pathname?.startsWith(`${href}/`);
+                      return (
+                        <li key={d.slug}>
+                          <Link
+                            href={href}
+                            onClick={() => setDeptOpen(false)}
+                            className={`flex flex-col gap-0.5 px-4 py-2 text-sm transition ${
+                              active ? 'bg-amber-50 text-amber-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="font-medium">{d.name}</span>
+                            {d.description && (
+                              <span className="text-[11px] text-slate-400">{d.description}</span>
+                            )}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <div ref={moreRef} className="relative">
             <button
               type="button"
@@ -304,6 +370,19 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
                   <MobileLink key={l.href} href={l.href} active={pathname === l.href} badge={badge}>{l.label}</MobileLink>
                 );
               })}
+              {departments.length > 0 && (
+                <>
+                  <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">部门</li>
+                  {departments.map((d) => {
+                    const href = `/dept/${d.slug}`;
+                    return (
+                      <MobileLink key={d.slug} href={href} active={pathname === href || (pathname?.startsWith(`${href}/`) ?? false)}>
+                        {d.name}
+                      </MobileLink>
+                    );
+                  })}
+                </>
+              )}
               <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">更多</li>
               {MORE_LINKS.map((l) => (
                 <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
