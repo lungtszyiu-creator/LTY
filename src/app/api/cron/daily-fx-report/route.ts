@@ -48,10 +48,6 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         workflow_id: workflowId,
         parameters: { [inputParam]: PROMPT },
-        // Coze async mode：workflow 立刻返回 execute_id 异步执行，
-        // 避免 Vercel 函数等 forex_lookout 拉多平台 API 超 60s
-        // workflow 内部跑完后用 send_to_telegram 等 plugin 自己分发结果
-        is_async: true,
       }),
     });
     const j = (await res.json()) as { code?: number; data?: unknown; msg?: string; execute_id?: string };

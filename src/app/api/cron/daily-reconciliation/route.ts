@@ -51,9 +51,6 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         workflow_id: workflowId,
         parameters: { [inputParam]: PROMPT },
-        // Coze async mode：workflow 立刻返回 execute_id 异步执行，
-        // 避免 Vercel 函数等 reconciler 拉多表数据 + AI 分析超 60s
-        is_async: true,
       }),
     });
     const j = (await res.json()) as { code?: number; data?: unknown; msg?: string; execute_id?: string };
