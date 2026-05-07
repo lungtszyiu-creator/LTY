@@ -69,9 +69,15 @@ const SCOPE_PRESETS: ScopePreset[] = [
   { group: '🔒 MC 法务部（隔离）', value: 'MC_LEGAL_ADMIN', label: '👑 MC 法务全权', desc: 'MC 法务全读写（慎发，红线）', danger: true },
   { group: '🔒 MC 法务部（隔离）', value: 'MC_LEGAL_READONLY', label: 'MC 法务只读', desc: '看板被动展示用' },
 
-  // ====== HR / 知识管理 / AI 部 占位（PR E/F 接入后启用）======
-  { group: '👥 人事部（v1.1）', value: 'HR_AI:hr_clerk', label: '人事工单（v1.1）', desc: '招聘 / 考勤 / 薪资' },
-  { group: '👥 人事部（v1.1）', value: 'HR_ADMIN', label: '👑 人事全权', desc: '慎发', danger: true },
+  // ====== 人事部（PR E 嵌入）======
+  { group: '👥 人事部', value: 'HR_AI:hr_clerk', label: '人事管家', desc: '写候选人 / 员工档案 / 试用期监控' },
+  { group: '👥 人事部', value: 'HR_ADMIN', label: '👑 人事全权', desc: '人事部全读写（慎发）', danger: true },
+  { group: '👥 人事部', value: 'HR_READONLY', label: '人事只读', desc: '看板被动展示用' },
+
+  // ====== 财务出纳（PR E 嵌入）======
+  { group: '💼 财务出纳', value: 'CASHIER_AI:cashier_clerk', label: '出纳助手', desc: '快速录入 / 报销 / 对账（v1.1 接入后可写）' },
+  { group: '💼 财务出纳', value: 'CASHIER_ADMIN', label: '👑 出纳全权', desc: '出纳全读写（慎发）', danger: true },
+  { group: '💼 财务出纳', value: 'CASHIER_READONLY', label: '出纳只读', desc: '看板被动展示用' },
   { group: '📚 知识管理部', value: 'KNOWLEDGE_AI:curator', label: '维基管家', desc: 'ingest / 写 wiki' },
   { group: '📚 知识管理部', value: 'KNOWLEDGE_AI:scribe', label: '仓库员', desc: 'raw 归档' },
   { group: '📚 知识管理部', value: 'KNOWLEDGE_AI:inspector', label: '审查员', desc: '断链 / 孤儿页扫描' },
