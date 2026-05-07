@@ -549,3 +549,54 @@ body::before {
   user-select: none;
   white-space: nowrap;
 }
+
+/* ---- Markdown 渲染（react-markdown 用）---- */
+.md-render { line-height: 1.7; }
+.md-render > * + * { margin-top: 0.75rem; }
+.md-render h1 { font-size: 1.875rem; font-weight: 700; margin-top: 1.75rem; }
+.md-render h2 { font-size: 1.5rem;   font-weight: 700; margin-top: 1.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
+.md-render h3 { font-size: 1.25rem;  font-weight: 600; margin-top: 1.25rem; }
+.md-render h4 { font-size: 1.0625rem; font-weight: 600; margin-top: 1rem; }
+.md-render blockquote {
+  border-left: 3px solid #d4d4d8;
+  padding-left: 1rem;
+  color: #64748b;
+  font-style: italic;
+}
+.md-render code {
+  background: #f1f5f9;
+  padding: 0.125rem 0.35rem;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.md-render pre {
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 0.9rem 1.1rem;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
+}
+.md-render pre code { background: transparent; padding: 0; color: inherit; }
+.md-render ul, .md-render ol { padding-left: 1.4rem; }
+.md-render ul { list-style: disc; }
+.md-render ol { list-style: decimal; }
+.md-render li + li { margin-top: 0.25rem; }
+.md-render a { color: #4f46e5; text-decoration: underline; text-underline-offset: 2px; }
+.md-render hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1.5rem 0; }
+.md-render table {
+  border-collapse: collapse; width: 100%;
+  margin: 0.75rem 0;
+  font-size: 0.9em;
+}
+.md-render th, .md-render td {
+  border: 1px solid #e2e8f0;
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.md-render th { background: #f8fafc; font-weight: 600; }
+.md-render strong { font-weight: 600; }
+.md-render input[type="checkbox"] { margin-right: 0.5rem; }
