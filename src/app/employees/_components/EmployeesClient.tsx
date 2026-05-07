@@ -1,17 +1,23 @@
 'use client';
 
 /**
- * AI 员工档案 client UI — Step 1
+ * AI 员工档案 client UI
  *
- * 桌面：表格（姓名/角色/部门/层级/日额度/状态/最近活跃/操作）
+ * 桌面：表格（姓名/角色/部门/层级/日额度/隶属上司/状态/最近活跃/操作）
  * 移动：卡片堆，每张卡片含同样信息 + 操作按钮
  *
  * 操作：
- *   - ✏️ 编辑（弹模态框）
+ *   - ✏️ 编辑（弹模态框，含 isSupervisor 勾选 + 隶属上司下拉）
+ *   - 👑 设为上司 / 取消上司（金色按钮，一键切 isSupervisor）
  *   - 🔌 停用 / 启用（toggle active）
  *   - 🗑 删除（仅 SUPER_ADMIN）
  *
- * Step 1 不含 isSupervisor / reportsToId 操作（schema 已放，Step 4 暴露 UI）。
+ * 上司池机制：
+ *   - 「隶属上司」下拉只列 isSupervisor=true && active 的员工
+ *   - 上司池空时下拉显示提示「先去某人那里点设为上司」
+ *   - 取消某员工的上司身份时如果有下属：confirm 弹框
+ *     「他还带 N 个下属，取消后会清空他们的隶属，确定？」
+ *     后端 PATCH 会自动 SetNull 所有下属的 reportsToId
  *
  * 实时状态：
  *   running  < 5 min   绿
@@ -36,6 +42,9 @@ export type EmployeeRow = {
   lastActiveAt: string | null;
   isSupervisor: boolean;
   reportsToId: string | null;
+  // Step 4: 关联上司名 + 下属计数（page.tsx 已 join 好）
+  reportsToName: string | null;
+  reportsCount: number;
   apiKey: {
     id: string;
     keyPrefix: string;
@@ -121,9 +130,42 @@ export function EmployeesClient({
     startTransition(async () => {
       const r = await fetch(`/api/employees/${row.id}`, { method: 'DELETE' });
       if (r.ok) await refresh();
-      else setError(`删除失败：${(await r.json().catch(() => ({}))).error ?? r.statusText}`);
+      else {
+        const j = await r.json().catch(() => ({}));
+        setError(`删除失败：${j.hint ?? j.error ?? r.statusText}`);
+      }
     });
   }
+
+  /**
+   * 一键切 isSupervisor。从 true → false 时如果有下属，先 confirm 提示
+   * 「他还带 N 个下属，取消后会清空他们的隶属」。后端 PATCH 自动 SetNull。
+   */
+  function toggleSupervisor(row: EmployeeRow) {
+    if (row.isSupervisor && row.reportsCount > 0) {
+      const ok = confirm(
+        `${row.name} 还带 ${row.reportsCount} 个下属。\n` +
+          `取消上司身份后，他们的"隶属上司"会自动清空。继续吗？`,
+      );
+      if (!ok) return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await fetch(`/api/employees/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isSupervisor: !row.isSupervisor }),
+      });
+      if (r.ok) await refresh();
+      else {
+        const j = await r.json().catch(() => ({}));
+        setError(`切换上司身份失败：${j.hint ?? j.error ?? r.statusText}`);
+      }
+    });
+  }
+
+  // 上司池：active && isSupervisor → 编辑模态框「隶属上司」下拉用
+  const supervisorPool = rows.filter((r) => r.isSupervisor && r.active);
 
   return (
     <>
@@ -136,7 +178,8 @@ export function EmployeesClient({
       {/* 工具条 */}
       <div className="mb-4 flex items-center justify-between gap-2">
         <span className="text-xs text-slate-500">
-          共 {rows.length} 个 AI 员工 · 在用 {rows.filter((r) => r.active).length}
+          共 {rows.length} 个 AI 员工 · 在用 {rows.filter((r) => r.active).length} ·{' '}
+          <span className="text-amber-700">上司 {supervisorPool.length}</span>
         </span>
         <button
           type="button"
@@ -147,9 +190,17 @@ export function EmployeesClient({
         </button>
       </div>
 
+      {/* 上司池为空时引导提示 */}
+      {supervisorPool.length === 0 && rows.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-200/60 bg-amber-50/40 px-3 py-2 text-[11px] text-amber-900">
+          💡 还没有员工被标为上司 — 编辑模态框里的「隶属上司」下拉会是空。
+          先在某个员工的「👑 设为上司」按钮点一下，他就会进入上司池供其他员工挂靠。
+        </div>
+      )}
+
       {/* 桌面表格 */}
       <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-2 text-left">姓名</th>
@@ -157,8 +208,8 @@ export function EmployeesClient({
               <th className="px-4 py-2 text-left">部门</th>
               <th className="px-4 py-2 text-left">层级</th>
               <th className="px-4 py-2 text-right">日额度 HKD</th>
+              <th className="px-4 py-2 text-left">隶属上司</th>
               <th className="px-4 py-2 text-left">状态</th>
-              <th className="px-4 py-2 text-left">API Key</th>
               <th className="px-4 py-2 text-left">最近活跃</th>
               <th className="px-4 py-2 text-right">操作</th>
             </tr>
@@ -196,29 +247,55 @@ export function EmployeesClient({
                   <td className="px-4 py-2 align-top text-right font-mono tabular-nums text-slate-700">
                     {row.dailyLimitHkd.toLocaleString('zh-HK', { maximumFractionDigits: 2 })}
                   </td>
+                  {/* 隶属上司列（Step 4） */}
+                  <td className="px-4 py-2 align-top">
+                    {row.reportsToName ? (
+                      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 ring-1 ring-sky-200">
+                        ↑ {row.reportsToName}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-300">—</span>
+                    )}
+                    {row.isSupervisor && row.reportsCount > 0 && (
+                      <div className="mt-0.5 text-[10px] text-amber-700">
+                        带 {row.reportsCount} 下属
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-2 align-top whitespace-nowrap">
                     <StatusChip active={row.active} paused={row.paused} />
                   </td>
-                  <td className="px-4 py-2 align-top">
-                    {row.apiKey ? (
-                      <span className="font-mono text-[11px] text-slate-500">
-                        {row.apiKey.keyPrefix}…
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">无</span>
-                    )}
-                  </td>
                   <td className="px-4 py-2 align-top text-xs text-slate-500">
                     {row.lastActiveAt ? formatTimeAgo(row.lastActiveAt) : '从未'}
+                    {row.apiKey && (
+                      <div className="mt-0.5 font-mono text-[10px] text-slate-300">
+                        {row.apiKey.keyPrefix}…
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2 align-top text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
                       <button
                         type="button"
                         onClick={() => setEditTarget(row)}
                         className="text-xs text-sky-700 hover:underline"
                       >
                         ✏️ 编辑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleSupervisor(row)}
+                        disabled={pending}
+                        className={`text-xs hover:underline disabled:opacity-50 ${
+                          row.isSupervisor ? 'text-slate-500' : 'text-amber-700'
+                        }`}
+                        title={
+                          row.isSupervisor
+                            ? '取消上司身份（下属隶属会被自动清空）'
+                            : '设为上司，加入「隶属上司」下拉的可选池'
+                        }
+                      >
+                        👑 {row.isSupervisor ? '取消上司' : '设为上司'}
                       </button>
                       <button
                         type="button"
@@ -282,6 +359,14 @@ export function EmployeesClient({
                     HKD {row.dailyLimitHkd.toLocaleString('zh-HK')}
                   </span>
                 </span>
+                {row.reportsToName && (
+                  <span className="inline-flex items-center rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700 ring-1 ring-sky-200">
+                    ↑ {row.reportsToName}
+                  </span>
+                )}
+                {row.isSupervisor && row.reportsCount > 0 && (
+                  <span className="text-amber-700">带 {row.reportsCount} 下属</span>
+                )}
                 {row.apiKey && (
                   <span className="font-mono text-slate-400">{row.apiKey.keyPrefix}…</span>
                 )}
@@ -289,19 +374,31 @@ export function EmployeesClient({
                   {row.lastActiveAt ? `活跃 ${formatTimeAgo(row.lastActiveAt)}` : '从未活跃'}
                 </span>
               </div>
-              <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
+              <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditTarget(row)}
-                  className="flex-1 rounded-md bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                  className="rounded-md bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
                 >
                   ✏️ 编辑
                 </button>
                 <button
                   type="button"
+                  onClick={() => toggleSupervisor(row)}
+                  disabled={pending}
+                  className={`rounded-md px-2 py-1.5 text-xs font-medium disabled:opacity-50 ${
+                    row.isSupervisor
+                      ? 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  👑 {row.isSupervisor ? '取消上司' : '设为上司'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => toggleActive(row)}
                   disabled={pending}
-                  className="flex-1 rounded-md bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                  className="rounded-md bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                 >
                   🔌 {row.active ? '停用' : '启用'}
                 </button>
@@ -310,9 +407,9 @@ export function EmployeesClient({
                     type="button"
                     onClick={() => onDelete(row)}
                     disabled={pending}
-                    className="flex-1 rounded-md bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                    className="rounded-md bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-50"
                   >
-                    🗑
+                    🗑 删除
                   </button>
                 )}
               </div>
@@ -341,6 +438,7 @@ export function EmployeesClient({
         <EditDialog
           row={editTarget}
           depts={depts}
+          supervisorPool={supervisorPool.filter((s) => s.id !== editTarget.id)}
           onClose={() => setEditTarget(null)}
           onSaved={async () => {
             setEditTarget(null);
@@ -574,11 +672,14 @@ function CreateDialog({
 function EditDialog({
   row,
   depts,
+  supervisorPool,
   onClose,
   onSaved,
 }: {
   row: EmployeeRow;
   depts: DeptOption[];
+  /** 上司池（已剔除自己），给"隶属上司"下拉用 */
+  supervisorPool: EmployeeRow[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -588,10 +689,21 @@ function EditDialog({
   const [layer, setLayer] = useState(row.layer);
   const [dailyLimitHkd, setDailyLimitHkd] = useState(row.dailyLimitHkd);
   const [webhookUrl, setWebhookUrl] = useState(row.webhookUrl ?? '');
+  const [isSupervisor, setIsSupervisor] = useState(row.isSupervisor);
+  const [reportsToId, setReportsToId] = useState(row.reportsToId ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function submit() {
+    // 取消上司身份且有下属 → 二次确认
+    if (row.isSupervisor && !isSupervisor && row.reportsCount > 0) {
+      const ok = confirm(
+        `${row.name} 还带 ${row.reportsCount} 个下属。\n` +
+          `保存后他们的"隶属上司"会自动清空。继续吗？`,
+      );
+      if (!ok) return;
+    }
+
     setBusy(true);
     setErr(null);
     try {
@@ -605,11 +717,13 @@ function EditDialog({
           layer,
           dailyLimitHkd,
           webhookUrl: webhookUrl.trim() || null,
+          isSupervisor,
+          reportsToId: reportsToId || null,
         }),
       });
       const j = await r.json();
       if (!r.ok) {
-        setErr(j.error ?? `HTTP ${r.status}`);
+        setErr(j.hint ?? j.error ?? `HTTP ${r.status}`);
         return;
       }
       await onSaved();
@@ -673,6 +787,52 @@ function EditDialog({
             className={inputCls}
           />
         </Field>
+      </div>
+
+      {/* Step 4: 组织树字段 */}
+      <div className="mt-4 rounded-lg border border-amber-200/60 bg-amber-50/30 p-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-900">
+          组织树
+        </div>
+        <label className="flex items-baseline gap-2 text-sm font-medium text-amber-900">
+          <input
+            type="checkbox"
+            checked={isSupervisor}
+            onChange={(e) => setIsSupervisor(e.target.checked)}
+          />
+          <span>👑 可被指派为上司</span>
+          <span className="text-[10px] font-normal text-amber-700">
+            （勾选后会进入「隶属上司」下拉的可选池）
+          </span>
+        </label>
+        {row.isSupervisor && !isSupervisor && row.reportsCount > 0 && (
+          <div className="mt-2 rounded bg-rose-50 px-2 py-1.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
+            ⚠️ 该员工目前带 {row.reportsCount} 个下属。取消上司身份后，下属的「隶属上司」会被自动清空。
+          </div>
+        )}
+
+        <div className="mt-3">
+          <Field label="隶属上司">
+            {supervisorPool.length === 0 ? (
+              <div className={`${inputCls} flex items-center text-[11px] text-slate-400`}>
+                暂无可选上司 — 先去其他员工那里点「👑 设为上司」把人加进池
+              </div>
+            ) : (
+              <select
+                value={reportsToId}
+                onChange={(e) => setReportsToId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">— 无（直接对老板汇报）—</option>
+                {supervisorPool.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    👑 {s.name} · {s.role}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </div>
       </div>
 
       {row.apiKey && (
