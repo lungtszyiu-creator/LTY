@@ -762,8 +762,68 @@ model ApiKey {
   createdAt   DateTime  @default(now())
 
   activityLogs AiActivityLog[]
+  // 一个 ApiKey 最多挂一个 AiEmployee（员工档案模块）
+  aiEmployee  AiEmployee?
 
   @@index([scope, active])
+}
+
+// ==========================================================================
+// AI 员工档案 + Token 监控（移植自 MC Markets · 适配 LTY）
+// ==========================================================================
+//
+// LTY 的"AI 员工"过去靠 ApiKey.scope 字符串区分（FINANCE_AI:voucher_clerk 等），
+// 没有"档案"概念，看不到状态、没法管日额度、没法挂组织树。本模块给每个 AI
+// 一份正式档案：基本信息 / 部门 / 日预算 / 上司 / 状态。
+//
+// 设计要点（与 MC Markets 原版的差异）：
+//   - 不混入真人员工 — LTY 真人走 User + HrEmployeeProfile 已有体系
+//   - apiKeyId 关联到现有 ApiKey 表（一员工一把 key），复用 generateApiKey/
+//     requireApiKey 机制，不重造
+//   - group 字段用 LTY 部门 slug 字符串（finance / admin / hr / ...），
+//     而不是 MC Markets 的 CONTENT/VIDEO/SOCIAL 营销 enum
+//   - 去掉 lang 字段（LTY 内部全中文，多语种是 MC Markets 跨地区营销专属）
+//   - 货币：HKD（LTY 香港公司）
+//   - 时区：UTC+8（与 HK 一致，与 MC Markets 同）
+
+model AiEmployee {
+  id           String  @id @default(cuid())
+  name         String // "凭证编制员" / "对账员" / "MC 法务工单 AI" 等
+  role         String // 自由字符串，简短描述："凭证草稿" / "汇率瞭望" / etc
+  // 部门归属（柔性 String，绑 LTY Department.slug）。null = 跨部门 / 总管 AI。
+  // 不绑 enum 是为了未来加部门不用迁 schema；不做 FK 是为了删部门时不连带删 AI。
+  deptSlug     String?
+  // 管理层级 1=总监 2=组长 3=一线（自由约定）
+  layer        Int     @default(3)
+  active       Boolean @default(true)
+  // 日预算（HKD），撞顶自动 paused
+  dailyLimitHkd Decimal @default(1000) @db.Decimal(12, 2)
+  paused       Boolean   @default(false)
+  pausedAt     DateTime?
+  pauseReason  String?
+  // 关联 LTY 现有 ApiKey 表（一对一可空）。员工删除时 ApiKey 也吊销。
+  apiKeyId     String?  @unique
+  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  // 可选 webhook（员工 paused/unpaused 时 push 通知，v1.1）
+  webhookUrl   String?
+  // 实时活跃度：每次 X-Api-Key 鉴权成功时更新 → 看板算 "在跑/待命/离线"
+  lastActiveAt DateTime?
+  // 组织树（自引用）—— Step 1 schema 一次性放好，UI 在 Step 4 暴露。
+  // 删上司时不连带删下属（SetNull），下属隶属字段自动清空。
+  reportsToId  String?
+  reportsTo    AiEmployee?  @relation("AiEmployeeSupervisor", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reports      AiEmployee[] @relation("AiEmployeeSupervisor")
+  // 上司池白名单：必须 isSupervisor=true 才能在他人"隶属上司"下拉里被选到
+  isSupervisor Boolean      @default(false)
+  meta         Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([active, paused])
+  @@index([deptSlug])
+  @@index([lastActiveAt])
+  @@index([isSupervisor])
+  @@index([reportsToId])
 }
 
 // ---- 财务主数据：钱包 ----
