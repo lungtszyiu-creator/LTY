@@ -20,6 +20,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+// Vercel Pro 函数 maxDuration 默认 60s，月报涉及 prisma 大查询 + Coze AI 分析（30-120s）+ GitHub commit
+// 设到 300s 给充裕余量，避免 504 timeout
+export const maxDuration = 300;
+
 const TG_API = 'https://api.telegram.org';
 
 function checkAuth(req: NextRequest): boolean {

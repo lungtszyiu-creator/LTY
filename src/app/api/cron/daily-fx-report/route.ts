@@ -12,6 +12,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+// forex_lookout 要拉多平台 API + 写早报，可能 60-120s
+export const maxDuration = 180;
+
 function checkAuth(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET;
   if (!expected) return false;

@@ -13,6 +13,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+// reconciler 要拉多表数据 + AI 分析差异，给 180s 充裕
+export const maxDuration = 180;
+
 function checkAuth(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET;
   if (!expected) return false;
