@@ -19,6 +19,9 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { ReimbursementsTab } from './_components/ReimbursementsTab';
+import { ReconciliationsTab } from './_components/ReconciliationsTab';
+import { ComplianceTab } from './_components/ComplianceTab';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +35,14 @@ type TabKey =
   | 'monthly'
   | 'payroll';
 
+// PR F（增量层）：把报销 / 对账 / 合规台账 三个 Tab 标 ready，
+// 业务表 schema 由 20260508120000_add_cashier_module 迁移补齐。
 const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'overview', label: '财务概览', ready: true },
   { key: 'pending', label: '待处理', ready: false },
-  { key: 'expense', label: '报销', ready: false },
-  { key: 'reconciliation', label: '对账', ready: false },
-  { key: 'compliance', label: '合规台账', ready: false },
+  { key: 'expense', label: '报销', ready: true },
+  { key: 'reconciliation', label: '对账', ready: true },
+  { key: 'compliance', label: '合规台账', ready: true },
   { key: 'budget', label: '预算管理', ready: false },
   { key: 'monthly', label: '月度结算', ready: false },
   { key: 'payroll', label: '工资单', ready: false },
@@ -46,12 +51,13 @@ const TABS: { key: TabKey; label: string; ready: boolean }[] = [
 export default async function CashierPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; sub?: string }>;
 }) {
   const ctx = await requireDeptView('cashier');
   const sp = await searchParams;
   const requested = (sp.tab as TabKey) ?? 'overview';
   const tab: TabKey = TABS.some((t) => t.key === requested) ? requested : 'overview';
+  const subCategory = sp.sub ?? null;
 
   // 读现有 LTY 财务数据：最近 fx 汇率（pair 字段）+ 待审凭证数 + 钱包数
   const [latestUsdHkd, latestUsdCny, pendingVouchers, activeWallets] = await Promise.all([
@@ -174,12 +180,26 @@ export default async function CashierPage({
         </>
       )}
 
-      {tab !== 'overview' && (
+      {tab === 'expense' && <ReimbursementsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} />}
+      {tab === 'reconciliation' && <ReconciliationsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} />}
+      {tab === 'compliance' && (
+        <ComplianceTab
+          canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin}
+          isSuperAdmin={ctx.isSuperAdmin}
+          subCategory={subCategory}
+        />
+      )}
+
+      {(tab === 'pending' || tab === 'budget' || tab === 'monthly' || tab === 'payroll') && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-12 text-center">
           <div className="text-2xl">🚧</div>
-          <p className="mt-2 text-sm text-slate-500">本 Tab 在 PR I 接入</p>
+          <p className="mt-2 text-sm text-slate-500">本 Tab v1.1 接入</p>
           <p className="mt-1 text-xs text-slate-400">
-            等老板发出纳子页详细截图（待处理 / 报销 / 对账 / 合规 / 预算 / 月度 / 工资 字段表）后落地
+            {tab === 'payroll'
+              ? '工资单复用 LTY /finance EmployeePayrollProfile，等老板补字段细化'
+              : '等老板发出纳子页详细截图（' +
+                (tab === 'pending' ? '待处理' : tab === 'budget' ? '预算' : '月度结算') +
+                '）后落地'}
           </p>
         </div>
       )}

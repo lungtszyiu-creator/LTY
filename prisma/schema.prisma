@@ -158,6 +158,13 @@ model User {
   hrPerformanceEvaluated HrPerformanceReview[] @relation("HrPerformanceReviewEvaluator")
   hrPrivateMsgsSent      HrPrivateMessage[]    @relation("HrPrivateMessageSender")
   hrPrivateMsgsReplied   HrPrivateMessage[]    @relation("HrPrivateMessageHr")
+
+  // 出纳部反向关系（PR F · 增量层）
+  cashierTodosOwned      CashierTodo[]               @relation("CashierTodoOwner")
+  cashierReimbApplied    CashierReimbursement[]      @relation("CashierReimbApplicant")
+  cashierReimbApproved   CashierReimbursement[]      @relation("CashierReimbApprover")
+  cashierReconTasksOwned CashierReconciliationTask[] @relation("CashierReconTaskOwner")
+  cashierComplianceOwned CashierComplianceEntry[]    @relation("CashierComplianceResponsible")
 }
 
 // Audit trail for every change to a user's leave balances. Each entry is one
@@ -1399,4 +1406,158 @@ model HrPrivateMessage {
 
   @@index([threadId, createdAt])
   @@index([senderId])
+}
+
+// =====================================================
+// 出纳部业务表（Cashier · PR F · 增量层）
+// =====================================================
+//
+// PR #41 仅做 Department seed + UI 框架，业务表留 PR I/F。本 PR（F）
+// 接出纳 manus 看板的 7 张子页所需 schema：
+//   待处理 / 报销 / 对账 / 合规台账 / 预算 / 月度结算（工资单复用 EmployeePayrollProfile）
+//
+// ⭐ 双层结构铁律（feedback_lty_legal_dual_layer）：
+//   合规台账条目 dualLayer 字段 = REAL/COMPLIANCE/BOTH，决定要不要进真实账。
+
+// 出纳 · 待处理任务（页面：待处理）
+model CashierTodo {
+  id          String    @id @default(cuid())
+  title       String
+  detail      String?
+  priority    String    @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+  status      String    @default("OPEN") // "OPEN" | "IN_PROGRESS" | "DONE" | "CANCELLED"
+  ownerId     String?
+  owner       User?     @relation("CashierTodoOwner", fields: [ownerId], references: [id])
+  dueAt       DateTime?
+  doneAt      DateTime?
+  notes       String?
+  createdByAi String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, dueAt])
+  @@index([ownerId])
+}
+
+// 出纳 · 报销申请（页面：报销）
+// 跟 /finance ApprovalInstance 不混 —— 这是出纳页"小/中/大额"轻量入口，
+// approvalInstanceId 弱关联到走重审批的实例（仅大额报销用）。
+model CashierReimbursement {
+  id                 String    @id @default(cuid())
+  applicantId        String
+  applicant          User      @relation("CashierReimbApplicant", fields: [applicantId], references: [id])
+  category           String // "TRAVEL" | "MEAL" | "OFFICE" | "TRAINING" | "OTHER"
+  title              String
+  amount             Decimal   @db.Decimal(18, 2)
+  currency           String    @default("CNY") // "HKD" | "CNY" | "USD"
+  occurredOn         DateTime?
+  department         String?
+  reason             String?
+  receiptVaultPath   String?
+  status             String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "PAID" | "CANCELLED"
+  approvedById       String?
+  approvedBy         User?     @relation("CashierReimbApprover", fields: [approvedById], references: [id])
+  approvedAt         DateTime?
+  paidAt             DateTime?
+  rejectReason       String?
+  approvalInstanceId String?
+  notes              String?
+  createdByAi        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([applicantId, status])
+  @@index([status, createdAt])
+  @@index([category, occurredOn])
+}
+
+// 出纳 · 对账任务（页面：对账）
+// 周期性对账"该做什么"任务池（投放 / 代理 / 平台手续费 / 工资社保 / 银行 / 税务）。
+// 区别于 finance.Reconciliation（那个是对账"记录结果"）。
+model CashierReconciliationTask {
+  id             String    @id @default(cuid())
+  title          String // "投放渠道对账（Google/Meta/抖音）"
+  reconType      String // "AD_CHANNEL" | "AGENT_REBATE" | "PLATFORM_FEE" | "PAYROLL_SOCIAL" | "BANK_DEPOSIT" | "TAX_FILING" | "OTHER"
+  cycle          String // "WEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUAL"
+  ownerRole      String? // 自由文本 "市场运营专员" / "财务专员" / "人事专员" / "CFO"
+  ownerId        String?
+  owner          User?     @relation("CashierReconTaskOwner", fields: [ownerId], references: [id])
+  description    String?
+  dueAt          DateTime
+  status         String    @default("OPEN") // "OPEN" | "IN_PROGRESS" | "DONE" | "WARNING"
+  completedAt    DateTime?
+  completionNote String?
+  notes          String?
+  createdByAi    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, dueAt])
+  @@index([reconType, dueAt])
+}
+
+// 出纳 · 合规台账（页面：合规台账）
+// 5 子分类：税务申报 / 证照管理 / 银行账户 / 交易所账户 / 固定资产
+// ⭐ dualLayer：REAL=链上真实业务 / COMPLIANCE=书面合规外壳 / BOTH=两本都进
+//   AI 默认 REAL，老板手工切到 COMPLIANCE 防 ledger 污染。
+model CashierComplianceEntry {
+  id              String    @id @default(cuid())
+  category        String // "TAX" | "LICENSE" | "BANK_ACCOUNT" | "EXCHANGE_ACCOUNT" | "FIXED_ASSET"
+  name            String
+  identifier      String? // 税号 / 证号 / 账号 / 资产编号
+  cycle           String? // "MONTHLY" | "QUARTERLY" | "ANNUAL" | "ADHOC"
+  nextDueAt       DateTime?
+  responsibleId   String?
+  responsible     User?     @relation("CashierComplianceResponsible", fields: [responsibleId], references: [id])
+  responsibleName String? // 自由文本 fallback（manus.space 不要求账号绑定）
+  dualLayer       String    @default("REAL") // ⭐ "REAL" | "COMPLIANCE" | "BOTH"
+  status          String    @default("ACTIVE") // "ACTIVE" | "EXPIRING" | "EXPIRED" | "ARCHIVED"
+  vaultPath       String?
+  notes           String?
+  createdByAi     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([category, status])
+  @@index([category, nextDueAt])
+  @@index([dualLayer]) // 老板批查"哪些是合规外壳"
+}
+
+// 出纳 · 预算（页面：预算管理） · v1.1 UI
+model CashierBudget {
+  id           String   @id @default(cuid())
+  fiscalYear   Int
+  month        Int? // 1-12，null = 整年
+  category     String
+  department   String?
+  planAmount   Decimal  @db.Decimal(18, 2)
+  currency     String   @default("USD")
+  actualAmount Decimal? @db.Decimal(18, 2)
+  notes        String?
+  createdById  String?
+  createdByAi  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([fiscalYear, month, category, department, currency])
+  @@index([fiscalYear, month])
+}
+
+// 出纳 · 月度结算（页面：月度结算） · v1.1 UI
+model CashierMonthlySettlement {
+  id                 String    @id @default(cuid())
+  period             String    @unique // "2026-05"
+  reimbursementTotal Decimal?  @db.Decimal(18, 2)
+  payrollTotal       Decimal?  @db.Decimal(18, 2)
+  incomeTotal        Decimal?  @db.Decimal(18, 2)
+  expenseTotal       Decimal?  @db.Decimal(18, 2)
+  netProfit          Decimal?  @db.Decimal(18, 2)
+  currency           String    @default("USD")
+  status             String    @default("DRAFT") // "DRAFT" | "FINAL" | "REOPENED"
+  generatedAt        DateTime?
+  generatedById      String?
+  notes              String?
+  createdByAi        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
