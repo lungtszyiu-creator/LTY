@@ -12,6 +12,7 @@ import { requireDeptView } from '@/lib/dept-access';
 import { LicensesTab } from './_components/LicensesTab';
 import { AssetsTab } from './_components/AssetsTab';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,11 +95,12 @@ export default async function AdminDeptPage({
         )}
       </div>
 
-      {ctx.isSuperAdmin && (
+      {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard
           deptName="行政部"
           scopePrefix="ADMIN_"
-          presetForGenerate="ADMIN_AI:license_clerk"
+          scopeChoices={getScopeChoices('ADMIN_')}
+          canManage={ctx.isSuperAdmin || ctx.level === 'LEAD'}
           accent="amber"
         />
       )}

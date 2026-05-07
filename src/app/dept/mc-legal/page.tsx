@@ -10,6 +10,7 @@ import { requireDeptView } from '@/lib/dept-access';
 import { LEGAL_DEPT_META, type LegalRequestRow } from '@/lib/legal-shared';
 import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,11 +111,12 @@ export default async function McLegalPage({
         {tab !== 'requests' && <StubTab tabKey={tab} />}
       </div>
 
-      {ctx.isSuperAdmin && (
+      {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard
           deptName="MC 法务部（隔离）"
           scopePrefix="MC_LEGAL_"
-          presetForGenerate="MC_LEGAL_AI:legal_clerk"
+          scopeChoices={getScopeChoices('MC_LEGAL_')}
+          canManage={ctx.isSuperAdmin || ctx.level === 'LEAD'}
           accent="purple"
         />
       )}

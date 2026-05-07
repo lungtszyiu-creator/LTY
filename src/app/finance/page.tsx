@@ -19,6 +19,7 @@ import { CleanupVaultTestsButton } from './cleanup-vault-tests-button';
 import { VaultIngestButton } from './vault-ingest-button';
 import { VoucherDeleteButton } from './voucher-delete-button';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 
 export const dynamic = 'force-dynamic';
 
@@ -188,13 +189,14 @@ export default async function FinancePage({
         {tab === 'activity' && <ActivityTab recentActivity={recentActivity} />}
       </div>
 
-      {/* 财务部 AI 员工 API Key（仅 SUPER_ADMIN）—— 老板要求 API Key 直接在
-         每个部门里体现，不用专门跳 admin 页 */}
+      {/* 财务部 AI 员工 API Key（仅 SUPER_ADMIN）—— FINANCE_* 是跨部门 scope，
+         只有老板能发；非老板看不到这块卡片 */}
       {access.isSuperAdmin && (
         <DeptApiKeysCard
           deptName="财务部"
           scopePrefix="FINANCE_"
-          presetForGenerate="FINANCE_AI:voucher_clerk"
+          scopeChoices={getScopeChoices('FINANCE_')}
+          canManage={true}
           accent="rose"
         />
       )}

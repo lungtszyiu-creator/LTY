@@ -32,6 +32,7 @@ export async function GET(): Promise<NextResponse> {
       status: true,
       vaultPath: true,
       errorMessage: true,
+      description: true,
       createdAt: true,
       downloadedAt: true,
     },

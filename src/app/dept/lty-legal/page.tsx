@@ -12,6 +12,7 @@ import { requireDeptView } from '@/lib/dept-access';
 import { LEGAL_DEPT_META, type LegalRequestRow } from '@/lib/legal-shared';
 import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,11 +105,12 @@ export default async function LtyLegalPage({
         {tab !== 'requests' && <StubTab tabKey={tab} />}
       </div>
 
-      {ctx.isSuperAdmin && (
+      {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard
           deptName="LTY 法务部"
           scopePrefix="LTY_LEGAL_"
-          presetForGenerate="LTY_LEGAL_AI:legal_clerk"
+          scopeChoices={getScopeChoices('LTY_LEGAL_')}
+          canManage={ctx.isSuperAdmin || ctx.level === 'LEAD'}
           accent="sky"
         />
       )}

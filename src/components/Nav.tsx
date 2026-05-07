@@ -153,7 +153,12 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
     { href: '/knowledge', label: '知识' },
   ];
 
-  const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
+  // /admin/api-keys 总管理仅 SUPER_ADMIN（避免跨部门越权 —— 部门 LEAD 应该
+  // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
+  const visibleAdminLinks = ADMIN_LINKS.filter(
+    (l) => l.href !== '/admin/api-keys' || isSuper,
+  );
+  const adminActive = visibleAdminLinks.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const moreActive = MORE_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
   const deptActive = !!pathname?.startsWith('/dept/');
 
@@ -291,7 +296,7 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
               {adminOpen && (
                 <div className="absolute right-0 top-full z-20 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur-xl rise">
                   <ul className="py-1">
-                    {ADMIN_LINKS.map((l) => {
+                    {visibleAdminLinks.map((l) => {
                       const active = pathname === l.href || pathname?.startsWith(l.href);
                       return (
                         <li key={l.href}>
@@ -390,7 +395,7 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
               {isAdmin && (
                 <>
                   <li className="mt-3 px-3 pb-1 text-[10px] uppercase tracking-[0.2em] text-slate-400">管理</li>
-                  {ADMIN_LINKS.map((l) => (
+                  {visibleAdminLinks.map((l) => (
                     <MobileLink key={l.href} href={l.href} active={pathname === l.href}>{l.label}</MobileLink>
                   ))}
                 </>
