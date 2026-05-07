@@ -80,10 +80,13 @@ export function EmployeesClient({
   initial,
   depts,
   meRole,
+  importableCount = 0,
 }: {
   initial: EmployeeRow[];
   depts: DeptOption[];
   meRole: 'ADMIN' | 'SUPER_ADMIN';
+  /** 可一键导入的财务 ApiKey 数量（未关联到任何 AiEmployee）。> 0 时显示导入按钮 */
+  importableCount?: number;
 }) {
   const [rows, setRows] = useState<EmployeeRow[]>(initial);
   const [showCreate, setShowCreate] = useState(false);
@@ -91,6 +94,8 @@ export function EmployeesClient({
   const [newKeyForCopy, setNewKeyForCopy] = useState<{ name: string; key: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [importable, setImportable] = useState(importableCount);
+  const [importDone, setImportDone] = useState<string | null>(null);
 
   // 每分钟刷一次 lastActiveAt 的状态指示（不重 fetch，仅 re-render）
   const [, setTick] = useState(0);
@@ -167,11 +172,70 @@ export function EmployeesClient({
   // 上司池：active && isSupervisor → 编辑模态框「隶属上司」下拉用
   const supervisorPool = rows.filter((r) => r.isSupervisor && r.active);
 
+  /**
+   * 一键从现有 ApiKey 表批量建 AiEmployee 档案。
+   * 后端按 SCOPE_PRESETS 名单过滤 + 排除已关联 + 排除 _READONLY，每把
+   * key 建一个员工。把老板 Step 1 之前发的 5 个财务 AI 一次性补档案。
+   */
+  function runImport() {
+    if (importable === 0) return;
+    const ok = confirm(
+      `把 ${importable} 把现有 ApiKey 转为 AI 员工档案？\n` +
+        `每把 key 建一条 AiEmployee，名字按 scope 自动取（如"凭证编制员"），\n` +
+        `日额度默认 100 HKD，可后续在列表里编辑。`,
+    );
+    if (!ok) return;
+    setError(null);
+    setImportDone(null);
+    startTransition(async () => {
+      const r = await fetch('/api/employees/import-from-keys', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setImportDone(j.message ?? `导入了 ${j.created?.length ?? 0} 个`);
+        setImportable(0);
+        await refresh();
+      } else {
+        setError(`导入失败：${j.hint ?? j.error ?? r.statusText}`);
+      }
+    });
+  }
+
   return (
     <>
       {error && (
         <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">
           {error}
+        </div>
+      )}
+
+      {/* 导入财务 ApiKey 引导块 — 仅 SUPER_ADMIN + 有未导入 key 时显示 */}
+      {meRole === 'SUPER_ADMIN' && importable > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-300/70 bg-amber-50/60 p-3.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-amber-900">
+                📥 检测到 {importable} 把现有 ApiKey 还没建 AI 员工档案
+              </div>
+              <div className="mt-1 text-[11px] text-amber-800">
+                估计是 Step 1 之前发过的财务 AI（凭证编制员 / 链上记账员 / 汇率瞭望员 / 对账员 / CFO 等）。
+                点右侧按钮一次性补档案，他们就能：
+                <span className="text-amber-900">看 token 用量 · 实时状态指示 · 撞顶自动暂停</span>。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={runImport}
+              disabled={pending}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
+            >
+              {pending ? '导入中…' : `📥 一键导入 ${importable} 个`}
+            </button>
+          </div>
+        </div>
+      )}
+      {importDone && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-900">
+          ✓ {importDone}
         </div>
       )}
 
