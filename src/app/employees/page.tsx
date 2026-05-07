@@ -1,5 +1,5 @@
 /**
- * AI 员工档案管理 (/employees) — Step 1
+ * AI 员工档案管理 (/employees)
  *
  * 移植自 MC Markets，适配 LTY：
  *   - 仅管理 AI 员工（真人走 LTY 已有 User + HrEmployeeProfile 体系）
@@ -7,13 +7,14 @@
  *   - 复用 LTY 现有 ApiKey 表（apiKeyId FK）+ generateApiKey()
  *   - group 字段 = LTY 部门 slug（柔性 String，不绑 enum）
  *
- * Step 1 范围（按老板节奏走）：
- *   - 列表展示（桌面表格 + 移动卡片）
- *   - 新建 / 编辑 / 停用启用 / 删除（仅 SUPER_ADMIN）
- *   - 实时状态指示：在跑 (<5min) / 待命 (<30min) / 离线 / 从未
- *   - 不含: reportsTo / isSupervisor UI（schema 已放，留 Step 4）
- *   - 不含: token 监控（Step 2）
- *   - 不含: 撞顶暂停（Step 5）
+ * 已上线：
+ *   ✅ Step 1 — 基础 CRUD + 列表 + 编辑 + 删除
+ *   ✅ Step 2 — Token 监控写端点 + 今日 hero
+ *   ✅ Step 3 — Token 历史范围 + 趋势图
+ *   ✅ Step 4 — 上司池：isSupervisor 切换 + reportsTo 下拉
+ *
+ * 待做：
+ *   ⏳ Step 5 — 撞顶自动 paused + TG 告警 + 解锁审批入口
  *
  * 权限：ADMIN+（管理员可看可改），仅 SUPER_ADMIN 能硬删。
  */
@@ -44,6 +45,9 @@ export default async function EmployeesPage() {
           lastUsedAt: true,
         },
       },
+      // Step 4: 上司名 + 下属计数
+      reportsTo: { select: { id: true, name: true } },
+      _count: { select: { reports: true } },
     },
   });
 
@@ -70,6 +74,8 @@ export default async function EmployeesPage() {
     lastActiveAt: e.lastActiveAt?.toISOString() ?? null,
     isSupervisor: e.isSupervisor,
     reportsToId: e.reportsToId,
+    reportsToName: e.reportsTo?.name ?? null,
+    reportsCount: e._count.reports,
     apiKey: e.apiKey
       ? {
           id: e.apiKey.id,
@@ -89,10 +95,10 @@ export default async function EmployeesPage() {
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI 员工档案</h1>
           <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200">
-            Step 1 · 基础 CRUD
+            Step 4 · 上司池
           </span>
         </div>
-        <span className="text-xs text-slate-400">Token 监控 / 上司池 / 撞顶暂停 后续 Step 上线</span>
+        <span className="text-xs text-slate-400">撞顶暂停 + TG 告警 留 Step 5</span>
       </header>
       <p className="mb-5 rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-xs text-slate-600">
         💡 这里管的是 <strong>AI 员工</strong>（凭证编制员、对账员、法务工单 AI 等）。真人员工请去{' '}
