@@ -426,7 +426,8 @@ function CreateDialog({
   const [role, setRole] = useState('');
   const [deptSlug, setDeptSlug] = useState('');
   const [layer, setLayer] = useState(3);
-  const [dailyLimitHkd, setDailyLimitHkd] = useState(1000);
+  // 默认 100 HKD — 公司日预算 500 / 5 员工。老板可单条调高/调低。
+  const [dailyLimitHkd, setDailyLimitHkd] = useState(100);
   const [generateKey, setGenerateKey] = useState(true);
   const [apiKeyScope, setApiKeyScope] = useState('AI_EMPLOYEE:default');
   const [busy, setBusy] = useState(false);

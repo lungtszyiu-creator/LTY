@@ -69,10 +69,15 @@ export function listKnownModels(): string[] {
     .map((x) => x.m);
 }
 
-/** 公司日预算（HKD），可由 env `DAILY_BUDGET_HKD` 覆盖。默认 100k。 */
+/**
+ * 公司日预算（HKD）。可由 env `DAILY_BUDGET_HKD` 覆盖。
+ *
+ * 默认 500 HKD —— 老板拍板（2026-05-08）。Step 5 起撞顶自动暂停超额员工。
+ * 若以后预算放宽改 env 即可，不动代码。
+ */
 export function getCompanyDailyBudgetHkd(): number {
   const raw = process.env.DAILY_BUDGET_HKD;
-  if (!raw) return 100_000;
+  if (!raw) return 500;
   const v = parseFloat(raw);
-  return Number.isFinite(v) && v > 0 ? v : 100_000;
+  return Number.isFinite(v) && v > 0 ? v : 500;
 }

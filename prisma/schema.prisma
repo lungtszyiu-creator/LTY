@@ -796,8 +796,10 @@ model AiEmployee {
   // 管理层级 1=总监 2=组长 3=一线（自由约定）
   layer        Int     @default(3)
   active       Boolean @default(true)
-  // 日预算（HKD），撞顶自动 paused
-  dailyLimitHkd Decimal @default(1000) @db.Decimal(12, 2)
+  // 日预算（HKD），撞顶自动 paused。默认 100 HKD —— 公司日预算 500，
+  // 单员工 100 = 5 员工同时打满才到顶，给老板 5x 余量。已有员工自动写好的
+  // 值不会被新建默认覆盖；要改单条记录去 /employees 编辑。
+  dailyLimitHkd Decimal @default(100) @db.Decimal(12, 2)
   paused       Boolean   @default(false)
   pausedAt     DateTime?
   pauseReason  String?
