@@ -81,6 +81,16 @@ export default function ApiKeyAdminPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [name, setName] = useState('');
   const [scope, setScope] = useState(SCOPE_PRESETS[0].value);
+
+  // 从 URL ?preset=XXX 预选 scope（部门页 "+ 生成 Key" 链接传过来）
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const preset = params.get('preset');
+    if (preset && SCOPE_PRESETS.some((p) => p.value === preset)) {
+      setScope(preset);
+    }
+  }, []);
   const [expiresInDays, setExpiresInDays] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [newKeyPlaintext, setNewKeyPlaintext] = useState<string | null>(null);

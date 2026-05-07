@@ -11,6 +11,7 @@ import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { LicensesTab } from './_components/LicensesTab';
 import { AssetsTab } from './_components/AssetsTab';
+import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,11 +95,12 @@ export default async function AdminDeptPage({
       </div>
 
       {ctx.isSuperAdmin && (
-        <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
-          💡 仅总管可见 · AI 员工 API Key（行政部）将由后续 PR 接入：
-          <code className="rounded bg-white px-1.5 py-0.5 font-mono">ADMIN_AI:license_clerk</code>{' '}
-          / <code className="rounded bg-white px-1.5 py-0.5 font-mono">ADMIN_ADMIN</code>。
-        </footer>
+        <DeptApiKeysCard
+          deptName="行政部"
+          scopePrefix="ADMIN_"
+          presetForGenerate="ADMIN_AI:license_clerk"
+          accent="amber"
+        />
       )}
     </div>
   );

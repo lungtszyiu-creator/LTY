@@ -18,6 +18,7 @@ import { CleanupTestsButton } from './cleanup-tests-button';
 import { CleanupVaultTestsButton } from './cleanup-vault-tests-button';
 import { VaultIngestButton } from './vault-ingest-button';
 import { VoucherDeleteButton } from './voucher-delete-button';
+import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,15 +156,22 @@ export default async function FinancePage({
         {tab === 'activity' && <ActivityTab recentActivity={recentActivity} />}
       </div>
 
+      {/* 财务部 AI 员工 API Key（仅 SUPER_ADMIN）—— 老板要求 API Key 直接在
+         每个部门里体现，不用专门跳 admin 页 */}
+      {access.isSuperAdmin && (
+        <DeptApiKeysCard
+          deptName="财务部"
+          scopePrefix="FINANCE_"
+          presetForGenerate="FINANCE_AI:voucher_clerk"
+          accent="rose"
+        />
+      )}
+
       {/* Footer */}
       {access.level === 'EDITOR' ? (
         <footer className="mt-10 rounded-xl border border-amber-200/60 bg-amber-50/40 p-4 text-xs text-amber-900">
           <div>
-            💡 仅老板可见 · 想让 AI 写到这里？在{' '}
-            <Link href="/admin/finance/api-keys" className="underline">
-              管理 → 财务 API Key 管理
-            </Link>{' '}
-            创建对应角色的 API Key，发给 Coze / n8n 用。授予/收回他人查看权限请去{' '}
+            💡 仅老板可见 · 授予/收回他人查看权限请去{' '}
             <Link href="/admin/finance/access" className="underline">
               管理 → 财务访问授权
             </Link>

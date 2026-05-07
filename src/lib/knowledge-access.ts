@@ -1,16 +1,22 @@
 /**
  * 知识管理部访问权限
  *
- * MVP 阶段简单：只有 SUPER_ADMIN（老板）能看 /knowledge。
- * 普通员工 redirect /dashboard（不暴露页面存在）。
- *
- * 未来可扩展：在 User 模型加 knowledgeRole 字段，类似 financeRole 那套。
+ * 老板要求：所有 active 员工可看 + 上传文档（PendingUpload），
+ * 但「召唤管家」（IngestRequest）仍仅 SUPER_ADMIN 能触发 ——
+ * 召唤会跑 Claude headless ingest 全 _inbox，是高代价 + 写权限动作。
  */
 import { redirect } from 'next/navigation';
 import { getSession } from './auth';
 import { prisma } from './db';
 
-export async function requireKnowledgeView(): Promise<{ userId: string }> {
+export type KnowledgeAccessCtx = {
+  userId: string;
+  isSuperAdmin: boolean;
+  /** 普通员工只能上传文档（PendingUpload），不能召唤管家 */
+  canSummonCurator: boolean;
+};
+
+export async function requireKnowledgeView(): Promise<KnowledgeAccessCtx> {
   const session = await getSession();
   if (!session?.user) redirect('/login?next=/knowledge');
 
@@ -20,8 +26,10 @@ export async function requireKnowledgeView(): Promise<{ userId: string }> {
   });
   if (!dbUser?.active) redirect('/login?next=/knowledge');
 
-  if (dbUser.role !== 'SUPER_ADMIN') {
-    redirect('/dashboard');
-  }
-  return { userId: dbUser.id };
+  const isSuperAdmin = dbUser.role === 'SUPER_ADMIN';
+  return {
+    userId: dbUser.id,
+    isSuperAdmin,
+    canSummonCurator: isSuperAdmin,
+  };
 }

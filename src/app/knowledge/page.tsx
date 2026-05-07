@@ -42,7 +42,7 @@ type RecentUpload = {
 };
 
 export default async function KnowledgePage() {
-  await requireKnowledgeView();
+  const ctx = await requireKnowledgeView();
 
   // 并行拉数据（vault JSON + 看板上传记录）
   const [dashboard, inboxQueue, recentUploads] = await Promise.all([
@@ -94,7 +94,7 @@ export default async function KnowledgePage() {
       <RoleStrip dashboard={dashboard} />
 
       {/* 上传文件入口（手机随时扔，Mac worker 拉走） */}
-      <UploadSection recentUploads={recentUploads} />
+      <UploadSection recentUploads={recentUploads} canSummonCurator={ctx.canSummonCurator} />
 
       {/* 待审待办 */}
       <PendingSection inboxQueue={inboxQueue} />
@@ -186,7 +186,13 @@ function RoleStrip({ dashboard }: { dashboard: DashboardJson | null }) {
   );
 }
 
-function UploadSection({ recentUploads }: { recentUploads: RecentUpload[] }) {
+function UploadSection({
+  recentUploads,
+  canSummonCurator,
+}: {
+  recentUploads: RecentUpload[];
+  canSummonCurator: boolean;
+}) {
   return (
     <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div className="space-y-4">
@@ -194,19 +200,29 @@ function UploadSection({ recentUploads }: { recentUploads: RecentUpload[] }) {
           <SectionTitle>上传文件到 vault</SectionTitle>
           <p className="mb-3 text-xs text-slate-500">
             手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
-            drudge 09:50 自动归档，或召唤管家立刻处理。
+            drudge 09:50 自动归档，或老板召唤管家立刻处理。
           </p>
           <UploadButton />
         </div>
 
-        <div className="rounded-xl border border-amber-200/60 bg-amber-50/30 p-5">
-          <SectionTitle>召唤管家 ingest</SectionTitle>
-          <p className="mb-3 text-xs text-slate-500">
-            一键让管家（Claude headless）读 _inbox 全部资料 → 一次性写 wiki/ + commit + push。
-            首次需 Mac 装 <code className="rounded bg-white px-1">npm install -g @anthropic-ai/claude-code</code> + 登录。
-          </p>
-          <IngestButton />
-        </div>
+        {canSummonCurator ? (
+          <div className="rounded-xl border border-amber-200/60 bg-amber-50/30 p-5">
+            <SectionTitle>召唤管家 ingest</SectionTitle>
+            <p className="mb-3 text-xs text-slate-500">
+              一键让管家（Claude headless）读 _inbox 全部资料 → 一次性写 wiki/ + commit + push。
+              首次需 Mac 装 <code className="rounded bg-white px-1">npm install -g @anthropic-ai/claude-code</code> + 登录。
+            </p>
+            <IngestButton />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5">
+            <SectionTitle>召唤管家 ingest</SectionTitle>
+            <p className="text-xs text-slate-500">
+              👁 你是普通员工，可以上传文件但不能召唤管家。每天 09:50 drudge 自动归档你上传的文件。
+              急件请联系老板触发。
+            </p>
+          </div>
+        )}
       </div>
 
       <div>
