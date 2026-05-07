@@ -7,16 +7,18 @@
  *   - 复用 LTY 现有 ApiKey 表（apiKeyId FK）+ generateApiKey()
  *   - group 字段 = LTY 部门 slug（柔性 String，不绑 enum）
  *
- * 已上线：
+ * 已上线（5 Step 全部完成）：
  *   ✅ Step 1 — 基础 CRUD + 列表 + 编辑 + 删除
  *   ✅ Step 2 — Token 监控写端点 + 今日 hero
  *   ✅ Step 3 — Token 历史范围 + 趋势图
  *   ✅ Step 4 — 上司池：isSupervisor 切换 + reportsTo 下拉
+ *   ✅ Step 5 — 撞顶自动 paused + TG 告警 + 解锁审批入口
  *
- * 待做：
- *   ⏳ Step 5 — 撞顶自动 paused + TG 告警 + 解锁审批入口
+ * 增量：
+ *   ✅ 顶部「📥 从财务 ApiKey 导入」一键把老板 Step 1 之前发过的 5 个
+ *      财务 AI（FINANCE_AI:* scope）补上 AiEmployee 档案
  *
- * 权限：ADMIN+（管理员可看可改），仅 SUPER_ADMIN 能硬删。
+ * 权限：ADMIN+（管理员可看可改），仅 SUPER_ADMIN 能硬删 / 导入。
  */
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
@@ -58,6 +60,22 @@ export default async function EmployeesPage() {
     select: { slug: true, name: true },
   });
 
+  // 探测：是否有未关联到 AiEmployee 的 active ApiKey（scope 在 SCOPE_PRESETS
+  // 名单里），有的话 client 会显示"📥 导入"按钮。仅 SUPER_ADMIN 看得到。
+  let importableCount = 0;
+  if (session.user.role === 'SUPER_ADMIN') {
+    importableCount = await prisma.apiKey.count({
+      where: {
+        active: true,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        aiEmployee: null,
+        // 只算非 _READONLY，跟导入路由的过滤口径一致
+        NOT: { scope: { endsWith: '_READONLY' } },
+      },
+    });
+  }
+
   // Decimal → number for client serialization
   const rows: EmployeeRow[] = employees.map((e) => ({
     id: e.id,
@@ -94,11 +112,13 @@ export default async function EmployeesPage() {
       <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI 员工档案</h1>
-          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200">
-            Step 4 · 上司池
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+            完整版 · 5 Step ✅
           </span>
         </div>
-        <span className="text-xs text-slate-400">撞顶暂停 + TG 告警 留 Step 5</span>
+        <a href="/overview" className="text-xs text-violet-700 hover:underline">
+          → 看 AI 总览（今日花费 / 趋势 / 撞顶）
+        </a>
       </header>
       <p className="mb-5 rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-xs text-slate-600">
         💡 这里管的是 <strong>AI 员工</strong>（凭证编制员、对账员、法务工单 AI 等）。真人员工请去{' '}
@@ -109,6 +129,7 @@ export default async function EmployeesPage() {
         initial={rows}
         depts={depts}
         meRole={session.user.role as 'ADMIN' | 'SUPER_ADMIN'}
+        importableCount={importableCount}
       />
     </div>
   );
