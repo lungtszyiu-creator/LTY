@@ -8,6 +8,18 @@
     {
       "path": "/api/cron/wallet-monitor-tx",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/daily-fx-report",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/daily-reconciliation",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/monthly-finance-report",
+      "schedule": "0 2 1 * *"
     }
   ]
 }
