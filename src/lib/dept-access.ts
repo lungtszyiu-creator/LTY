@@ -162,14 +162,20 @@ export async function requireDeptAuthOrApiKey(
 /**
  * 给 Nav / overview 列出"用户能看的部门"。
  * SUPER_ADMIN → 全部 active 部门；其他 → 自己有 membership 的。
+ *
+ * 排除：slug='finance' 的部门 —— Nav 顶级已经有"财务"链接，部门下拉里再来一项
+ * 重复混淆。出纳（slug='cashier'）保留（出纳 ≠ 财务总）。
  */
+const HIDDEN_DEPT_SLUGS = new Set(['finance']);
+
 export async function listAccessibleDepartments(userId: string, userRole: string) {
   if (userRole === 'SUPER_ADMIN') {
-    return prisma.department.findMany({
+    const all = await prisma.department.findMany({
       where: { active: true },
       orderBy: { order: 'asc' },
       select: { id: true, name: true, slug: true, description: true },
     });
+    return all.filter((d) => !HIDDEN_DEPT_SLUGS.has(d.slug));
   }
   const memberships = await prisma.departmentMembership.findMany({
     where: { userId },
@@ -180,7 +186,7 @@ export async function listAccessibleDepartments(userId: string, userRole: string
     },
   });
   return memberships
-    .filter((m) => m.department.active)
+    .filter((m) => m.department.active && !HIDDEN_DEPT_SLUGS.has(m.department.slug))
     .sort((a, b) => a.department.order - b.department.order)
     .map((m) => ({
       id: m.department.id,

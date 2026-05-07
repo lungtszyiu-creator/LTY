@@ -133,6 +133,38 @@ export default async function FinancePage({
         <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
       </section>
 
+      {/* 子页面快速入口 —— 4 张大卡片，移动端 2x2 / 桌面 4 列 */}
+      <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <SubPageCard
+          href="/finance/dashboard"
+          emoji="📊"
+          label="财务总看板"
+          hint="实时 KPI"
+          accent="rose"
+        />
+        <SubPageCard
+          href="/finance/monthly-reports"
+          emoji="📅"
+          label="月报"
+          hint="每月一次"
+          accent="amber"
+        />
+        <SubPageCard
+          href="/finance/fx-rates"
+          emoji="📈"
+          label="汇率"
+          hint="MSO 偏离"
+          accent="sky"
+        />
+        <SubPageCard
+          href="/dept/cashier"
+          emoji="🪙"
+          label="出纳"
+          hint="录入工作台"
+          accent="violet"
+        />
+      </section>
+
       {/* Tabs */}
       <TabBar current={tab} pendingCount={pendingVouchersCount} />
 
@@ -628,6 +660,38 @@ function KpiCard({
       </div>
       <div className="mt-0.5 text-2xl font-semibold tabular-nums sm:mt-1 sm:text-3xl">{value}</div>
     </div>
+  );
+}
+
+/** /finance 主页 → 各子页面的快速入口卡片 */
+function SubPageCard({
+  href,
+  emoji,
+  label,
+  hint,
+  accent,
+}: {
+  href: string;
+  emoji: string;
+  label: string;
+  hint?: string;
+  accent: 'rose' | 'amber' | 'sky' | 'violet';
+}) {
+  const map = {
+    rose: 'border-rose-200/60 hover:border-rose-300 hover:bg-rose-50/40',
+    amber: 'border-amber-200/60 hover:border-amber-300 hover:bg-amber-50/40',
+    sky: 'border-sky-200/60 hover:border-sky-300 hover:bg-sky-50/40',
+    violet: 'border-violet-200/60 hover:border-violet-300 hover:bg-violet-50/40',
+  } as const;
+  return (
+    <Link
+      href={href}
+      className={`flex flex-col items-center justify-center rounded-xl border bg-white px-3 py-4 text-center transition ${map[accent]}`}
+    >
+      <span className="text-2xl">{emoji}</span>
+      <span className="mt-1.5 text-sm font-medium text-slate-800">{label}</span>
+      {hint && <span className="mt-0.5 text-[11px] text-slate-500">{hint}</span>}
+    </Link>
   );
 }
 
