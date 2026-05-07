@@ -1,5 +1,5 @@
 /**
- * AI Token 用量上报端点 — Step 2
+ * AI Token 用量上报端点
  *
  * POST /api/v1/token-usage
  *   入参: { employeeId, model, inputTokens, outputTokens, meta? }
@@ -10,13 +10,16 @@
  *   2. 校验 employee 存在 / active / !paused
  *   3. 校验请求里的 employeeId === apiKey 关联的员工 id（防越权）
  *   4. 服务端 computeCostHkd() — 不信前端传的金额（铁律）
- *   5. 写 TokenUsage 行
- *   6. 顺手 update AiEmployee.lastActiveAt = now() — 看板算 在跑/待命/离线
- *
- * Step 2 暂不含「撞顶 paused=true + TG 告警」（那是 Step 5）。
+ *   5. 写 TokenUsage 行 + update lastActiveAt
+ *   6. Step 5 撞顶处理：
+ *      - 员工日花费 > dailyLimitHkd → 自动 paused=true + AiActivityLog +
+ *        TG 告警老板（异步 fire-and-forget 不阻塞主流程）
+ *      - 公司日花费 > 公司日预算 → 当日首次跨阈值时告警 + log；不冻结
+ *        任何员工（一个 AI 跑飞冻全员风险大，老板手动评估再下调单条额度）
  *
  * 返回:
- *   { ok: true, costHkd: 0.043, dailyUsedHkd: 12.5, paused: false }
+ *   { ok: true, costHkd: 0.043, dailyUsedHkd: 12.5, paused: false|true }
+ *   员工已 paused → 返 429 BUDGET_EXCEEDED
  *
  * 注意：本路由不走 LTY 现有 requireApiKey()（那个是 scope-based 校验给
  * 部门数据接口用），而是按 X-Api-Key → ApiKey → AiEmployee 反查的模式，
@@ -27,8 +30,9 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { hashApiKey } from '@/lib/api-auth';
-import { computeCostHkd } from '@/lib/pricing';
-import { startOfTodayHk, endOfTodayHk, employeeSpendByRange } from '@/lib/budget';
+import { computeCostHkd, getCompanyDailyBudgetHkd } from '@/lib/pricing';
+import { startOfTodayHk, endOfTodayHk, employeeSpendByRange, spendByRange } from '@/lib/budget';
+import { sendBossNotice, escapeTgHtml } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,18 +148,109 @@ export async function POST(req: NextRequest) {
     }),
   ]);
 
-  // 7. 算今日已花（含本次）+ 返回 — Step 5 起这里加撞顶判断
-  const dailyUsedHkd = await employeeSpendByRange(
-    employee.id,
-    startOfTodayHk(),
-    endOfTodayHk(),
-  );
+  // 7. 算今日已花（含本次）
+  const todayStart = startOfTodayHk();
+  const todayEnd = endOfTodayHk();
+  const dailyUsedHkd = await employeeSpendByRange(employee.id, todayStart, todayEnd);
+  const dailyLimit = Number(employee.dailyLimitHkd);
+
+  // 8. 员工撞顶 → 自动 paused + AiActivityLog + TG 告警（异步不阻塞）
+  let nowPaused = false;
+  if (dailyUsedHkd > dailyLimit) {
+    nowPaused = true;
+    const reason = `撞顶 HKD ${dailyUsedHkd.toFixed(2)} > 日额度 ${dailyLimit.toFixed(2)}`;
+    await prisma.aiEmployee.update({
+      where: { id: employee.id },
+      data: {
+        paused: true,
+        pausedAt: new Date(),
+        pauseReason: reason,
+      },
+    });
+    await prisma.aiActivityLog.create({
+      data: {
+        aiRole: 'ai_employee',
+        action: 'budget_exceeded_auto_pause',
+        status: 'success',
+        apiKeyId: apiKey.id,
+        payload: JSON.stringify({
+          employeeId: employee.id,
+          name: employee.name,
+          dailyUsedHkd,
+          dailyLimitHkd: dailyLimit,
+          model: data.model,
+        }),
+        telegramSent: false, // 下面发完会有 record，但本表不再 update（一行 log 就够）
+        dashboardWritten: true,
+      },
+    });
+    // TG 告警 — fire-and-forget；await 但失败不抛
+    void sendBossNotice(
+      'TOKEN_BUDGET',
+      [
+        `🚨 <b>AI 员工撞顶自动暂停</b>`,
+        ``,
+        `<b>${escapeTgHtml(employee.name)}</b>`,
+        `今日已花：HKD ${dailyUsedHkd.toFixed(2)}`,
+        `日额度：HKD ${dailyLimit.toFixed(2)}`,
+        ``,
+        `<i>已自动 paused=true。下次调用会返 429。</i>`,
+        `<i>解锁去 /admin/tokens（仅老板）</i>`,
+      ].join('\n'),
+    ).catch(() => undefined);
+  }
+
+  // 9. 公司日预算撞顶 → 当日首次跨阈值时告警一次（避免刷屏）
+  //    不冻结任何员工（一个 AI 跑飞冻全员风险大）
+  const companyBudget = getCompanyDailyBudgetHkd();
+  const companyTodaySpend = await spendByRange(todayStart, todayEnd);
+  if (companyTodaySpend > companyBudget) {
+    // 当日是否已发过公司预算告警？查一行 log 即可
+    const alreadyAlerted = await prisma.aiActivityLog.findFirst({
+      where: {
+        action: 'company_budget_exceeded',
+        createdAt: { gte: todayStart, lt: todayEnd },
+      },
+      select: { id: true },
+    });
+    if (!alreadyAlerted) {
+      await prisma.aiActivityLog.create({
+        data: {
+          aiRole: 'system',
+          action: 'company_budget_exceeded',
+          status: 'success',
+          payload: JSON.stringify({
+            companyTodaySpend,
+            companyBudget,
+            triggeredByEmployeeId: employee.id,
+            triggeredByName: employee.name,
+          }),
+          dashboardWritten: true,
+        },
+      });
+      void sendBossNotice(
+        'TOKEN_BUDGET',
+        [
+          `⚠️ <b>公司日预算超支</b>`,
+          ``,
+          `今日 AI 总花费：HKD ${companyTodaySpend.toFixed(2)}`,
+          `公司日预算：HKD ${companyBudget.toFixed(2)}`,
+          ``,
+          `<i>触发员工：${escapeTgHtml(employee.name)}</i>`,
+          `<i>未冻结任何员工。建议去 /admin/tokens 看 Top 员工 + 临时下调单条额度。</i>`,
+        ].join('\n'),
+      ).catch(() => undefined);
+    }
+  }
 
   return NextResponse.json({
     ok: true,
     costHkd: Number(costHkd.toFixed(6)),
     dailyUsedHkd: Number(dailyUsedHkd.toFixed(6)),
-    dailyLimitHkd: Number(employee.dailyLimitHkd),
-    paused: false,
+    dailyLimitHkd: dailyLimit,
+    paused: nowPaused,
+    ...(nowPaused
+      ? { hint: '本员工已自动暂停（撞顶）。下次调用会返 429。请联系老板解锁。' }
+      : {}),
   });
 }

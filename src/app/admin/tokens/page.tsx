@@ -1,12 +1,12 @@
 /**
- * AI Token 监控 — /admin/tokens（Step 2 · 今日 hero）
+ * AI Token 监控 — /admin/tokens
  *
- * 自上而下结构（按老板节奏分多步）：
- *   1. ✅ Step 2 · 今日 hero（HKD x / y 公司预算 + DoD% + 进度条）
- *   2. ✅ Step 2 · 暂停员工列表（如有撞顶的）
- *   3. ✅ Step 2 · 今日 Top 10 员工 + 今日模型分布
- *   4. ⏳ Step 3 · 历史范围切换 + 趋势图 + 每日明细
- *   5. ⏳ Step 5 · 解锁审批入口
+ * 完整结构（5 个 Step 全上线）：
+ *   1. ✅ 今日 hero（HKD x / y 公司预算 + DoD% + 进度条）
+ *   2. ✅ 暂停员工列表 + 一键解锁按钮（仅 SUPER_ADMIN）
+ *   3. ✅ 今日 Top 10 员工 + 今日模型分布
+ *   4. ✅ 历史范围切换（today/7d/30d/月/年）+ 4 KPI + 纯 CSS 趋势图 + 每日明细
+ *   5. ✅ 撞顶自动 paused + TG 告警 + 解锁审批入口
  *
  * 数据真实性铁律：所有 KPI 实时从 prisma 查 TokenUsage 聚合，无任何缓存。
  *
@@ -27,6 +27,7 @@ import {
 } from '@/lib/budget';
 import { getCompanyDailyBudgetHkd } from '@/lib/pricing';
 import { HistoricalSection } from './_components/HistoricalSection';
+import { UnpauseButton } from './_components/UnpauseButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,12 +89,12 @@ export default async function TokensPage({
       <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Token 监控</h1>
-          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200">
-            Step 3 · 历史 + 趋势图
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+            Step 5 · 完整版
           </span>
         </div>
         <span className="text-xs text-slate-400">
-          时区 HK · 撞顶暂停 / 解锁审批 留 Step 5
+          时区 HK · 撞顶自动暂停 + TG 告警 + 一键解锁
         </span>
       </header>
 
@@ -107,36 +108,55 @@ export default async function TokensPage({
         dodPct={dodPct}
       />
 
-      {/* 2. 暂停员工 */}
+      {/* 2. 暂停员工 + Step 5 解锁审批入口 */}
       {pausedEmployees.length > 0 && (
         <section className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-rose-700">
-            ⏸ 暂停中的员工（{pausedEmployees.length}）
-          </h2>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-rose-700">
+              ⏸ 暂停中的员工（{pausedEmployees.length}）
+            </h2>
+            <span className="text-[11px] text-slate-400">
+              撞顶自动暂停 · 仅老板可解锁
+            </span>
+          </div>
           <ul className="space-y-1.5 overflow-hidden rounded-xl border border-rose-200 bg-rose-50/30">
             {pausedEmployees.map((e) => (
               <li
                 key={e.id}
-                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-rose-100 px-4 py-2 text-sm last:border-b-0"
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-rose-100 px-4 py-2.5 text-sm last:border-b-0"
               >
-                <div className="flex items-baseline gap-2">
-                  <span className="font-medium text-slate-800">{e.name}</span>
-                  <span className="text-xs text-slate-500">{e.role}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-medium text-slate-800">{e.name}</span>
+                    <span className="text-xs text-slate-500">{e.role}</span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-rose-700">
+                    {e.pauseReason && <span>{e.pauseReason}</span>}
+                    <span className="text-slate-500">
+                      日额度 HKD {Number(e.dailyLimitHkd).toLocaleString('zh-HK')}
+                    </span>
+                    {e.pausedAt && (
+                      <time className="text-slate-400">
+                        {new Date(e.pausedAt).toLocaleString('zh-HK', { hour12: false })}
+                      </time>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-baseline gap-3 text-xs text-rose-700">
-                  {e.pauseReason && <span>{e.pauseReason}</span>}
-                  <span className="text-slate-500">
-                    日额度 HKD {Number(e.dailyLimitHkd).toLocaleString('zh-HK')}
-                  </span>
-                  {e.pausedAt && (
-                    <time className="text-slate-400">
-                      {new Date(e.pausedAt).toLocaleString('zh-HK', { hour12: false })}
-                    </time>
-                  )}
-                </div>
+                <UnpauseButton
+                  employeeId={e.id}
+                  name={e.name}
+                  reason={e.pauseReason}
+                />
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-[11px] text-slate-500">
+            💡 撞顶根因通常是日额度太低。建议先去{' '}
+            <a href="/employees" className="text-rose-700 hover:underline">
+              /employees
+            </a>{' '}
+            上调该员工额度，再回来解锁 — 否则 AI 短时间内又会撞顶。
+          </p>
         </section>
       )}
 
