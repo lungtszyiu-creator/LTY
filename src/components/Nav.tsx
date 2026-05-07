@@ -144,13 +144,13 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   // 总览仅对 SUPER_ADMIN 开放。拼到公共链接最前以保持一致的 nav 顺序。
   // 财务入口需 SUPER_ADMIN 或 financeRole !== null（出纳/编辑者）
-  // 知识入口仅 SUPER_ADMIN（v1 阶段；v2 接入 ApiKey 后可对 AI 开放 API 路径）
+  // 知识入口对所有 active 员工开放（PR 39 起）：员工可上传文档，召唤管家仍仅 SUPER_ADMIN
   const hasFinanceAccess = isSuper || !!user.financeRole;
   const publicLinks = [
     ...(isSuper ? [{ href: '/overview', label: '总览' }] : []),
     ...PUBLIC_LINKS,
     ...(hasFinanceAccess ? [{ href: '/finance', label: '财务' }] : []),
-    ...(isSuper ? [{ href: '/knowledge', label: '知识' }] : []),
+    { href: '/knowledge', label: '知识' },
   ];
 
   const adminActive = ADMIN_LINKS.some((l) => pathname === l.href || pathname?.startsWith(l.href));
