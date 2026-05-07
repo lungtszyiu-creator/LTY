@@ -44,8 +44,13 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error('FORBIDDEN: 账号未激活');
         }
 
-        // 解析前端 payload（含原始 filename）
+        // 解析前端 payload（含原始 filename + 老板手填的 description）
         const meta = clientPayload ? JSON.parse(clientPayload) : {};
+        // description 截断到 1000 字，防恶意大 payload
+        const description: string | null =
+          typeof meta.description === 'string' && meta.description.trim()
+            ? meta.description.trim().slice(0, 1000)
+            : null;
 
         return {
           // allowedContentTypes 故意不设 = 任意类型放行
@@ -54,6 +59,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           tokenPayload: JSON.stringify({
             uploaderId: dbUser.id,
             originalFilename: meta.originalFilename ?? 'unknown',
+            description,
           }),
         };
       },
@@ -70,6 +76,7 @@ export async function POST(request: Request): Promise<NextResponse> {
               contentType: blob.contentType ?? null,
               sizeBytes: 0, // blob.size 可能没填；Mac 端 download 时实际 size 会更准
               uploaderId: meta.uploaderId ?? '',
+              description: meta.description ?? null,
               status: 'pending',
             },
           });

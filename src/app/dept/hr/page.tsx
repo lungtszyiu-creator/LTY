@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 
 export const dynamic = 'force-dynamic';
 
@@ -212,11 +213,12 @@ export default async function HrPage() {
         <NavCard href="/announcements" emoji="📣" label="公司制度 / 公告" hint="" />
       </section>
 
-      {ctx.isSuperAdmin && (
+      {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard
           deptName="人事部"
           scopePrefix="HR_"
-          presetForGenerate="HR_AI:hr_clerk"
+          scopeChoices={getScopeChoices('HR_')}
+          canManage={ctx.isSuperAdmin || ctx.level === 'LEAD'}
           accent="rose"
         />
       )}

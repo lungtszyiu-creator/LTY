@@ -1045,6 +1045,9 @@ model PendingUpload {
   contentType  String?
   sizeBytes    Int
   uploaderId   String // 上传人 User.id（弱关联，无 FK 避免删用户连带删上传）
+  // 上传人手填的"这是什么文件 / 给知识管家的提示" —— 老板和知识库管家
+  // 都看得到，方便后续整理（老板要求）。
+  description  String?
   status       String    @default("pending") // "pending" | "downloaded" | "failed"
   downloadedAt DateTime?
   vaultPath    String? // 落到 vault 的相对路径，downloaded 时填

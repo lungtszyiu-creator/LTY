@@ -37,6 +37,7 @@ type RecentUpload = {
   status: string;
   vaultPath: string | null;
   errorMessage: string | null;
+  description: string | null;
   createdAt: Date;
   downloadedAt: Date | null;
 };
@@ -59,6 +60,7 @@ export default async function KnowledgePage() {
         status: true,
         vaultPath: true,
         errorMessage: true,
+        description: true,
         createdAt: true,
         downloadedAt: true,
       },
@@ -242,6 +244,11 @@ function UploadSection({
               <li key={u.id} className="flex items-start justify-between gap-3 border-b border-slate-100 px-3 py-2 text-xs last:border-b-0">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-slate-700">{u.filename}</div>
+                  {u.description && (
+                    <div className="mt-0.5 break-words text-[11px] text-slate-600">
+                      💬 {u.description}
+                    </div>
+                  )}
                   {u.vaultPath && (
                     <div className="truncate font-mono text-[10px] text-slate-400">→ {u.vaultPath}</div>
                   )}

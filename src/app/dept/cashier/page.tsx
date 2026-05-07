@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
+import { getScopeChoices } from '@/lib/scope-presets';
 import { ReimbursementsTab } from './_components/ReimbursementsTab';
 import { ReconciliationsTab } from './_components/ReconciliationsTab';
 import { ComplianceTab } from './_components/ComplianceTab';
@@ -204,11 +205,12 @@ export default async function CashierPage({
         </div>
       )}
 
-      {ctx.isSuperAdmin && (
+      {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard
           deptName="财务出纳"
           scopePrefix="CASHIER_"
-          presetForGenerate="CASHIER_AI:cashier_clerk"
+          scopeChoices={getScopeChoices('CASHIER_')}
+          canManage={ctx.isSuperAdmin || ctx.level === 'LEAD'}
           accent="rose"
         />
       )}

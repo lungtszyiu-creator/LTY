@@ -64,6 +64,18 @@ export async function requireDeptView(slug: string): Promise<DeptCtx> {
     };
   }
 
+  // 系统级 ADMIN 自动视同所有部门的 LEAD —— 不必为每个部门单独加 DepartmentMembership。
+  // 老板反馈：他设了管理员后竟然连岗位都改不了，因为没在该部门加 membership。
+  // ADMIN 是被信任的"管理者"，给所有部门 LEAD 权限合理。
+  if (dbUser.role === 'ADMIN') {
+    return {
+      userId: dbUser.id,
+      level: 'LEAD',
+      isSuperAdmin: false,
+      department: dept,
+    };
+  }
+
   const membership = await prisma.departmentMembership.findUnique({
     where: { departmentId_userId: { departmentId: dept.id, userId: dbUser.id } },
     select: { role: true },
@@ -139,6 +151,10 @@ export async function requireDeptAuthOrApiKey(
   if (dbUser.role === 'SUPER_ADMIN') {
     return { kind: 'session', userId: dbUser.id, level: 'SUPER_ADMIN', departmentId: dept.id };
   }
+  // 系统 ADMIN 视同所有部门 LEAD（同 requireDeptView 策略）
+  if (dbUser.role === 'ADMIN') {
+    return { kind: 'session', userId: dbUser.id, level: 'LEAD', departmentId: dept.id };
+  }
 
   const membership = await prisma.departmentMembership.findUnique({
     where: { departmentId_userId: { departmentId: dept.id, userId: dbUser.id } },
@@ -169,7 +185,8 @@ export async function requireDeptAuthOrApiKey(
 const HIDDEN_DEPT_SLUGS = new Set(['finance']);
 
 export async function listAccessibleDepartments(userId: string, userRole: string) {
-  if (userRole === 'SUPER_ADMIN') {
+  // SUPER_ADMIN 和系统 ADMIN 都看所有 active 部门（ADMIN 视同部门 LEAD）
+  if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
     const all = await prisma.department.findMany({
       where: { active: true },
       orderBy: { order: 'asc' },
