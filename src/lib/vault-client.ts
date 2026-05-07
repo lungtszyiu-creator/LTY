@@ -182,13 +182,134 @@ export async function getVaultInboxQueue(): Promise<InboxQueueJson | null> {
   return fetchVaultJson<InboxQueueJson>('_meta/inbox_queue.json');
 }
 
-// ============ 财务月报 ============
+// ============ 财务 / 运营 报告（统一 5 类） ============
+//
+// 5 类报告 + vault 路径约定（cron 各自写 markdown 到这些目录）：
+//   financial-monthly:   raw/财务部/monthly_reports/YYYY-MM.md
+//   financial-quarterly: raw/财务部/quarterly_reports/YYYY-Q[1-4].md
+//   financial-annual:    raw/财务部/annual_reports/YYYY.md
+//   ops-quarterly:       raw/财务部/ops_quarterly/YYYY-Q[1-4].md
+//   ops-annual:          raw/财务部/ops_annual/YYYY.md
+//
+// 兼容：原 listMonthlyReports / getMonthlyReport 保留作 financial-monthly 的别名。
+
+export type ReportCategory =
+  | 'financial-monthly'
+  | 'financial-quarterly'
+  | 'financial-annual'
+  | 'ops-quarterly'
+  | 'ops-annual';
+
+export const REPORT_CATEGORY_META: Record<
+  ReportCategory,
+  { label: string; dir: string; keyRegex: RegExp; period: 'monthly' | 'quarterly' | 'annual'; type: 'financial' | 'ops' }
+> = {
+  'financial-monthly': {
+    label: '财务月报',
+    dir: 'raw/财务部/monthly_reports',
+    keyRegex: /^\d{4}-\d{2}$/,
+    period: 'monthly',
+    type: 'financial',
+  },
+  'financial-quarterly': {
+    label: '财务季报',
+    dir: 'raw/财务部/quarterly_reports',
+    keyRegex: /^\d{4}-Q[1-4]$/,
+    period: 'quarterly',
+    type: 'financial',
+  },
+  'financial-annual': {
+    label: '财务年报',
+    dir: 'raw/财务部/annual_reports',
+    keyRegex: /^\d{4}$/,
+    period: 'annual',
+    type: 'financial',
+  },
+  'ops-quarterly': {
+    label: '运营季度分析',
+    dir: 'raw/财务部/ops_quarterly',
+    keyRegex: /^\d{4}-Q[1-4]$/,
+    period: 'quarterly',
+    type: 'ops',
+  },
+  'ops-annual': {
+    label: '运营年度分析',
+    dir: 'raw/财务部/ops_annual',
+    keyRegex: /^\d{4}$/,
+    period: 'annual',
+    type: 'ops',
+  },
+};
+
+export function isReportCategory(s: string): s is ReportCategory {
+  return s in REPORT_CATEGORY_META;
+}
+
+export interface ReportEntry {
+  category: ReportCategory;
+  key: string; // "2026-04" / "2026-Q2" / "2026"
+  filename: string;
+  path: string;
+  htmlUrl?: string;
+  size: number;
+  sha: string;
+}
+
+export interface ReportContent {
+  category: ReportCategory;
+  key: string;
+  markdown: string;
+  htmlUrl?: string;
+}
+
+/** 列出某类报告，按 key 倒序（最近的在前） */
+export async function listVaultReports(category: ReportCategory): Promise<ReportEntry[]> {
+  const meta = REPORT_CATEGORY_META[category];
+  const entries = await fetchVaultDir(meta.dir);
+  if (!entries) return [];
+  return entries
+    .filter((e) => {
+      if (e.type !== 'file' || !e.name.endsWith('.md')) return false;
+      const key = e.name.replace(/\.md$/, '');
+      return meta.keyRegex.test(key);
+    })
+    .map((e) => ({
+      category,
+      key: e.name.replace(/\.md$/, ''),
+      filename: e.name,
+      path: e.path,
+      htmlUrl: e.html_url,
+      size: e.size,
+      sha: e.sha,
+    }))
+    .sort((a, b) => b.key.localeCompare(a.key));
+}
+
+/** 拉某份报告 markdown 内容 */
+export async function getVaultReport(
+  category: ReportCategory,
+  key: string,
+): Promise<ReportContent | null> {
+  const meta = REPORT_CATEGORY_META[category];
+  if (!meta.keyRegex.test(key)) return null;
+  const path = `${meta.dir}/${key}.md`;
+  const md = await fetchVaultText(path);
+  if (md === null) return null;
+  return {
+    category,
+    key,
+    markdown: md,
+    htmlUrl: `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${encodeURI(path)}`,
+  };
+}
+
+// ============ 兼容旧 API（财务月报）============
 
 export interface MonthlyReportEntry {
-  yearMonth: string; // "2026-04"
-  filename: string; // "2026-04.md"
-  path: string; // vault path
-  htmlUrl?: string; // GitHub web view URL
+  yearMonth: string;
+  filename: string;
+  path: string;
+  htmlUrl?: string;
   size: number;
   sha: string;
 }
@@ -199,35 +320,22 @@ export interface MonthlyReportContent {
   htmlUrl?: string;
 }
 
-const MONTHLY_REPORTS_DIR = 'raw/财务部/monthly_reports';
-
-/** 列出所有月报，按月倒序 */
+/** @deprecated 用 listVaultReports('financial-monthly') —— 保留兼容 PR #44 调用方 */
 export async function listMonthlyReports(): Promise<MonthlyReportEntry[]> {
-  const entries = await fetchVaultDir(MONTHLY_REPORTS_DIR);
-  if (!entries) return [];
-  return entries
-    .filter((e) => e.type === 'file' && /^\d{4}-\d{2}\.md$/.test(e.name))
-    .map((e) => ({
-      yearMonth: e.name.replace(/\.md$/, ''),
-      filename: e.name,
-      path: e.path,
-      htmlUrl: e.html_url,
-      size: e.size,
-      sha: e.sha,
-    }))
-    .sort((a, b) => b.yearMonth.localeCompare(a.yearMonth));
+  const entries = await listVaultReports('financial-monthly');
+  return entries.map((e) => ({
+    yearMonth: e.key,
+    filename: e.filename,
+    path: e.path,
+    htmlUrl: e.htmlUrl,
+    size: e.size,
+    sha: e.sha,
+  }));
 }
 
-/** 拉某月月报 markdown 内容 */
+/** @deprecated 用 getVaultReport('financial-monthly', yearMonth) */
 export async function getMonthlyReport(yearMonth: string): Promise<MonthlyReportContent | null> {
-  // 校验格式 YYYY-MM 防注入
-  if (!/^\d{4}-\d{2}$/.test(yearMonth)) return null;
-  const path = `${MONTHLY_REPORTS_DIR}/${yearMonth}.md`;
-  const md = await fetchVaultText(path);
-  if (md === null) return null;
-  return {
-    yearMonth,
-    markdown: md,
-    htmlUrl: `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${encodeURI(path)}`,
-  };
+  const content = await getVaultReport('financial-monthly', yearMonth);
+  if (!content) return null;
+  return { yearMonth: content.key, markdown: content.markdown, htmlUrl: content.htmlUrl };
 }

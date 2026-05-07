@@ -254,8 +254,9 @@ export default function ApiKeyAdminPage() {
             还没生成 Key。
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <table className="w-full text-sm">
+          // 移动端横向溢出时滚动，避免 chip 被压缩成多行（"已吊销"换行问题）
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table className="w-full min-w-[820px] text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-4 py-2 text-left align-top">名称</th>
@@ -275,17 +276,17 @@ export default function ApiKeyAdminPage() {
                     <td className="px-4 py-2 align-top text-xs text-slate-500">
                       {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('zh-CN') : '从未'}
                     </td>
-                    <td className="px-4 py-2 align-top">
+                    <td className="px-4 py-2 align-top whitespace-nowrap">
                       {k.revokedAt ? (
-                        <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700 ring-1 ring-rose-200">
+                        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-700 ring-1 ring-rose-200">
                           已吊销
                         </span>
                       ) : k.active ? (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
+                        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
                           在用
                         </span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 ring-1 ring-slate-200">
+                        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 ring-1 ring-slate-200">
                           停用
                         </span>
                       )}
