@@ -146,14 +146,25 @@ export async function DELETE(
   const admin = await requireSuperAdmin();
   const existing = await prisma.aiEmployee.findUnique({
     where: { id: params.id },
-    select: { id: true, apiKeyId: true },
+    select: { id: true, apiKeyId: true, _count: { select: { tokenUsages: true } } },
   });
   if (!existing) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
   }
 
-  // Step 2 上线 TokenUsage 后这里要加 "无业务行才能删" 校验。
-  // Step 1 暂无业务关联，直接删即可。
+  // 无业务关联才能硬删；有 tokenUsages 历史的员工只能停用（active=false）
+  // 不能删（保留历史用于审计 + 财务回溯）
+  if (existing._count.tokenUsages > 0) {
+    return NextResponse.json(
+      {
+        error: 'cannot_delete_has_records',
+        hint: `该员工有 ${existing._count.tokenUsages} 条 token 调用历史，不能硬删。请改用"停用"。`,
+        tokenUsages: existing._count.tokenUsages,
+      },
+      { status: 422 },
+    );
+  }
+
   await prisma.$transaction(async (tx) => {
     // 关联 ApiKey 同步吊销（保留行用于审计，置 revokedAt + active=false）
     if (existing.apiKeyId) {
