@@ -503,9 +503,15 @@ export function EmployeesClient({
           row={editTarget}
           depts={depts}
           supervisorPool={supervisorPool.filter((s) => s.id !== editTarget.id)}
+          meRole={meRole}
           onClose={() => setEditTarget(null)}
           onSaved={async () => {
             setEditTarget(null);
+            await refresh();
+          }}
+          onKeyRegenerated={async (name, plaintext) => {
+            setEditTarget(null);
+            setNewKeyForCopy({ name, key: plaintext });
             await refresh();
           }}
         />
@@ -737,15 +743,20 @@ function EditDialog({
   row,
   depts,
   supervisorPool,
+  meRole,
   onClose,
   onSaved,
+  onKeyRegenerated,
 }: {
   row: EmployeeRow;
   depts: DeptOption[];
   /** 上司池（已剔除自己），给"隶属上司"下拉用 */
   supervisorPool: EmployeeRow[];
+  meRole: 'ADMIN' | 'SUPER_ADMIN';
   onClose: () => void;
   onSaved: () => void | Promise<void>;
+  /** 重新生成 key 完成后调；父组件用同一个 NewKeyDialog 弹明文 */
+  onKeyRegenerated: (name: string, plaintext: string) => void;
 }) {
   const [name, setName] = useState(row.name);
   const [role, setRole] = useState(row.role);
@@ -756,7 +767,34 @@ function EditDialog({
   const [isSupervisor, setIsSupervisor] = useState(row.isSupervisor);
   const [reportsToId, setReportsToId] = useState(row.reportsToId ?? '');
   const [busy, setBusy] = useState(false);
+  const [regeneratingKey, setRegeneratingKey] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  async function regenerateKey() {
+    const ok = confirm(
+      `重新生成 ${row.name} 的 API Key？\n\n` +
+        `⚠️ 旧 key 会立刻失效（吊销），用旧 key 调看板会返 401。\n` +
+        `新 key 明文一次性显示，必须立刻复制保存（看板永远不存明文）。\n\n` +
+        `继续吗？`,
+    );
+    if (!ok) return;
+    setRegeneratingKey(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/employees/${row.id}/regenerate-key`, { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) {
+        setErr(j.hint ?? j.error ?? `HTTP ${r.status}`);
+        return;
+      }
+      // 关闭编辑模态框 + 让父组件弹出 NewKeyDialog 显示明文
+      onKeyRegenerated(row.name, j.plaintext_key);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '未知错误');
+    } finally {
+      setRegeneratingKey(false);
+    }
+  }
 
   async function submit() {
     // 取消上司身份且有下属 → 二次确认
@@ -901,14 +939,33 @@ function EditDialog({
 
       {row.apiKey && (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/40 p-3 text-xs text-slate-600">
-          🔑 关联 API Key：
-          <span className="ml-1 font-mono text-slate-800">{row.apiKey.keyPrefix}…</span>
-          <span className="ml-2">scope: <code className="rounded bg-white px-1">{row.apiKey.scope}</code></span>
-          {row.apiKey.lastUsedAt && (
-            <span className="ml-2 text-slate-400">最近使用 {formatTimeAgo(row.apiKey.lastUsedAt)}</span>
-          )}
-          <p className="mt-1 text-[10px] text-slate-500">
-            想换 scope 或重生成 key？现阶段去 /admin/api-keys 直接管理（仅老板）。
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0 flex-1">
+              🔑 关联 API Key：
+              <span className="ml-1 font-mono text-slate-800">{row.apiKey.keyPrefix}…</span>
+              <span className="ml-2">
+                scope: <code className="rounded bg-white px-1">{row.apiKey.scope}</code>
+              </span>
+              {row.apiKey.lastUsedAt && (
+                <span className="ml-2 text-slate-400">
+                  最近使用 {formatTimeAgo(row.apiKey.lastUsedAt)}
+                </span>
+              )}
+            </div>
+            {meRole === 'SUPER_ADMIN' && (
+              <button
+                type="button"
+                onClick={regenerateKey}
+                disabled={regeneratingKey || busy}
+                className="rounded bg-rose-700 px-2.5 py-1 text-[11px] font-medium text-amber-50 transition hover:bg-rose-800 disabled:opacity-50"
+                title="生成一把新 key + 立刻吊销旧 key（明文一次性显示）"
+              >
+                {regeneratingKey ? '生成中…' : '🔄 重新生成 Key'}
+              </button>
+            )}
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-500">
+            ⚠️ 重新生成会立刻吊销旧 key，用旧 key 的 AI 调用会 401。明文新 key 必须立刻保存。
           </p>
         </div>
       )}
