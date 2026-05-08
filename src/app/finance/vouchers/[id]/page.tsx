@@ -9,6 +9,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { VoucherActions } from './voucher-actions';
+import { EditVoucherCard } from './EditVoucherCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -129,16 +130,43 @@ export default async function VoucherDetailPage({
 
       {/* 老板操作区（VIEWER 看不到） */}
       {access.level === 'EDITOR' && (
-        <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600">
-            老板操作
-          </h2>
-          <VoucherActions
-            voucherId={voucher.id}
-            status={voucher.status as never}
-            isSuperAdmin={access.isSuperAdmin}
-          />
-        </section>
+        <>
+          {(voucher.status === 'AI_DRAFT' || voucher.status === 'BOSS_REVIEWING') && (
+            <section className="mb-4">
+              <EditVoucherCard
+                initial={{
+                  id: voucher.id,
+                  date: voucher.date.toISOString().slice(0, 10),
+                  summary: voucher.summary,
+                  debitAccount: voucher.debitAccount,
+                  creditAccount: voucher.creditAccount,
+                  amount: voucher.amount.toString(),
+                  currency: voucher.currency,
+                  notes: voucher.notes,
+                  relatedTxIdsArr: (() => {
+                    if (!voucher.relatedTxIds) return [];
+                    try {
+                      const parsed = JSON.parse(voucher.relatedTxIds);
+                      return Array.isArray(parsed) ? parsed.map(String) : [];
+                    } catch {
+                      return [];
+                    }
+                  })(),
+                }}
+              />
+            </section>
+          )}
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600">
+              老板操作
+            </h2>
+            <VoucherActions
+              voucherId={voucher.id}
+              status={voucher.status as never}
+              isSuperAdmin={access.isSuperAdmin}
+            />
+          </section>
+        </>
       )}
       {access.level === 'VIEWER' && (
         <div className="rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
