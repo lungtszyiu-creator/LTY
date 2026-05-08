@@ -1704,3 +1704,44 @@ model HrRoster {
   @@index([status])
   @@index([linkedUserId])
 }
+
+// ---- Vault 公司实体镜像 ----
+//
+// 用途：vault wiki/entities/company_*.md 是 LTY 体系实体事实源
+// （LTY BRANDS HK / 旭珑商顾 SZ / 龙氏贵金属 / 龙氏珠宝 / Magic Compass /
+//  EVER FRONT / 慈航管理 / 琰宸科技 / Prime Cdex UAB / 摩石集团 / YAGANG / mc_markets）
+//
+// 不混入登录用 User 的 Department 体系，独立镜像表，由 vault-ingest 自动 sync。
+// 读 only：要改公司资料 → 改 vault wiki 文件 → 重 sync。
+model VaultCompanyMirror {
+  id              String   @id @default(cuid())
+  vaultPath       String   @unique // "wiki/entities/company_xxx.md"
+  title           String   // "香港旭珑 (LTY Brands Management Limited)"
+  officialNameEn  String?  // "LTY Brands Management Limited"
+  officialNameZh  String?  // "旭珑品牌管理有限公司"
+  jurisdiction    String?  // "香港" / "中国大陆（深圳）" / "立陶宛" / ...
+  entityKind      String?  // "company" / "company_group" / ...
+
+  // 治理（如有）
+  legalRepresentative String? // 法人代表（含 "花钱挂名" 标记）
+  actualController    String? // 实控人
+  registeredAddress   String?
+  registeredCapital   String? // 字符串保原始格式，如 "RMB 800 万" / "BR 73268889"
+  creditCode          String? // 91440300...（中国）或 BR（HK）
+  established         String? // 成立日期（字符串保原始）
+
+  // LTY 关联
+  relationToLty   String? // "唯一公司拥有者主体" / "全资子公司" / "关联实体" / "客户" / "第三方业主" / "已关闭"
+  privateMatter   Boolean @default(false) // 私人事情（如慈航管理 = 张婉玲相关）
+
+  status         String  @default("ACTIVE") // "ACTIVE" | "CLOSED" | "PRIVATE_MATTER"
+
+  syncedAt       DateTime @default(now())
+  rawFrontmatter String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([jurisdiction])
+}

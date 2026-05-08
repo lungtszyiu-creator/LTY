@@ -187,6 +187,9 @@ export async function POST(req: NextRequest) {
   const walletFiles = files.filter((f) => f.type === 'file' && /^wallet_.*\.md$/i.test(f.name));
   const bankFiles = files.filter((f) => f.type === 'file' && /^bank_.*\.md$/i.test(f.name));
   const employeeFiles = files.filter((f) => f.type === 'file' && /^employee_.*\.md$/i.test(f.name));
+  const companyFiles = files.filter(
+    (f) => f.type === 'file' && (/^company_.*\.md$/i.test(f.name) || f.name === 'mc_markets.md'),
+  );
 
   // 拉取 HR 薪资结构表（best-effort，失败不阻塞 employee 同步）
   let salaryMap = new Map<string, { monthlySalary: number; currency: string }>();
@@ -289,9 +292,48 @@ export async function POST(req: NextRequest) {
     }),
   );
 
+  // company_*.md / mc_markets.md 解析
+  const companies = await Promise.all(
+    companyFiles.map(async (f) => {
+      if (!f.download_url) return null;
+      const md = await ghFileText(f.download_url, token);
+      const fm = parseFrontmatter(md);
+      const titleStr = fm.title ?? f.name.replace(/\.md$/, '');
+
+      // 状态判断：md body 提到关闭/注销 → CLOSED；frontmatter visibility:private → PRIVATE_MATTER
+      const isClosed = /\b(已关闭|注销|closed|deregistered|清算完毕)\b/i.test(md);
+      const isPrivate = fm.visibility === 'private' || /私人事情|私人事务/i.test(md);
+      const status = isClosed ? 'CLOSED' : isPrivate ? 'PRIVATE_MATTER' : 'ACTIVE';
+
+      return {
+        sourcePath: `${ENTITIES_DIR}/${f.name}`,
+        raw: fm,
+        mapped: {
+          vaultPath: `${ENTITIES_DIR}/${f.name}`,
+          title: titleStr,
+          officialNameEn: fm.official_name_en ?? fm.official_name ?? null,
+          officialNameZh: fm.chinese_official ?? fm.official_name_zh ?? null,
+          jurisdiction: fm.jurisdiction ?? null,
+          entityKind: fm.entity_kind ?? null,
+          legalRepresentative: fm.legal_representative ?? null,
+          actualController: fm.actual_controller ?? null,
+          registeredAddress: fm.registered_address ?? null,
+          registeredCapital: fm.registered_capital ?? fm.business_registration ?? null,
+          creditCode: fm.credit_code ?? fm.business_registration ?? null,
+          established: fm.established ?? null,
+          relationToLty: fm.relation_to_lty ?? fm.relationship ?? null,
+          privateMatter: isPrivate,
+          status,
+          rawFrontmatter: JSON.stringify(fm).slice(0, 4000),
+        },
+      };
+    }),
+  );
+
   const validWallets = wallets.filter((w): w is NonNullable<typeof w> => !!w && !!w.mapped.address);
   const validBanks = banks.filter((b): b is NonNullable<typeof b> => !!b && !!b.mapped.accountNumber);
   const validEmployees = employees.filter((e): e is NonNullable<typeof e> => !!e && !!e.mapped.title);
+  const validCompanies = companies.filter((c): c is NonNullable<typeof c> => !!c && !!c.mapped.title);
 
   if (dryRun) {
     return NextResponse.json({
@@ -299,10 +341,12 @@ export async function POST(req: NextRequest) {
       wallets: validWallets.map((w) => w.mapped),
       banks: validBanks.map((b) => b.mapped),
       employees: validEmployees.map((e) => e.mapped),
+      companies: validCompanies.map((c) => c.mapped),
       counts: {
         wallets: validWallets.length,
         banks: validBanks.length,
         employees: validEmployees.length,
+        companies: validCompanies.length,
         salaryRowsParsed: salaryMap.size,
       },
     });
@@ -352,15 +396,34 @@ export async function POST(req: NextRequest) {
     ),
   );
 
+  const companyResults = await Promise.all(
+    validCompanies.map((c) =>
+      prisma.vaultCompanyMirror.upsert({
+        where: { vaultPath: c.mapped.vaultPath },
+        create: c.mapped,
+        update: { ...c.mapped, syncedAt: new Date() },
+        select: {
+          id: true,
+          title: true,
+          jurisdiction: true,
+          status: true,
+          relationToLty: true,
+        },
+      }),
+    ),
+  );
+
   return NextResponse.json({
     imported: {
       wallets: walletResults,
       banks: bankResults,
       employees: employeeResults,
+      companies: companyResults,
       counts: {
         wallets: walletResults.length,
         banks: bankResults.length,
         employees: employeeResults.length,
+        companies: companyResults.length,
         salaryRowsParsed: salaryMap.size,
       },
     },

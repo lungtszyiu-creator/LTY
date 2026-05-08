@@ -23,10 +23,33 @@ type BankMap = {
   currency: string;
 };
 
+type EmployeeMap = {
+  title: string;
+  chineseName?: string | null;
+  englishName?: string | null;
+  employmentType?: string | null;
+  status?: string | null;
+  monthlySalary?: string | number | null;
+  currency?: string | null;
+};
+type CompanyMap = {
+  title: string;
+  jurisdiction?: string | null;
+  status?: string | null;
+  relationToLty?: string | null;
+};
 type Preview = {
   wallets: WalletMap[];
   banks: BankMap[];
-  counts: { wallets: number; banks: number };
+  employees?: EmployeeMap[];
+  companies?: CompanyMap[];
+  counts: {
+    wallets: number;
+    banks: number;
+    employees?: number;
+    companies?: number;
+    salaryRowsParsed?: number;
+  };
 };
 
 export function VaultIngestButton() {
@@ -34,7 +57,12 @@ export function VaultIngestButton() {
   const [pending, startTransition] = useTransition();
   const [stage, setStage] = useState<'idle' | 'preview' | 'done'>('idle');
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [result, setResult] = useState<{ wallets: number; banks: number } | null>(null);
+  const [result, setResult] = useState<{
+    wallets: number;
+    banks: number;
+    employees?: number;
+    companies?: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function call(body: { dryRun?: boolean }) {
@@ -56,7 +84,13 @@ export function VaultIngestButton() {
     startTransition(async () => {
       const j = await call({ dryRun: true });
       if (j) {
-        setPreview({ wallets: j.wallets, banks: j.banks, counts: j.counts });
+        setPreview({
+          wallets: j.wallets,
+          banks: j.banks,
+          employees: j.employees,
+          companies: j.companies,
+          counts: j.counts,
+        });
         setStage('preview');
       }
     });
@@ -89,7 +123,7 @@ export function VaultIngestButton() {
           disabled={pending}
           className="rounded-lg bg-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-800 ring-1 ring-indigo-200 transition hover:bg-indigo-200 disabled:opacity-50"
         >
-          {pending ? '读取 vault 中...' : '📥 从 Vault 导入主数据（钱包 / 银行户）'}
+          {pending ? '读取 vault 中...' : '📥 从 Vault 导入主数据（钱包 / 银行 / 员工 / 公司）'}
         </button>
       )}
 
@@ -127,6 +161,57 @@ export function VaultIngestButton() {
             </div>
           )}
 
+          {preview.employees && preview.employees.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-indigo-800 mb-1">
+                员工（{preview.employees.length}） · 含薪资 {preview.counts.salaryRowsParsed ?? 0} 行
+              </div>
+              <ul className="space-y-1 text-xs max-h-48 overflow-y-auto">
+                {preview.employees.map((e, i) => (
+                  <li key={i} className="text-indigo-900">
+                    {e.chineseName || e.title}
+                    {e.englishName ? ` (${e.englishName})` : ''}
+                    {e.employmentType ? ` · ${e.employmentType}` : ''}
+                    {e.monthlySalary ? ` · ${e.monthlySalary} ${e.currency ?? ''}` : ''}
+                    {' · '}
+                    <span className={e.status === 'RESIGNED' ? 'text-slate-500' : 'text-emerald-700'}>
+                      {e.status === 'RESIGNED' ? '离职' : '在职'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {preview.companies && preview.companies.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-indigo-800 mb-1">
+                公司实体（{preview.companies.length}）
+              </div>
+              <ul className="space-y-1 text-xs max-h-48 overflow-y-auto">
+                {preview.companies.map((c, i) => (
+                  <li key={i} className="text-indigo-900">
+                    {c.title}
+                    {c.jurisdiction ? ` · ${c.jurisdiction}` : ''}
+                    {c.relationToLty ? ` · ${c.relationToLty}` : ''}
+                    {' · '}
+                    <span
+                      className={
+                        c.status === 'CLOSED'
+                          ? 'text-slate-400'
+                          : c.status === 'PRIVATE_MATTER'
+                          ? 'text-amber-700'
+                          : 'text-emerald-700'
+                      }
+                    >
+                      {c.status === 'CLOSED' ? '已关闭' : c.status === 'PRIVATE_MATTER' ? '私人' : '在用'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="text-[11px] text-indigo-700">
             读自 lty-vault repo 的 wiki/entities/ 目录。upsert 不会重复 —— 已存在按 (chain,address) 或 (bankName,accountNumber) 更新。
           </div>
@@ -138,7 +223,14 @@ export function VaultIngestButton() {
               disabled={pending || preview.counts.wallets + preview.counts.banks === 0}
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
             >
-              {pending ? '导入中...' : `✅ 确认导入 ${preview.counts.wallets + preview.counts.banks} 条`}
+              {pending
+                ? '导入中...'
+                : `✅ 确认导入 ${
+                    preview.counts.wallets +
+                    preview.counts.banks +
+                    (preview.counts.employees ?? 0) +
+                    (preview.counts.companies ?? 0)
+                  } 条`}
             </button>
             <button
               type="button"
@@ -156,6 +248,8 @@ export function VaultIngestButton() {
         <div className="space-y-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
           <div className="text-sm font-medium text-emerald-900">
             ✅ 已导入 {result.wallets} 钱包 + {result.banks} 银行账户
+            {result.employees ? ` + ${result.employees} 员工` : ''}
+            {result.companies ? ` + ${result.companies} 公司实体` : ''}
           </div>
           <button
             type="button"
