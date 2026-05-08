@@ -44,6 +44,18 @@ const patchSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('approve') }),
   z.object({ action: z.literal('reject'), reason: z.string().min(1).max(2000) }),
   z.object({ action: z.literal('void'), reason: z.string().min(1).max(2000) }),
+  // edit：仅在 AI_DRAFT / BOSS_REVIEWING 状态下允许，POSTED/REJECTED/VOIDED 不可改
+  z.object({
+    action: z.literal('edit'),
+    date: z.string().datetime().optional(),
+    summary: z.string().min(1).max(500).optional(),
+    debitAccount: z.string().min(1).max(100).optional(),
+    creditAccount: z.string().min(1).max(100).optional(),
+    amount: z.coerce.number().positive().optional(),
+    currency: z.string().min(1).max(10).optional(),
+    notes: z.string().max(1000).optional().nullable(),
+    relatedTxIds: z.array(z.string()).optional().nullable(),
+  }),
 ]);
 
 // 生成凭证号 V-YYYYMM-NNN（按凭证 date 月份分流水）
@@ -128,6 +140,48 @@ export async function PATCH(
           : `[REJECTED at ${now.toISOString()}]: ${data.reason}`,
       },
     });
+    return NextResponse.json(updated);
+  }
+
+  if (data.action === 'edit') {
+    // 只允许编辑未过账状态：POSTED 必须先 VOID 留痕；REJECTED/VOIDED 是终态
+    if (voucher.status !== 'AI_DRAFT' && voucher.status !== 'BOSS_REVIEWING') {
+      return NextResponse.json(
+        {
+          error: 'CANNOT_EDIT',
+          from: voucher.status,
+          hint: 'POSTED/REJECTED/VOIDED 凭证不能直接修改。POSTED 请先作废后重建，REJECTED/VOIDED 是终态。',
+        },
+        { status: 409 },
+      );
+    }
+    const updateData: {
+      date?: Date;
+      summary?: string;
+      debitAccount?: string;
+      creditAccount?: string;
+      amount?: number;
+      currency?: string;
+      notes?: string | null;
+      relatedTxIds?: string | null;
+    } = {};
+    if (data.date !== undefined) updateData.date = new Date(data.date);
+    if (data.summary !== undefined) updateData.summary = data.summary;
+    if (data.debitAccount !== undefined) updateData.debitAccount = data.debitAccount;
+    if (data.creditAccount !== undefined) updateData.creditAccount = data.creditAccount;
+    if (data.amount !== undefined) updateData.amount = data.amount;
+    if (data.currency !== undefined) updateData.currency = data.currency;
+    if (data.notes !== undefined) updateData.notes = data.notes ?? null;
+    if (data.relatedTxIds !== undefined) {
+      updateData.relatedTxIds = data.relatedTxIds ? JSON.stringify(data.relatedTxIds) : null;
+    }
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'NO_FIELDS', hint: '至少要改一个字段' },
+        { status: 400 },
+      );
+    }
+    const updated = await prisma.voucher.update({ where: { id }, data: updateData });
     return NextResponse.json(updated);
   }
 

@@ -119,6 +119,14 @@ export default async function VouchersListPage({
             )}
           </p>
         </div>
+        {access.level === 'EDITOR' && (
+          <Link
+            href="/finance/vouchers/new"
+            className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-rose-700"
+          >
+            + 新建凭证
+          </Link>
+        )}
       </div>
 
       {/* 状态过滤 */}
