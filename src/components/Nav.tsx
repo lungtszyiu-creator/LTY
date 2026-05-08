@@ -44,7 +44,6 @@ const ADMIN_LINKS = [
   { href: '/admin/vault-etl',            label: 'Vault → 看板 导入' },
   { href: '/employees',                  label: 'AI 员工档案' },
   { href: '/admin/ai-onboarding',        label: 'AI 接入向导' },
-  { href: '/overview',                   label: 'AI 总览（Token 监控）' },
   { href: '/admin/api-keys',             label: 'API Key 管理（全部门）' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
@@ -146,12 +145,12 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   const isAdmin = isSuper || user.role === 'ADMIN';
   const roleLabel = isSuper ? '总管' : isAdmin ? '管理员' : '成员';
 
-  // 总览仅对 SUPER_ADMIN 开放。拼到公共链接最前以保持一致的 nav 顺序。
+  // AI 部全员可见（透明文化决策 2026-05-09）。/overview redirect 到 /dept/ai。
   // 财务入口需 SUPER_ADMIN 或 financeRole !== null（出纳/编辑者）
   // 知识入口对所有 active 员工开放（PR 39 起）：员工可上传文档，召唤管家仍仅 SUPER_ADMIN
   const hasFinanceAccess = isSuper || !!user.financeRole;
   const publicLinks = [
-    ...(isSuper ? [{ href: '/overview', label: 'AI 总览' }] : []),
+    { href: '/dept/ai', label: 'AI 部' },
     ...PUBLIC_LINKS,
     ...(hasFinanceAccess ? [{ href: '/finance', label: '财务' }] : []),
     { href: '/knowledge', label: '知识' },
@@ -159,12 +158,11 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
 
   // /admin/api-keys 总管理仅 SUPER_ADMIN（避免跨部门越权 —— 部门 LEAD 应该
   // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
-  // /overview AI 总览含公司日预算 + 撞顶事件，敏感，也仅 SUPER_ADMIN。
   // /admin/vault-etl 一次性数据导入，写库操作，必须仅 SUPER_ADMIN。
   // /admin/ai-onboarding 暴露 AI 接入配置（含 keyPrefix），仅 SUPER_ADMIN。
+  // 注：/overview 已搬到 /dept/ai 全员可见（解锁按钮内部条件渲染 SUPER_ADMIN）
   const SUPER_ONLY_LINKS = new Set([
     '/admin/api-keys',
-    '/overview',
     '/admin/vault-etl',
     '/admin/ai-onboarding',
   ]);
