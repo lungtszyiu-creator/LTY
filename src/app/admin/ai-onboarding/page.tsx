@@ -17,7 +17,8 @@
  *
  * 数据源：AiEmployee + ApiKey (prisma)
  *
- * 权限：仅 SUPER_ADMIN。
+ * 权限：ADMIN+（让各部门 ADMIN 自己看教程接 token 监控，不用老板单独教）。
+ * keyPrefix 暴露给 ADMIN 也安全 — 看板永不存明文，他们看不到完整 key。
  */
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -31,7 +32,10 @@ export const dynamic = 'force-dynamic';
 export default async function AiOnboardingPage() {
   const session = await getSession();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'SUPER_ADMIN') redirect('/dashboard');
+  // ADMIN+ 都能看接入教程（部门 ADMIN 自己接自己的部门 AI）
+  if (session.user.role !== 'SUPER_ADMIN' && session.user.role !== 'ADMIN') {
+    redirect('/dashboard');
+  }
 
   const employees = await prisma.aiEmployee.findMany({
     orderBy: [{ active: 'desc' }, { paused: 'desc' }, { layer: 'asc' }, { createdAt: 'desc' }],

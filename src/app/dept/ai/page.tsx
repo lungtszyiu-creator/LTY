@@ -37,6 +37,7 @@ import {
 import { getCompanyDailyBudgetHkd } from '@/lib/pricing';
 import { HistoricalSection } from '@/components/ai-dashboard/HistoricalSection';
 import { UnpauseButton } from '@/components/ai-dashboard/UnpauseButton';
+import { AiActivityFeed, type ActivityRow } from '@/components/ai-dashboard/AiActivityFeed';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ export default async function DeptAiPage({
     modelBreakdown,
     employeeStats,
     recentEmployees,
+    todayActivities,
   ] = await Promise.all([
     spendByRange(todayStart, todayEnd),
     callCountByRange(todayStart, todayEnd),
@@ -123,7 +125,41 @@ export default async function DeptAiPage({
         dailyLimitHkd: true,
       },
     }),
+    // 今日 AiActivityLog（按员工分组的工作日记）— 关联 apiKey → AiEmployee
+    // 拿员工真名 + role；最多 200 条防止刷屏
+    prisma.aiActivityLog.findMany({
+      where: { createdAt: { gte: todayStart, lt: todayEnd } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        apiKey: {
+          select: {
+            name: true,
+            aiEmployee: { select: { name: true, role: true } },
+          },
+        },
+      },
+    }),
   ]);
+
+  // 序列化为 client-friendly ActivityRow（Date → ISO 字符串）
+  const activityRows: ActivityRow[] = todayActivities.map((a) => ({
+    id: a.id,
+    aiRole: a.aiRole,
+    action: a.action,
+    status: a.status,
+    payload: a.payload,
+    voucherId: a.voucherId,
+    chainTransactionId: a.chainTransactionId,
+    fxRateId: a.fxRateId,
+    reconciliationId: a.reconciliationId,
+    telegramSent: a.telegramSent,
+    vaultWritten: a.vaultWritten,
+    createdAt: a.createdAt.toISOString(),
+    employeeName: a.apiKey?.aiEmployee?.name ?? null,
+    employeeRole: a.apiKey?.aiEmployee?.role ?? null,
+    apiKeyName: a.apiKey?.name ?? null,
+  }));
 
   const dodPct =
     yesterdaySpend > 0 ? ((todaySpend - yesterdaySpend) / yesterdaySpend) * 100 : null;
@@ -250,8 +286,11 @@ export default async function DeptAiPage({
         }))}
       />
 
+      {/* 5. 今日 AI 工作日记（每个 AI 干了啥的时间线） */}
+      <AiActivityFeed rows={activityRows} />
+
       {/* 空状态指引 */}
-      {todayCalls === 0 && pausedEmployees.length === 0 && (
+      {todayCalls === 0 && pausedEmployees.length === 0 && activityRows.length === 0 && (
         <section className="mb-6 rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-6 text-center text-sm text-slate-500">
           <div className="text-2xl">📡</div>
           <p className="mt-2">今日 0 次 AI 调用 — 等 AI 员工开始上报 token 用量。</p>
@@ -262,7 +301,7 @@ export default async function DeptAiPage({
         </section>
       )}
 
-      {/* 5. 历史范围 + 趋势图 + 每日明细 */}
+      {/* 6. 历史范围 + 趋势图 + 每日明细 */}
       <HistoricalSection range={range} />
     </div>
   );

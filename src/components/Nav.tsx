@@ -159,12 +159,11 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   // /admin/api-keys 总管理仅 SUPER_ADMIN（避免跨部门越权 —— 部门 LEAD 应该
   // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
   // /admin/vault-etl 一次性数据导入，写库操作，必须仅 SUPER_ADMIN。
-  // /admin/ai-onboarding 暴露 AI 接入配置（含 keyPrefix），仅 SUPER_ADMIN。
+  // /admin/ai-onboarding 现在 ADMIN+ 都能看（让各部门 ADMIN 自己接 token 监控）
   // 注：/overview 已搬到 /dept/ai 全员可见（解锁按钮内部条件渲染 SUPER_ADMIN）
   const SUPER_ONLY_LINKS = new Set([
     '/admin/api-keys',
     '/admin/vault-etl',
-    '/admin/ai-onboarding',
   ]);
   const visibleAdminLinks = ADMIN_LINKS.filter(
     (l) => !SUPER_ONLY_LINKS.has(l.href) || isSuper,
