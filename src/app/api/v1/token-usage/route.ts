@@ -2,8 +2,13 @@
  * AI Token 用量上报端点
  *
  * POST /api/v1/token-usage
- *   入参: { employeeId, model, inputTokens, outputTokens, meta? }
+ *   入参: { employeeId?, model, inputTokens?, outputTokens?, inputChars?, outputChars?, meta? }
  *   鉴权: X-Api-Key（员工独立 key，AiEmployee.apiKeyId 反查到员工）
+ *
+ *   token 数 / 字符数二选一即可（也可同时传，token 优先）：
+ *     - inputTokens + outputTokens：精确（bridge LLM proxy 抓 usage 拿到的）
+ *     - inputChars + outputChars：估算（Coze 大模型节点不返 usage，传 prompt
+ *       + response 字符数，看板用 ÷3 估 token，误差 ±10-15%，撞顶判断够用）
  *
  * 流程：
  *   1. 校验 X-Api-Key → 拿 ApiKey 行 → 反查 AiEmployee
@@ -36,17 +41,39 @@ import { sendBossNotice, escapeTgHtml } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 
-// employeeId 改可选 — finance_bridge LLM proxy 不知道员工 id，只知道 X-Api-Key。
-// 留着可选是为了向后兼容（老的 Coze plugin / n8n flow 还可以传），同时让
-// bridge 可以省事直接 X-Api-Key 反查。如果 body 里传了 employeeId，仍会跟
-// X-Api-Key 关联的员工做 mismatch 校验。
-const writeSchema = z.object({
-  employeeId: z.string().min(1).optional(),
-  model: z.string().min(1).max(100),
-  inputTokens: z.number().int().min(0).max(10_000_000),
-  outputTokens: z.number().int().min(0).max(10_000_000),
-  meta: z.record(z.unknown()).optional(),
-});
+// 三种上报模式（只要 model + 二选一的 token/chars）：
+//
+//   ① 精确：直接传 inputTokens + outputTokens（bridge LLM proxy / 自家
+//      脚本调 LLM 拿到 usage 字段，最准）
+//   ② 估算：传 inputChars + outputChars（Coze 大模型节点不返 usage，
+//      把 prompt + response 的字符数传上来，看板用 ÷3 估 token，
+//      中英混合误差 ±10-15%，撞顶判断够用）
+//   ③ 混合：可同时传，token 优先；缺哪边 fallback 到 chars 估
+//
+// employeeId 可选：bridge / Coze 不知道 id，只知道 X-Api-Key — 看板自己反查。
+const writeSchema = z
+  .object({
+    employeeId: z.string().min(1).optional(),
+    model: z.string().min(1).max(100),
+    inputTokens: z.number().int().min(0).max(10_000_000).optional(),
+    outputTokens: z.number().int().min(0).max(10_000_000).optional(),
+    inputChars: z.number().int().min(0).max(50_000_000).optional(),
+    outputChars: z.number().int().min(0).max(50_000_000).optional(),
+    meta: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (d) =>
+      d.inputTokens !== undefined ||
+      d.outputTokens !== undefined ||
+      d.inputChars !== undefined ||
+      d.outputChars !== undefined,
+    { message: '必须传 inputTokens/outputTokens 或 inputChars/outputChars 之一' },
+  );
+
+/** 字符数 → token 估算（中英混合 ~3 char/token；纯英文 ~4，纯中文 ~2，取中间值 3） */
+function charsToTokens(chars: number): number {
+  return Math.ceil(chars / 3);
+}
 
 export async function POST(req: NextRequest) {
   // 1. X-Api-Key 鉴权
@@ -129,7 +156,28 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. 服务端算成本（不信前端）
-  const costHkd = computeCostHkd(data.model, data.inputTokens, data.outputTokens);
+  // 优先用精确 token 数；缺则用 chars/3 估
+  const inputTokens =
+    data.inputTokens !== undefined
+      ? data.inputTokens
+      : data.inputChars !== undefined
+      ? charsToTokens(data.inputChars)
+      : 0;
+  const outputTokens =
+    data.outputTokens !== undefined
+      ? data.outputTokens
+      : data.outputChars !== undefined
+      ? charsToTokens(data.outputChars)
+      : 0;
+  const costHkd = computeCostHkd(data.model, inputTokens, outputTokens);
+
+  // 估算上报时把原始 chars 也存到 meta，方便后续审计 / 校准
+  const metaWithEstimate: Record<string, unknown> = { ...(data.meta ?? {}) };
+  if (data.inputTokens === undefined && data.inputChars !== undefined) {
+    metaWithEstimate.estimated = true;
+    metaWithEstimate.inputChars = data.inputChars;
+    metaWithEstimate.outputChars = data.outputChars;
+  }
 
   // 6. 写入 + 顺手更新 lastActiveAt
   await prisma.$transaction([
@@ -137,10 +185,13 @@ export async function POST(req: NextRequest) {
       data: {
         employeeId: employee.id,
         model: data.model,
-        inputTokens: data.inputTokens,
-        outputTokens: data.outputTokens,
+        inputTokens,
+        outputTokens,
         costHkd,
-        meta: (data.meta as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        meta:
+          Object.keys(metaWithEstimate).length > 0
+            ? (metaWithEstimate as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
       },
     }),
     prisma.aiEmployee.update({
