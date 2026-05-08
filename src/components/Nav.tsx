@@ -43,6 +43,7 @@ const ADMIN_LINKS = [
   { href: '/admin/finance/access',       label: '财务访问授权' },
   { href: '/admin/vault-etl',            label: 'Vault → 看板 导入' },
   { href: '/employees',                  label: 'AI 员工档案' },
+  { href: '/admin/ai-onboarding',        label: 'AI 接入向导' },
   { href: '/overview',                   label: 'AI 总览（Token 监控）' },
   { href: '/admin/api-keys',             label: 'API Key 管理（全部门）' },
   { href: '/admin/notifications',        label: '通知日志' },
@@ -160,7 +161,13 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
   // /overview AI 总览含公司日预算 + 撞顶事件，敏感，也仅 SUPER_ADMIN。
   // /admin/vault-etl 一次性数据导入，写库操作，必须仅 SUPER_ADMIN。
-  const SUPER_ONLY_LINKS = new Set(['/admin/api-keys', '/overview', '/admin/vault-etl']);
+  // /admin/ai-onboarding 暴露 AI 接入配置（含 keyPrefix），仅 SUPER_ADMIN。
+  const SUPER_ONLY_LINKS = new Set([
+    '/admin/api-keys',
+    '/overview',
+    '/admin/vault-etl',
+    '/admin/ai-onboarding',
+  ]);
   const visibleAdminLinks = ADMIN_LINKS.filter(
     (l) => !SUPER_ONLY_LINKS.has(l.href) || isSuper,
   );
