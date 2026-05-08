@@ -36,8 +36,12 @@ import { sendBossNotice, escapeTgHtml } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 
+// employeeId 改可选 — finance_bridge LLM proxy 不知道员工 id，只知道 X-Api-Key。
+// 留着可选是为了向后兼容（老的 Coze plugin / n8n flow 还可以传），同时让
+// bridge 可以省事直接 X-Api-Key 反查。如果 body 里传了 employeeId，仍会跟
+// X-Api-Key 关联的员工做 mismatch 校验。
 const writeSchema = z.object({
-  employeeId: z.string().min(1),
+  employeeId: z.string().min(1).optional(),
   model: z.string().min(1).max(100),
   inputTokens: z.number().int().min(0).max(10_000_000),
   outputTokens: z.number().int().min(0).max(10_000_000),
@@ -95,13 +99,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. 防越权：请求里的 employeeId 必须是 apiKey 关联的员工
+  // 3. 防越权：如果 body 里传了 employeeId，必须 === apiKey 关联的员工
+  //    （没传时直接用 ApiKey 反查的，bridge LLM proxy 走这条路径）
   const employee = apiKey.aiEmployee;
-  if (data.employeeId !== employee.id) {
+  if (data.employeeId && data.employeeId !== employee.id) {
     return NextResponse.json(
       {
         error: 'EMPLOYEE_ID_MISMATCH',
-        hint: '请求里 employeeId 必须等于本 ApiKey 关联的员工 id',
+        hint: '请求里 employeeId 必须等于本 ApiKey 关联的员工 id（或省略让看板自动反查）',
       },
       { status: 403 },
     );
