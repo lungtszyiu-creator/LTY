@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { logAiActivity } from '@/lib/ai-log';
+import { archiveReconciliation, fireAndForgetArchive } from '@/lib/finance-vault-sync';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
@@ -113,6 +114,11 @@ export async function POST(req: NextRequest) {
       },
       vaultWritten: !!data.vaultPath,
     });
+  }
+
+  // 对账状态 RESOLVED / ESCALATED 时归档（终态 · dry-run 默认）
+  if (isResolved && !recon.vaultPath) {
+    fireAndForgetArchive(archiveReconciliation, recon, `reconciliation ${recon.period} ${recon.scope}`);
   }
 
   return NextResponse.json(recon, { status: 201 });

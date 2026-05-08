@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { getSession } from '@/lib/auth';
+import { archiveVoucher, fireAndForgetArchive } from '@/lib/finance-vault-sync';
 
 export async function GET(
   req: NextRequest,
@@ -121,6 +122,8 @@ export async function PATCH(
         postedById: userId,
       },
     });
+    // POSTED 后异步归档到 vault（dry-run 默认 · VAULT_SYNC_ENABLED=true 才真写）
+    fireAndForgetArchive(archiveVoucher, updated, `voucher ${voucherNumber}`);
     return NextResponse.json(updated);
   }
 

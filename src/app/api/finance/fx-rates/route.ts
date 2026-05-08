@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { logAiActivity } from '@/lib/ai-log';
+import { archiveFxRate, fireAndForgetArchive } from '@/lib/finance-vault-sync';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
@@ -97,6 +98,9 @@ export async function POST(req: NextRequest) {
       payload: { pair: data.pair, rate: data.rate, source: data.source },
     });
   }
+
+  // 汇率创建即归档（dry-run 默认）
+  fireAndForgetArchive(archiveFxRate, rate, `fx_rate ${rate.pair} ${rate.date.toISOString().slice(0, 10)}`);
 
   return NextResponse.json(rate, { status: 201 });
 }

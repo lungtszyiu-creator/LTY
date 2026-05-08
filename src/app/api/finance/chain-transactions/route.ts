@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { logAiActivity } from '@/lib/ai-log';
+import { archiveChainTransaction, fireAndForgetArchive } from '@/lib/finance-vault-sync';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuthOrApiKey(req, [
@@ -110,6 +111,11 @@ export async function POST(req: NextRequest) {
       payload: { txHash: data.txHash, amount: data.amount, token: data.token, tag: data.tag },
       vaultWritten: !!data.vaultPath,
     });
+  }
+
+  // 链上数据本身是事实，创建即归档（dry-run 默认）
+  if (!tx.vaultPath) {
+    fireAndForgetArchive(archiveChainTransaction, tx, `chain_tx ${tx.chain}-${tx.txHash.slice(0, 10)}`);
   }
 
   return NextResponse.json(tx, { status: 201 });
