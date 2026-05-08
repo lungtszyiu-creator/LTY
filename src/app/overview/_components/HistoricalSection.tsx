@@ -53,7 +53,7 @@ export async function HistoricalSection({ range }: { range: RangeKey }) {
       <div>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <h2 className="text-base font-semibold text-slate-900">
-            历史 / 周期统计 · <span className="text-violet-700">{label}</span>
+            历史 / 周期统计 · <span className="text-violet-800">{label}</span>
           </h2>
           <span className="text-[11px] text-slate-400">实时 · 不缓存</span>
         </div>
@@ -132,7 +132,7 @@ function RangePills({ current }: { current: RangeKey }) {
             aria-selected={active}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
               active
-                ? 'bg-violet-100 text-violet-900 shadow-sm'
+                ? 'bg-violet-200 text-violet-900 shadow-sm'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
@@ -158,12 +158,12 @@ function KpiCard({
   accent: Accent;
 }) {
   const map: Record<Accent, string> = {
-    violet: 'from-violet-50 to-violet-100/40 ring-violet-200/60 text-violet-700',
-    sky: 'from-sky-50 to-sky-100/40 ring-sky-200/60 text-sky-700',
-    emerald: 'from-emerald-50 to-emerald-100/40 ring-emerald-200/60 text-emerald-700',
+    violet: 'from-violet-100 to-violet-200/40 ring-violet-300/60 text-violet-800',
+    sky: 'from-sky-100 to-sky-200/40 ring-sky-300/60 text-sky-800',
+    emerald: 'from-emerald-100 to-emerald-200/40 ring-emerald-300/60 text-emerald-800',
     slate: 'from-slate-50 to-slate-100/40 ring-slate-200/60 text-slate-700',
-    rose: 'from-rose-50 to-rose-100/40 ring-rose-200/60 text-rose-700',
-    amber: 'from-amber-50 to-amber-100/40 ring-amber-200/60 text-amber-700',
+    rose: 'from-rose-100 to-rose-200/40 ring-rose-300/60 text-rose-800',
+    amber: 'from-amber-100 to-amber-200/40 ring-amber-300/60 text-amber-800',
   };
   return (
     <div className={`rounded-xl bg-gradient-to-br p-3 ring-1 sm:p-4 ${map[accent]}`}>
@@ -282,7 +282,7 @@ function RangeTopEmployees({
                   <div className="min-w-0 flex-1 truncate">
                     <span className="font-medium text-slate-800">{r.name}</span>
                     {r.paused && (
-                      <span className="ml-1.5 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] text-rose-700 ring-1 ring-rose-200">
+                      <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] text-rose-800 ring-1 ring-rose-300">
                         ⏸
                       </span>
                     )}

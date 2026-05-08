@@ -203,14 +203,14 @@ export function EmployeesClient({
   return (
     <>
       {error && (
-        <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">
+        <div className="mb-3 rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-800 ring-1 ring-rose-300">
           {error}
         </div>
       )}
 
       {/* 导入财务 ApiKey 引导块 — 仅 SUPER_ADMIN + 有未导入 key 时显示 */}
       {meRole === 'SUPER_ADMIN' && importable > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-300/70 bg-amber-50/60 p-3.5">
+        <div className="mb-4 rounded-xl border border-amber-300/70 bg-amber-100/60 p-3.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-amber-900">
@@ -234,7 +234,7 @@ export function EmployeesClient({
         </div>
       )}
       {importDone && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-900">
+        <div className="mb-4 rounded-lg border border-emerald-300 bg-emerald-100/60 px-3 py-2 text-sm text-emerald-900">
           ✓ {importDone}
         </div>
       )}
@@ -243,7 +243,7 @@ export function EmployeesClient({
       <div className="mb-4 flex items-center justify-between gap-2">
         <span className="text-xs text-slate-500">
           共 {rows.length} 个 AI 员工 · 在用 {rows.filter((r) => r.active).length} ·{' '}
-          <span className="text-amber-700">上司 {supervisorPool.length}</span>
+          <span className="text-amber-800">上司 {supervisorPool.length}</span>
         </span>
         <button
           type="button"
@@ -256,7 +256,7 @@ export function EmployeesClient({
 
       {/* 上司池为空时引导提示 */}
       {supervisorPool.length === 0 && rows.length > 0 && (
-        <div className="mb-3 rounded-lg border border-amber-200/60 bg-amber-50/40 px-3 py-2 text-[11px] text-amber-900">
+        <div className="mb-3 rounded-lg border border-amber-300/60 bg-amber-100/40 px-3 py-2 text-[11px] text-amber-900">
           💡 还没有员工被标为上司 — 编辑模态框里的「隶属上司」下拉会是空。
           先在某个员工的「👑 设为上司」按钮点一下，他就会进入上司池供其他员工挂靠。
         </div>
@@ -295,7 +295,7 @@ export function EmployeesClient({
                       <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
                       <span className="font-medium text-slate-800">{row.name}</span>
                       {row.isSupervisor && (
-                        <span className="rounded-full bg-amber-100/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-200/70">
+                        <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
                           👑 上司
                         </span>
                       )}
@@ -314,14 +314,14 @@ export function EmployeesClient({
                   {/* 隶属上司列（Step 4） */}
                   <td className="px-4 py-2 align-top">
                     {row.reportsToName ? (
-                      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 ring-1 ring-sky-200">
+                      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800 ring-1 ring-sky-300">
                         ↑ {row.reportsToName}
                       </span>
                     ) : (
                       <span className="text-[11px] text-slate-300">—</span>
                     )}
                     {row.isSupervisor && row.reportsCount > 0 && (
-                      <div className="mt-0.5 text-[10px] text-amber-700">
+                      <div className="mt-0.5 text-[10px] text-amber-800">
                         带 {row.reportsCount} 下属
                       </div>
                     )}
@@ -342,7 +342,7 @@ export function EmployeesClient({
                       <button
                         type="button"
                         onClick={() => setEditTarget(row)}
-                        className="text-xs text-sky-700 hover:underline"
+                        className="text-xs text-sky-800 hover:underline"
                       >
                         ✏️ 编辑
                       </button>
@@ -351,7 +351,7 @@ export function EmployeesClient({
                         onClick={() => toggleSupervisor(row)}
                         disabled={pending}
                         className={`text-xs hover:underline disabled:opacity-50 ${
-                          row.isSupervisor ? 'text-slate-500' : 'text-amber-700'
+                          row.isSupervisor ? 'text-slate-500' : 'text-amber-800'
                         }`}
                         title={
                           row.isSupervisor
@@ -374,7 +374,7 @@ export function EmployeesClient({
                           type="button"
                           onClick={() => onDelete(row)}
                           disabled={pending}
-                          className="text-xs text-rose-600 hover:underline disabled:opacity-50"
+                          className="text-xs text-rose-700 hover:underline disabled:opacity-50"
                         >
                           🗑 删除
                         </button>
@@ -405,7 +405,7 @@ export function EmployeesClient({
                     <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
                     <span className="truncate font-semibold text-slate-800">{row.name}</span>
                     {row.isSupervisor && (
-                      <span className="rounded-full bg-amber-100/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-200/70">
+                      <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
                         👑
                       </span>
                     )}
@@ -424,12 +424,12 @@ export function EmployeesClient({
                   </span>
                 </span>
                 {row.reportsToName && (
-                  <span className="inline-flex items-center rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700 ring-1 ring-sky-200">
+                  <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800 ring-1 ring-sky-300">
                     ↑ {row.reportsToName}
                   </span>
                 )}
                 {row.isSupervisor && row.reportsCount > 0 && (
-                  <span className="text-amber-700">带 {row.reportsCount} 下属</span>
+                  <span className="text-amber-800">带 {row.reportsCount} 下属</span>
                 )}
                 {row.apiKey && (
                   <span className="font-mono text-slate-400">{row.apiKey.keyPrefix}…</span>
@@ -442,7 +442,7 @@ export function EmployeesClient({
                 <button
                   type="button"
                   onClick={() => setEditTarget(row)}
-                  className="rounded-md bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                  className="rounded-md bg-sky-100 px-2 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-200"
                 >
                   ✏️ 编辑
                 </button>
@@ -453,7 +453,7 @@ export function EmployeesClient({
                   className={`rounded-md px-2 py-1.5 text-xs font-medium disabled:opacity-50 ${
                     row.isSupervisor
                       ? 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                   }`}
                 >
                   👑 {row.isSupervisor ? '取消上司' : '设为上司'}
@@ -471,7 +471,7 @@ export function EmployeesClient({
                     type="button"
                     onClick={() => onDelete(row)}
                     disabled={pending}
-                    className="rounded-md bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                    className="rounded-md bg-rose-100 px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-200 disabled:opacity-50"
                   >
                     🗑 删除
                   </button>
@@ -544,7 +544,7 @@ function LiveDot({ status }: { status: LiveStatus }) {
 function StatusChip({ active, paused }: { active: boolean; paused: boolean }) {
   if (paused) {
     return (
-      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700 ring-1 ring-rose-200">
+      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-800 ring-1 ring-rose-300">
         ⏸ 暂停
       </span>
     );
@@ -557,7 +557,7 @@ function StatusChip({ active, paused }: { active: boolean; paused: boolean }) {
     );
   }
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 ring-1 ring-emerald-200">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-800 ring-1 ring-emerald-300">
       在用
     </span>
   );
@@ -684,7 +684,7 @@ function CreateDialog({
         </Field>
       </div>
 
-      <div className="mt-4 rounded-lg border border-amber-200/60 bg-amber-50/30 p-3">
+      <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-100/30 p-3">
         <label className="flex items-baseline gap-2 text-sm font-medium text-amber-900">
           <input
             type="checkbox"
@@ -701,14 +701,14 @@ function CreateDialog({
               placeholder="例：FINANCE_AI:voucher_clerk / AI_EMPLOYEE:default"
               className={inputCls}
             />
-            <span className="mt-1 block text-[10px] text-amber-700">
+            <span className="mt-1 block text-[10px] text-amber-800">
               建议沿用现有 scope 体系（FINANCE_AI:voucher_clerk 等）。默认 AI_EMPLOYEE:default。
             </span>
           </Field>
         )}
       </div>
 
-      {err && <div className="mt-3 rounded bg-rose-50 px-3 py-2 text-xs text-rose-700">{err}</div>}
+      {err && <div className="mt-3 rounded bg-rose-100 px-3 py-2 text-xs text-rose-800">{err}</div>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
@@ -854,7 +854,7 @@ function EditDialog({
       </div>
 
       {/* Step 4: 组织树字段 */}
-      <div className="mt-4 rounded-lg border border-amber-200/60 bg-amber-50/30 p-3">
+      <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-100/30 p-3">
         <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-900">
           组织树
         </div>
@@ -865,12 +865,12 @@ function EditDialog({
             onChange={(e) => setIsSupervisor(e.target.checked)}
           />
           <span>👑 可被指派为上司</span>
-          <span className="text-[10px] font-normal text-amber-700">
+          <span className="text-[10px] font-normal text-amber-800">
             （勾选后会进入「隶属上司」下拉的可选池）
           </span>
         </label>
         {row.isSupervisor && !isSupervisor && row.reportsCount > 0 && (
-          <div className="mt-2 rounded bg-rose-50 px-2 py-1.5 text-[11px] text-rose-700 ring-1 ring-rose-200">
+          <div className="mt-2 rounded bg-rose-100 px-2 py-1.5 text-[11px] text-rose-800 ring-1 ring-rose-300">
             ⚠️ 该员工目前带 {row.reportsCount} 个下属。取消上司身份后，下属的「隶属上司」会被自动清空。
           </div>
         )}
@@ -913,7 +913,7 @@ function EditDialog({
         </div>
       )}
 
-      {err && <div className="mt-3 rounded bg-rose-50 px-3 py-2 text-xs text-rose-700">{err}</div>}
+      {err && <div className="mt-3 rounded bg-rose-100 px-3 py-2 text-xs text-rose-800">{err}</div>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
@@ -949,7 +949,7 @@ function NewKeyDialog({
 }) {
   return (
     <Modal title={`🔑 ${name} 的新 API Key（仅显示一次）`} onClose={onClose}>
-      <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
+      <div className="rounded-xl border-2 border-amber-400 bg-amber-100 p-4">
         <div className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-900">
           ⚠️ 立刻复制 — 关闭后永远找不回
         </div>
