@@ -20,6 +20,7 @@ import { requireFinanceEditSession } from '@/lib/finance-access';
 const VAULT_OWNER = 'lungtszyiu-creator';
 const VAULT_REPO = 'lty-vault';
 const ENTITIES_DIR = 'wiki/entities';
+const HR_SALARY_TABLE_PATH = 'wiki/topics/topic_HR薪资结构表.md';
 
 type GhFile = { name: string; path: string; type: string; download_url: string | null };
 
@@ -106,6 +107,52 @@ async function ghFileText(downloadUrl: string, token: string): Promise<string> {
   return res.text();
 }
 
+/** 从 wiki/topics/topic_HR薪资结构表.md 解析 markdown 表格，按英文名匹配回填薪资。
+ *
+ * 返回 Map<englishName_lower, {monthlySalary, currency, probation}>。
+ * 月薪取转正后金额（实际应得），试用期标记另存。
+ */
+function parseHrSalaryTable(md: string): Map<string, { monthlySalary: number; currency: string }> {
+  const out = new Map<string, { monthlySalary: number; currency: string }>();
+  // 匹配 markdown 表格行：| 中文名 | 英文名 | ... | 转正后金额 | 备注 |
+  const lines = md.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.startsWith('|') || !line.includes('|')) continue;
+    const cells = line.split('|').map((c) => c.trim()).filter((c) => c.length > 0);
+    if (cells.length < 3) continue;
+    // 跳过表头分隔行 (|---|---|...)
+    if (cells.every((c) => /^[-:]+$/.test(c))) continue;
+    // 跳过表头行（含"员工"/"英文名"等关键字）
+    if (cells.some((c) => c === '员工' || c === '英文名')) continue;
+
+    const chinese = cells[0];
+    const english = cells[1];
+    if (!english || english === '—' || english.startsWith('（') || /^\s*$/.test(english)) continue;
+
+    // 找含"USD"/"HKD"/"RMB"/数字的单元格 — 取转正金额（最后一个含金额的）
+    const amountRegex = /\*?\*?([\d,]+(?:\.\d+)?)\s*(USD|HKD|RMB|CNY|港币|港元|人民币|美元)?\*?\*?/i;
+    let lastAmount: { value: number; currency: string } | null = null;
+    for (let i = 2; i < cells.length; i++) {
+      const m = cells[i].match(amountRegex);
+      if (!m) continue;
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      if (!Number.isFinite(num) || num < 100) continue; // 过滤年份/小数字
+      let currency = (m[2] ?? '').toUpperCase();
+      if (currency === '人民币' || currency === '') currency = 'CNY';
+      else if (currency === 'RMB') currency = 'CNY';
+      else if (currency === '港币' || currency === '港元') currency = 'HKD';
+      else if (currency === '美元') currency = 'USD';
+      lastAmount = { value: num, currency };
+    }
+    if (!lastAmount) continue;
+
+    const key = english.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+    if (!key) continue;
+    out.set(key, { monthlySalary: lastAmount.value, currency: lastAmount.currency });
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireFinanceEditSession();
   if (auth instanceof NextResponse) return auth;
@@ -139,6 +186,22 @@ export async function POST(req: NextRequest) {
 
   const walletFiles = files.filter((f) => f.type === 'file' && /^wallet_.*\.md$/i.test(f.name));
   const bankFiles = files.filter((f) => f.type === 'file' && /^bank_.*\.md$/i.test(f.name));
+  const employeeFiles = files.filter((f) => f.type === 'file' && /^employee_.*\.md$/i.test(f.name));
+
+  // 拉取 HR 薪资结构表（best-effort，失败不阻塞 employee 同步）
+  let salaryMap = new Map<string, { monthlySalary: number; currency: string }>();
+  try {
+    const salaryFile = await ghJson<{ download_url?: string }>(
+      `https://api.github.com/repos/${VAULT_OWNER}/${VAULT_REPO}/contents/${encodeURIComponent(HR_SALARY_TABLE_PATH).replace(/%2F/g, '/')}`,
+      token,
+    );
+    if (salaryFile.download_url) {
+      const md = await ghFileText(salaryFile.download_url, token);
+      salaryMap = parseHrSalaryTable(md);
+    }
+  } catch {
+    // ok：薪资表不存在不影响 employee sync
+  }
 
   // 拉文件 + 解析
   const wallets = await Promise.all(
@@ -187,15 +250,61 @@ export async function POST(req: NextRequest) {
     }),
   );
 
+  // employee_*.md 解析（独立于 User 的 vault 花名册镜像）
+  const employees = await Promise.all(
+    employeeFiles.map(async (f) => {
+      if (!f.download_url) return null;
+      const md = await ghFileText(f.download_url, token);
+      const fm = parseFrontmatter(md);
+      // title 拆中英文："夏雨梅 (cici)" → ["夏雨梅", "cici"]
+      const titleStr = fm.title ?? f.name.replace(/^employee_/, '').replace(/\.md$/, '');
+      const titleMatch = titleStr.match(/^([^()（]+?)\s*[（(]([^）)]+)[）)]\s*$/);
+      const chineseName = titleMatch ? titleMatch[1].trim() : titleStr.trim();
+      const englishName = titleMatch ? titleMatch[2].trim() : null;
+
+      // 状态：md body 提到 离职/前员工 → RESIGNED
+      const status = /离职|前员工|resign/i.test(md) ? 'RESIGNED' : 'ACTIVE';
+
+      // 从薪资表反查（按英文名 lowercase 匹配）
+      const salaryHit = englishName ? salaryMap.get(englishName.toLowerCase()) : null;
+
+      return {
+        sourcePath: `${ENTITIES_DIR}/${f.name}`,
+        raw: fm,
+        mapped: {
+          vaultPath: `${ENTITIES_DIR}/${f.name}`,
+          title: titleStr,
+          chineseName,
+          englishName,
+          employmentType: fm.employment_type ?? null,
+          roles: null,
+          status,
+          monthlySalary: salaryHit?.monthlySalary ?? null,
+          currency: salaryHit?.currency ?? null,
+          probation: false,
+          linkedUserId: null,
+          rawFrontmatter: JSON.stringify(fm).slice(0, 4000),
+        },
+      };
+    }),
+  );
+
   const validWallets = wallets.filter((w): w is NonNullable<typeof w> => !!w && !!w.mapped.address);
   const validBanks = banks.filter((b): b is NonNullable<typeof b> => !!b && !!b.mapped.accountNumber);
+  const validEmployees = employees.filter((e): e is NonNullable<typeof e> => !!e && !!e.mapped.title);
 
   if (dryRun) {
     return NextResponse.json({
       dryRun: true,
       wallets: validWallets.map((w) => w.mapped),
       banks: validBanks.map((b) => b.mapped),
-      counts: { wallets: validWallets.length, banks: validBanks.length },
+      employees: validEmployees.map((e) => e.mapped),
+      counts: {
+        wallets: validWallets.length,
+        banks: validBanks.length,
+        employees: validEmployees.length,
+        salaryRowsParsed: salaryMap.size,
+      },
     });
   }
 
@@ -223,11 +332,37 @@ export async function POST(req: NextRequest) {
     ),
   );
 
+  const employeeResults = await Promise.all(
+    validEmployees.map((e) =>
+      prisma.hrRoster.upsert({
+        where: { vaultPath: e.mapped.vaultPath },
+        create: e.mapped,
+        update: { ...e.mapped, syncedAt: new Date() },
+        select: {
+          id: true,
+          title: true,
+          chineseName: true,
+          englishName: true,
+          status: true,
+          employmentType: true,
+          monthlySalary: true,
+          currency: true,
+        },
+      }),
+    ),
+  );
+
   return NextResponse.json({
     imported: {
       wallets: walletResults,
       banks: bankResults,
-      counts: { wallets: walletResults.length, banks: bankResults.length },
+      employees: employeeResults,
+      counts: {
+        wallets: walletResults.length,
+        banks: bankResults.length,
+        employees: employeeResults.length,
+        salaryRowsParsed: salaryMap.size,
+      },
     },
   });
 }

@@ -21,6 +21,7 @@ import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { SyncVaultRosterButton } from './_components/SyncVaultRosterButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +97,24 @@ export default async function HrPage() {
       _count: { _all: true },
     }),
   ]);
+
+  // Vault 花名册（独立于 User，从 wiki/entities/employee_*.md sync 来）
+  const vaultRoster = await prisma.hrRoster.findMany({
+    orderBy: [{ status: 'asc' }, { title: 'asc' }],
+    take: 100,
+    select: {
+      id: true,
+      title: true,
+      chineseName: true,
+      englishName: true,
+      employmentType: true,
+      status: true,
+      vaultPath: true,
+      syncedAt: true,
+      monthlySalary: true,
+      currency: true,
+    },
+  });
 
   const stageMap = Object.fromEntries(
     candidateStageGroups.map((g) => [g.stage, g._count._all]),
@@ -211,6 +230,74 @@ export default async function HrPage() {
         <NavCard href="/docs" emoji="📖" label="员工手册" hint="LTY /docs" />
         <NavCard href="/faq" emoji="❓" label="公开问答" hint="FAQ" />
         <NavCard href="/announcements" emoji="📣" label="公司制度 / 公告" hint="" />
+      </section>
+
+      {/* Vault 花名册（vault wiki/entities/employee_*.md 镜像） */}
+      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-800">
+            Vault 花名册
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              （知识库 wiki/entities/employee_*.md 镜像 · 含未注册看板的派驻 / 远程承包）
+            </span>
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400">
+              {vaultRoster.length} 人 ·{' '}
+              {vaultRoster[0]?.syncedAt
+                ? `最近同步 ${vaultRoster[0].syncedAt.toISOString().slice(0, 10)}`
+                : '尚未同步'}
+            </span>
+            <SyncVaultRosterButton canSync={ctx.isSuperAdmin} />
+          </div>
+        </div>
+        {vaultRoster.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+            未同步 vault 花名册。
+            {ctx.isSuperAdmin && (
+              <span className="ml-1">点上方"🔄 同步 vault 花名册"按钮触发首次 sync。</span>
+            )}
+          </div>
+        ) : (
+          <ul className="grid grid-cols-1 gap-1.5 text-sm sm:grid-cols-2">
+            {vaultRoster.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-baseline justify-between gap-2 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+              >
+                <div className="min-w-0 flex-1 truncate">
+                  <span className="font-medium text-slate-800">
+                    {r.chineseName || r.title}
+                  </span>
+                  {r.englishName && (
+                    <span className="ml-1.5 text-xs text-slate-500">({r.englishName})</span>
+                  )}
+                  {r.employmentType && (
+                    <span className="ml-2 text-xs text-slate-400">{r.employmentType}</span>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-baseline gap-1.5">
+                  {r.monthlySalary && (
+                    <span className="font-mono text-xs tabular-nums text-slate-700">
+                      {Number(r.monthlySalary).toLocaleString()} {r.currency ?? ''}
+                    </span>
+                  )}
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                      r.status === 'ACTIVE'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : r.status === 'RESIGNED'
+                        ? 'bg-slate-100 text-slate-500'
+                        : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {r.status === 'ACTIVE' ? '在职' : r.status === 'RESIGNED' ? '离职' : r.status}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
