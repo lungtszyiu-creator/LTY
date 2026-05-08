@@ -134,14 +134,21 @@ export default async function FinancePage({
         <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
       </section>
 
-      {/* 子页面快速入口 —— 4 张大卡片，移动端 2x2 / 桌面 4 列 */}
-      <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+      {/* 子页面快速入口 —— 5 张大卡片，移动端 2 列 / 桌面 5 列 */}
+      <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 sm:gap-3">
         <SubPageCard
           href="/finance/dashboard"
           emoji="📊"
           label="财务总看板"
           hint="实时 KPI"
           accent="rose"
+        />
+        <SubPageCard
+          href="/finance/vouchers"
+          emoji="📒"
+          label="凭证"
+          hint="全部状态"
+          accent="emerald"
         />
         <SubPageCard
           href="/finance/reports"
@@ -677,13 +684,14 @@ function SubPageCard({
   emoji: string;
   label: string;
   hint?: string;
-  accent: 'rose' | 'amber' | 'sky' | 'violet';
+  accent: 'rose' | 'amber' | 'sky' | 'violet' | 'emerald';
 }) {
   const map = {
     rose: 'border-rose-200/60 hover:border-rose-300 hover:bg-rose-50/40',
     amber: 'border-amber-200/60 hover:border-amber-300 hover:bg-amber-50/40',
     sky: 'border-sky-200/60 hover:border-sky-300 hover:bg-sky-50/40',
     violet: 'border-violet-200/60 hover:border-violet-300 hover:bg-violet-50/40',
+    emerald: 'border-emerald-200/60 hover:border-emerald-300 hover:bg-emerald-50/40',
   } as const;
   return (
     <Link
