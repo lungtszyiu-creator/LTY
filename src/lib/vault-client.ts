@@ -44,7 +44,7 @@ async function fetchVaultJson<T>(path: string): Promise<T | null> {
 }
 
 /** 拉文件 raw 文本（用于 markdown / 任意文件） */
-async function fetchVaultText(path: string): Promise<string | null> {
+export async function fetchVaultText(path: string): Promise<string | null> {
   if (!TOKEN) {
     console.warn(`[vault-client] VAULT_GITHUB_TOKEN missing, skipping ${path}`);
     return null;
@@ -72,7 +72,7 @@ async function fetchVaultText(path: string): Promise<string | null> {
 }
 
 /** GitHub Contents API 目录返回项 */
-interface GhDirEntry {
+export interface GhDirEntry {
   name: string;
   path: string;
   sha: string;
@@ -82,7 +82,7 @@ interface GhDirEntry {
 }
 
 /** 列目录（GitHub Contents API directory listing） */
-async function fetchVaultDir(path: string): Promise<GhDirEntry[] | null> {
+export async function fetchVaultDir(path: string): Promise<GhDirEntry[] | null> {
   if (!TOKEN) {
     console.warn(`[vault-client] VAULT_GITHUB_TOKEN missing, skipping dir ${path}`);
     return null;
