@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { CopyButton } from '../../copy-button';
+import { VaultSyncBadge } from '@/components/vault-sync-badge';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,11 +87,9 @@ export default async function BankAccountDetailPage({
               <pre className="whitespace-pre-wrap font-sans text-sm text-slate-600">{account.notes}</pre>
             </Row>
           )}
-          {account.vaultPath && (
-            <Row label="Vault 路径">
-              <code className="break-all rounded bg-slate-100 px-1.5 py-0.5 text-xs">{account.vaultPath}</code>
-            </Row>
-          )}
+          <Row label="Vault 同步">
+            <VaultSyncBadge vaultPath={account.vaultPath} />
+          </Row>
           <Row label="创建时间">{account.createdAt.toISOString().slice(0, 16).replace('T', ' ')}</Row>
           <Row label="更新时间">{account.updatedAt.toISOString().slice(0, 16).replace('T', ' ')}</Row>
         </dl>

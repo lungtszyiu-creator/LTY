@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { VoucherActions } from './voucher-actions';
 import { EditVoucherCard } from './EditVoucherCard';
+import { VaultSyncBadge } from '@/components/vault-sync-badge';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,11 +95,9 @@ export default async function VoucherDetailPage({
               <pre className="whitespace-pre-wrap font-sans text-sm text-slate-600">{voucher.notes}</pre>
             </Row>
           )}
-          {voucher.vaultPath && (
-            <Row label="Vault 路径">
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{voucher.vaultPath}</code>
-            </Row>
-          )}
+          <Row label="Vault 同步">
+            <VaultSyncBadge vaultPath={voucher.vaultPath} />
+          </Row>
           {voucher.relatedTxIds && (
             <Row label="关联链上交易"><code className="text-xs">{voucher.relatedTxIds}</code></Row>
           )}
