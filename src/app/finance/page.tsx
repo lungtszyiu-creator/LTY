@@ -171,6 +171,13 @@ export default async function FinancePage({
           hint="录入工作台"
           accent="violet"
         />
+        <SubPageCard
+          href="/finance/companies"
+          emoji="🏢"
+          label="集团实体"
+          hint="vault 镜像"
+          accent="rose"
+        />
       </section>
 
       {/* Tabs */}

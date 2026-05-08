@@ -190,6 +190,8 @@ export async function POST(req: NextRequest) {
   const companyFiles = files.filter(
     (f) => f.type === 'file' && (/^company_.*\.md$/i.test(f.name) || f.name === 'mc_markets.md'),
   );
+  // family_*.md 也按 company 镜像处理（标 privateMatter=true，与公司同表方便统一筛选）
+  const familyFiles = files.filter((f) => f.type === 'file' && /^family_.*\.md$/i.test(f.name));
 
   // 拉取 HR 薪资结构表（best-effort，失败不阻塞 employee 同步）
   let salaryMap = new Map<string, { monthlySalary: number; currency: string }>();
@@ -333,7 +335,42 @@ export async function POST(req: NextRequest) {
   const validWallets = wallets.filter((w): w is NonNullable<typeof w> => !!w && !!w.mapped.address);
   const validBanks = banks.filter((b): b is NonNullable<typeof b> => !!b && !!b.mapped.accountNumber);
   const validEmployees = employees.filter((e): e is NonNullable<typeof e> => !!e && !!e.mapped.title);
-  const validCompanies = companies.filter((c): c is NonNullable<typeof c> => !!c && !!c.mapped.title);
+  // family_*.md → 与 company 同 schema 但永远是 PRIVATE_MATTER
+  const families = await Promise.all(
+    familyFiles.map(async (f) => {
+      if (!f.download_url) return null;
+      const md = await ghFileText(f.download_url, token);
+      const fm = parseFrontmatter(md);
+      const titleStr = fm.title ?? f.name.replace(/^family_/, '').replace(/\.md$/, '');
+      return {
+        sourcePath: `${ENTITIES_DIR}/${f.name}`,
+        raw: fm,
+        mapped: {
+          vaultPath: `${ENTITIES_DIR}/${f.name}`,
+          title: titleStr,
+          officialNameEn: null,
+          officialNameZh: null,
+          jurisdiction: null,
+          entityKind: 'family',
+          legalRepresentative: null,
+          actualController: null,
+          registeredAddress: null,
+          registeredCapital: null,
+          creditCode: null,
+          established: null,
+          relationToLty: fm.status ?? '老板家属（私人事务）',
+          privateMatter: true,
+          status: 'PRIVATE_MATTER',
+          rawFrontmatter: JSON.stringify(fm).slice(0, 4000),
+        },
+      };
+    }),
+  );
+
+  const validCompanies = [
+    ...companies.filter((c): c is NonNullable<typeof c> => !!c && !!c.mapped.title),
+    ...families.filter((f): f is NonNullable<typeof f> => !!f && !!f.mapped.title),
+  ];
 
   if (dryRun) {
     return NextResponse.json({
