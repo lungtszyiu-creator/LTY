@@ -127,11 +127,11 @@ export default async function OverviewPage({
       <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI 总览</h1>
-          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200">
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800 ring-1 ring-violet-300">
             👑 老板专属
           </span>
         </div>
-        <Link href="/employees" className="text-xs text-violet-700 hover:underline">
+        <Link href="/employees" className="text-xs text-violet-800 hover:underline">
           → AI 员工档案管理
         </Link>
       </header>
@@ -150,14 +150,14 @@ export default async function OverviewPage({
       {pausedEmployees.length > 0 && (
         <section className="mb-6">
           <div className="mb-2 flex items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-rose-700">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-rose-800">
               ⏸ 暂停中的员工（{pausedEmployees.length}）
             </h2>
             <span className="text-[11px] text-slate-400">
               撞顶自动暂停 · 仅老板可解锁
             </span>
           </div>
-          <ul className="space-y-1.5 overflow-hidden rounded-xl border border-rose-200 bg-rose-50/30">
+          <ul className="space-y-1.5 overflow-hidden rounded-xl border border-rose-300 bg-rose-100/30">
             {pausedEmployees.map((e) => (
               <li
                 key={e.id}
@@ -168,7 +168,7 @@ export default async function OverviewPage({
                     <span className="font-medium text-slate-800">{e.name}</span>
                     <span className="text-xs text-slate-500">{e.role}</span>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-rose-700">
+                  <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-rose-800">
                     {e.pauseReason && <span>{e.pauseReason}</span>}
                     <span className="text-slate-500">
                       日额度 HKD {Number(e.dailyLimitHkd).toLocaleString('zh-HK')}
@@ -190,7 +190,7 @@ export default async function OverviewPage({
           </ul>
           <p className="mt-2 text-[11px] text-slate-500">
             💡 撞顶根因通常是日额度太低。建议先去{' '}
-            <Link href="/employees" className="text-rose-700 hover:underline">
+            <Link href="/employees" className="text-rose-800 hover:underline">
               /employees
             </Link>{' '}
             上调该员工额度，再回来解锁 — 否则 AI 短时间内又会撞顶。
@@ -264,10 +264,10 @@ function TodayHero({
       : 'bg-emerald-500';
   const barCls =
     budgetPct >= 80
-      ? 'border-rose-200/60 bg-rose-50/40'
+      ? 'border-rose-300/60 bg-rose-100/40'
       : budgetPct >= 50
-      ? 'border-amber-200/60 bg-amber-50/40'
-      : 'border-emerald-200/60 bg-emerald-50/40';
+      ? 'border-amber-300/60 bg-amber-100/40'
+      : 'border-emerald-300/60 bg-emerald-100/40';
 
   return (
     <section className={`mb-6 rounded-2xl border p-5 ${barCls}`}>
@@ -298,9 +298,9 @@ function TodayHero({
               dodPct === null
                 ? 'text-slate-400'
                 : dodPct > 20
-                ? 'text-rose-600'
+                ? 'text-rose-700'
                 : dodPct < -20
-                ? 'text-emerald-600'
+                ? 'text-emerald-700'
                 : 'text-slate-700'
             }
             hint={yesterdaySpend > 0 ? `昨 HKD ${yesterdaySpend.toFixed(0)}` : '昨 0'}
@@ -320,7 +320,7 @@ function TodayHero({
           />
         </div>
         {budgetPct >= 80 && (
-          <div className="mt-2 text-[11px] text-rose-700">
+          <div className="mt-2 text-[11px] text-rose-800">
             ⚠️ 已用 {budgetPct.toFixed(1)}%，建议盯紧高额度员工或临时下调日额度。
           </div>
         )}
@@ -377,7 +377,7 @@ function TopEmployeesCard({
                   <div className="min-w-0 flex-1 truncate">
                     <span className="font-medium text-slate-800">{r.name}</span>
                     {r.paused && (
-                      <span className="ml-1.5 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] text-rose-700 ring-1 ring-rose-200">
+                      <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] text-rose-800 ring-1 ring-rose-300">
                         ⏸
                       </span>
                     )}
@@ -478,7 +478,7 @@ function EmployeesOverview({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
           AI 员工概览
         </h2>
-        <Link href="/employees" className="text-[11px] text-violet-700 hover:underline">
+        <Link href="/employees" className="text-[11px] text-violet-800 hover:underline">
           管理 / 新建 / 编辑 →
         </Link>
       </div>
@@ -499,7 +499,7 @@ function EmployeesOverview({
       {totalEmployees === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-6 text-center text-sm text-slate-500">
           还没建过 AI 员工档案。
-          <Link href="/employees" className="ml-2 text-violet-700 hover:underline">
+          <Link href="/employees" className="ml-2 text-violet-800 hover:underline">
             去 /employees 新建 →
           </Link>
         </div>
@@ -553,10 +553,10 @@ function MiniKpi({
   accent: 'violet' | 'emerald' | 'amber' | 'rose' | 'slate';
 }) {
   const map: Record<typeof accent, string> = {
-    violet: 'from-violet-50 to-violet-100/40 ring-violet-200/60 text-violet-700',
-    emerald: 'from-emerald-50 to-emerald-100/40 ring-emerald-200/60 text-emerald-700',
-    amber: 'from-amber-50 to-amber-100/40 ring-amber-200/60 text-amber-700',
-    rose: 'from-rose-50 to-rose-100/40 ring-rose-200/60 text-rose-700',
+    violet: 'from-violet-100 to-violet-200/40 ring-violet-300/60 text-violet-800',
+    emerald: 'from-emerald-100 to-emerald-200/40 ring-emerald-300/60 text-emerald-800',
+    amber: 'from-amber-100 to-amber-200/40 ring-amber-300/60 text-amber-800',
+    rose: 'from-rose-100 to-rose-200/40 ring-rose-300/60 text-rose-800',
     slate: 'from-slate-50 to-slate-100/40 ring-slate-200/60 text-slate-700',
   };
   return (

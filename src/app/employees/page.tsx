@@ -112,17 +112,17 @@ export default async function EmployeesPage() {
       <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI 员工档案</h1>
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-emerald-300">
             完整版 · 5 Step ✅
           </span>
         </div>
-        <a href="/overview" className="text-xs text-violet-700 hover:underline">
+        <a href="/overview" className="text-xs text-violet-800 hover:underline">
           → 看 AI 总览（今日花费 / 趋势 / 撞顶）
         </a>
       </header>
       <p className="mb-5 rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 text-xs text-slate-600">
         💡 这里管的是 <strong>AI 员工</strong>（凭证编制员、对账员、法务工单 AI 等）。真人员工请去{' '}
-        <a href="/admin/users" className="text-amber-700 hover:underline">用户管理</a>。
+        <a href="/admin/users" className="text-amber-800 hover:underline">用户管理</a>。
         每个 AI 配一把 API Key（lty_... 格式），AI 调看板 API 时挂在 <code className="rounded bg-white px-1">x-api-key</code> header。
       </p>
       <EmployeesClient

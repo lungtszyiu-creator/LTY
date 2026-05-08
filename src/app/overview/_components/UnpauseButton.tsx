@@ -44,7 +44,7 @@ export function UnpauseButton({
 
   if (done) {
     return (
-      <span className="text-[11px] text-emerald-700">✓ 已解锁</span>
+      <span className="text-[11px] text-emerald-800">✓ 已解锁</span>
     );
   }
   return (
