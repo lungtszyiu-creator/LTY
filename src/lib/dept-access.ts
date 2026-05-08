@@ -183,6 +183,9 @@ export async function requireDeptAuthOrApiKey(
  * 重复混淆。出纳（slug='cashier'）保留（出纳 ≠ 财务总）。
  */
 const HIDDEN_DEPT_SLUGS = new Set(['finance']);
+// 全员可见的部门 — 不论 membership 都能进。透明文化决策。
+// ai = AI 部（token 监控公开 2026-05-09）
+const PUBLIC_DEPT_SLUGS = new Set(['ai']);
 
 export async function listAccessibleDepartments(userId: string, userRole: string) {
   // SUPER_ADMIN 和系统 ADMIN 都看所有 active 部门（ADMIN 视同部门 LEAD）
@@ -194,21 +197,47 @@ export async function listAccessibleDepartments(userId: string, userRole: string
     });
     return all.filter((d) => !HIDDEN_DEPT_SLUGS.has(d.slug));
   }
-  const memberships = await prisma.departmentMembership.findMany({
-    where: { userId },
-    include: {
-      department: {
-        select: { id: true, name: true, slug: true, description: true, active: true, order: true },
+  // MEMBER 默认看自己 membership 的部门 + 公开部门（如 ai）
+  const [memberships, publicDepts] = await Promise.all([
+    prisma.departmentMembership.findMany({
+      where: { userId },
+      include: {
+        department: {
+          select: { id: true, name: true, slug: true, description: true, active: true, order: true },
+        },
       },
-    },
-  });
-  return memberships
+    }),
+    prisma.department.findMany({
+      where: {
+        active: true,
+        slug: { in: Array.from(PUBLIC_DEPT_SLUGS) },
+      },
+      select: { id: true, name: true, slug: true, description: true, order: true },
+    }),
+  ]);
+  const memberDepts = memberships
     .filter((m) => m.department.active && !HIDDEN_DEPT_SLUGS.has(m.department.slug))
-    .sort((a, b) => a.department.order - b.department.order)
     .map((m) => ({
       id: m.department.id,
       name: m.department.name,
       slug: m.department.slug,
       description: m.department.description,
+      order: m.department.order,
+    }));
+  // 合并 + 去重（用 slug 作 key），按 order 排
+  const seen = new Set<string>();
+  const merged: typeof memberDepts = [];
+  for (const d of [...memberDepts, ...publicDepts]) {
+    if (seen.has(d.slug)) continue;
+    seen.add(d.slug);
+    merged.push(d);
+  }
+  return merged
+    .sort((a, b) => a.order - b.order)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      description: m.description,
     }));
 }
