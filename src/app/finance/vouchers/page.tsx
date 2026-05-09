@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { VoucherDeleteButton } from '../voucher-delete-button';
+import { shortenEthAddressesIn } from '@/lib/finance-format';
 
 export const dynamic = 'force-dynamic';
 
@@ -212,8 +213,12 @@ export default async function VouchersListPage({
                       </div>
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-slate-500">
-                      <span className="truncate">
-                        {v.debitAccount} → {v.creditAccount}
+                      <span
+                        className="truncate"
+                        title={`${v.debitAccount} → ${v.creditAccount}`}
+                      >
+                        {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                        {shortenEthAddressesIn(v.creditAccount)}
                       </span>
                       <span className="shrink-0 tabular-nums">
                         {v.date.toISOString().slice(0, 10)}
@@ -246,20 +251,32 @@ export default async function VouchersListPage({
               );
             })}
           </ul>
-          {/* Desktop：表格 */}
+          {/* Desktop：表格 —— 跟主页待审凭证表同模板：table-fixed + colgroup
+              限制列宽 + 借/贷地址压缩，防被长 ETH 地址撑爆挤断摘要 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[100px]" />{/* 日期 */}
+                <col className="w-[110px]" />{/* 凭证号 */}
+                <col />{/* 摘要 — 撑剩余空间 */}
+                <col className="w-[12%]" />{/* 借 */}
+                <col className="w-[16%]" />{/* 贷 */}
+                <col className="w-[110px]" />{/* 金额 */}
+                <col className="w-[80px]" />{/* 状态 */}
+                <col className="w-[100px]" />{/* 来源 */}
+                <col className="w-[140px]" />{/* 操作 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">日期</th>
-                  <th className="px-4 py-2 text-left">凭证号</th>
-                  <th className="px-4 py-2 text-left">摘要</th>
-                  <th className="px-4 py-2 text-left">借</th>
-                  <th className="px-4 py-2 text-left">贷</th>
-                  <th className="px-4 py-2 text-right">金额</th>
-                  <th className="px-4 py-2 text-left">状态</th>
-                  <th className="px-4 py-2 text-left">来源</th>
-                  <th className="px-4 py-2 text-right">操作</th>
+                  <th className="px-3 py-2 text-left">日期</th>
+                  <th className="px-3 py-2 text-left">凭证号</th>
+                  <th className="px-3 py-2 text-left">摘要</th>
+                  <th className="px-3 py-2 text-left">借</th>
+                  <th className="px-3 py-2 text-left">贷</th>
+                  <th className="px-3 py-2 text-right">金额</th>
+                  <th className="px-3 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">来源</th>
+                  <th className="px-3 py-2 text-right">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,48 +289,62 @@ export default async function VouchersListPage({
                       key={v.id}
                       className="border-t border-slate-100 transition hover:bg-amber-50/40"
                     >
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600 tabular-nums">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600 tabular-nums">
                         <Link href={`/finance/vouchers/${v.id}`} className="block">
                           {v.date.toISOString().slice(0, 10)}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap font-mono text-xs text-slate-500">
-                        <Link href={`/finance/vouchers/${v.id}`} className="block">
+                      <td className="truncate px-3 py-2 align-top font-mono text-xs text-slate-500">
+                        <Link href={`/finance/vouchers/${v.id}`} className="block truncate">
                           {v.voucherNumber ?? '—'}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/finance/vouchers/${v.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/finance/vouchers/${v.id}`}
+                          className="block break-words leading-snug"
+                          title={v.summary}
+                        >
                           {v.summary}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                        {v.debitAccount}
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={v.debitAccount}
+                      >
+                        {shortenEthAddressesIn(v.debitAccount)}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                        {v.creditAccount}
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={v.creditAccount}
+                      >
+                        {shortenEthAddressesIn(v.creditAccount)}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
-                        {v.amount.toString()} {v.currency}
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
+                        {v.amount.toString()}{' '}
+                        <span className="text-[10px] font-normal text-slate-500">{v.currency}</span>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}
                         >
                           {sm.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-500"
+                        title={v.createdByAi ?? v.createdBy?.name ?? '人工'}
+                      >
                         {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-right">
-                        <div className="inline-flex items-center gap-2">
+                      <td className="px-3 py-2 align-top text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                           {access.isSuperAdmin && (
                             <VoucherDeleteButton voucherId={v.id} summary={v.summary} size="sm" />
                           )}
                           <Link
                             href={`/finance/vouchers/${v.id}`}
-                            className="inline-flex items-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+                            className="inline-flex items-center whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
                           >
                             详情 →
                           </Link>

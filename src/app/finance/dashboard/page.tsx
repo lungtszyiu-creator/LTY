@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireFinanceView } from '@/lib/finance-access';
 import { MsoDeviationChart, type MsoDeviationPoint } from './_components/MsoDeviationChart';
+import { shortenEthAddressesIn } from '@/lib/finance-format';
 
 export const dynamic = 'force-dynamic';
 
@@ -341,10 +342,14 @@ export default async function FinanceDashboardPage() {
                   href={`/finance/vouchers/${v.id}`}
                   className="flex items-baseline justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/40 px-4 py-2.5 transition hover:border-rose-300 hover:bg-rose-50"
                 >
-                  <div className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                  <div
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800"
+                    title={`${v.summary} · ${v.debitAccount} → ${v.creditAccount}`}
+                  >
                     {v.summary}
                     <span className="ml-2 text-[11px] text-slate-500">
-                      {v.debitAccount} → {v.creditAccount}
+                      {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                      {shortenEthAddressesIn(v.creditAccount)}
                     </span>
                   </div>
                   <div className="shrink-0 font-mono text-sm font-semibold tabular-nums text-rose-700">
