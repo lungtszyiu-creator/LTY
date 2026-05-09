@@ -21,6 +21,7 @@ import { VoucherDeleteButton } from './voucher-delete-button';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
 import { AddWalletBankBar } from './_components/AddWalletBankBar';
+import { shortenEthAddressesIn } from '@/lib/finance-format';
 
 export const dynamic = 'force-dynamic';
 
@@ -355,8 +356,14 @@ function OverviewTab({
                       </div>
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-slate-500">
-                      <span className="truncate">
-                        {v.debitAccount} → {v.creditAccount}
+                      {/* 借/贷 长地址压缩，不然单行 truncate 把贷的钱包后缀"钱包"
+                          这种关键 hint 给吃掉了，看不出来是 USDT 钱包还是银行户 */}
+                      <span
+                        className="truncate"
+                        title={`${v.debitAccount} → ${v.creditAccount}`}
+                      >
+                        {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                        {shortenEthAddressesIn(v.creditAccount)}
                       </span>
                       <span className="shrink-0 tabular-nums">
                         {v.date.toISOString().slice(0, 10)}
@@ -379,18 +386,36 @@ function OverviewTab({
                 </li>
               ))}
             </ul>
-            {/* Desktop：表格 */}
+            {/* Desktop：表格 ——
+                之前问题：贷列里 AI 写的「其他货币资金-0x3cbDE679...749c钱包」用了
+                whitespace-nowrap，autosize 把 200+ px 横向空间占走，剩下给摘要的
+                空间不够，中文按字断行成"出 / 差 / 差 / 旅 / 报 / 销"。
+                修法：
+                1. 表格用 table-fixed + 显式列宽（colgroup），布局可预测
+                2. 借/贷 长地址用 shortenEthAddressesIn() 压成 0x6 字符…4 字符
+                3. 摘要用 break-words 自然换行（不再被挤成 4em 宽逐字断）
+                4. 借/贷/摘要超出列宽 truncate + title attr 鼠标 hover 看完整
+                5. 操作列内的"审核→"+删除按钮用 flex-wrap 防小屏挤爆 */}
             <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[100px]" />{/* 日期 */}
+                  <col />{/* 摘要 — 撑剩余空间 */}
+                  <col className="w-[14%]" />{/* 借 */}
+                  <col className="w-[18%]" />{/* 贷（含钱包名通常更长） */}
+                  <col className="w-[120px]" />{/* 金额 */}
+                  <col className="w-[110px]" />{/* 来源 */}
+                  <col className="w-[140px]" />{/* 操作 */}
+                </colgroup>
                 <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="px-4 py-2 text-left">日期</th>
-                    <th className="px-4 py-2 text-left">摘要</th>
-                    <th className="px-4 py-2 text-left">借</th>
-                    <th className="px-4 py-2 text-left">贷</th>
-                    <th className="px-4 py-2 text-right">金额</th>
-                    <th className="px-4 py-2 text-left">来源</th>
-                    <th className="px-4 py-2 text-right">操作</th>
+                    <th className="px-3 py-2 text-left">日期</th>
+                    <th className="px-3 py-2 text-left">摘要</th>
+                    <th className="px-3 py-2 text-left">借</th>
+                    <th className="px-3 py-2 text-left">贷</th>
+                    <th className="px-3 py-2 text-right">金额</th>
+                    <th className="px-3 py-2 text-left">来源</th>
+                    <th className="px-3 py-2 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -399,36 +424,50 @@ function OverviewTab({
                       key={v.id}
                       className="border-t border-slate-100 transition hover:bg-amber-50/40"
                     >
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600">
                         <Link href={`/finance/vouchers/${v.id}`} className="block">
                           {v.date.toISOString().slice(0, 10)}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/finance/vouchers/${v.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/finance/vouchers/${v.id}`}
+                          className="block break-words leading-snug"
+                          title={v.summary}
+                        >
                           {v.summary}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                        {v.debitAccount}
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={v.debitAccount}
+                      >
+                        {shortenEthAddressesIn(v.debitAccount)}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                        {v.creditAccount}
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={v.creditAccount}
+                      >
+                        {shortenEthAddressesIn(v.creditAccount)}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
-                        {v.amount.toString()} {v.currency}
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-right font-medium tabular-nums text-slate-900">
+                        {v.amount.toString()}{' '}
+                        <span className="text-[10px] font-normal text-slate-500">{v.currency}</span>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-500"
+                        title={v.createdByAi ?? v.createdBy?.name ?? '人工'}
+                      >
                         {v.createdByAi ? `🤖 ${v.createdByAi}` : v.createdBy?.name ?? '人工'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-right">
-                        <div className="inline-flex items-center gap-2">
+                      <td className="px-3 py-2 align-top text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                           {isSuperAdmin && (
                             <VoucherDeleteButton voucherId={v.id} summary={v.summary} size="sm" />
                           )}
                           <Link
                             href={`/finance/vouchers/${v.id}`}
-                            className="inline-flex items-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
+                            className="inline-flex items-center whitespace-nowrap rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700"
                           >
                             审核 →
                           </Link>
@@ -786,3 +825,4 @@ function formatTime(d: Date): string {
   if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} 小时前`;
   return d.toISOString().slice(0, 16).replace('T', ' ');
 }
+
