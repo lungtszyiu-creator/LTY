@@ -20,6 +20,7 @@ import { VaultIngestButton } from './vault-ingest-button';
 import { VoucherDeleteButton } from './voucher-delete-button';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { AddWalletBankBar } from './_components/AddWalletBankBar';
 
 export const dynamic = 'force-dynamic';
 
@@ -184,6 +185,7 @@ export default async function FinancePage({
             wallets={wallets}
             bankAccounts={bankAccounts}
             isSuperAdmin={access.isSuperAdmin}
+            canEdit={access.level === 'EDITOR'}
           />
         )}
         {tab === 'snapshots' && (
@@ -291,6 +293,7 @@ function OverviewTab({
   wallets,
   bankAccounts,
   isSuperAdmin,
+  canEdit,
 }: {
   pendingVouchers: Array<{
     id: string;
@@ -317,6 +320,7 @@ function OverviewTab({
     accountNumber: string;
     currency: string;
   }>;
+  canEdit: boolean;
   isSuperAdmin: boolean;
 }) {
   return (
@@ -438,6 +442,9 @@ function OverviewTab({
           </>
         )}
       </section>
+
+      {/* 添加 / 去重 工具栏（EDITOR 看到加按钮，SUPER_ADMIN 多看到去重按钮） */}
+      <AddWalletBankBar canEdit={canEdit} isSuperAdmin={isSuperAdmin} />
 
       {/* 钱包 / 银行 双栏 */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
