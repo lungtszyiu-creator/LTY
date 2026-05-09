@@ -126,10 +126,13 @@ model User {
   docVersions    DocVersion[] @relation("DocVersionAuthor")
 
   // 财务模块反向关系
-  walletsHeld     CryptoWallet[]          @relation("WalletHolder")
-  payrollProfile  EmployeePayrollProfile? @relation("PayrollProfile")
-  vouchersCreated Voucher[]               @relation("VoucherCreator")
-  vouchersPosted  Voucher[]               @relation("VoucherPoster")
+  walletsHeld            CryptoWallet[]          @relation("WalletHolder")
+  payrollProfile         EmployeePayrollProfile? @relation("PayrollProfile")
+  vouchersCreated        Voucher[]               @relation("VoucherCreator")
+  vouchersPosted         Voucher[]               @relation("VoucherPoster")
+  // AI 成本订阅 / 月度入账反向关系
+  aiSubscriptionsCreated AiCostSubscription[]    @relation("AiSubscriptionCreator")
+  aiCostBookingsBy       AiCostBooking[]         @relation("AiCostBookedBy")
 
   // 行政部模块反向关系
   adminLicensesResponsible AdminLicense[]            @relation("AdminLicenseResponsible")
@@ -763,7 +766,7 @@ model ApiKey {
 
   activityLogs AiActivityLog[]
   // 一个 ApiKey 最多挂一个 AiEmployee（员工档案模块）
-  aiEmployee  AiEmployee?
+  aiEmployee   AiEmployee?
 
   @@index([scope, active])
 }
@@ -787,42 +790,44 @@ model ApiKey {
 //   - 时区：UTC+8（与 HK 一致，与 MC Markets 同）
 
 model AiEmployee {
-  id           String  @id @default(cuid())
-  name         String // "凭证编制员" / "对账员" / "MC 法务工单 AI" 等
-  role         String // 自由字符串，简短描述："凭证草稿" / "汇率瞭望" / etc
+  id            String       @id @default(cuid())
+  name          String // "凭证编制员" / "对账员" / "MC 法务工单 AI" 等
+  role          String // 自由字符串，简短描述："凭证草稿" / "汇率瞭望" / etc
   // 部门归属（柔性 String，绑 LTY Department.slug）。null = 跨部门 / 总管 AI。
   // 不绑 enum 是为了未来加部门不用迁 schema；不做 FK 是为了删部门时不连带删 AI。
-  deptSlug     String?
+  deptSlug      String?
   // 管理层级 1=总监 2=组长 3=一线（自由约定）
-  layer        Int     @default(3)
-  active       Boolean @default(true)
+  layer         Int          @default(3)
+  active        Boolean      @default(true)
   // 日预算（HKD），撞顶自动 paused。默认 100 HKD —— 公司日预算 500，
   // 单员工 100 = 5 员工同时打满才到顶，给老板 5x 余量。已有员工自动写好的
   // 值不会被新建默认覆盖；要改单条记录去 /employees 编辑。
-  dailyLimitHkd Decimal @default(100) @db.Decimal(12, 2)
-  paused       Boolean   @default(false)
-  pausedAt     DateTime?
-  pauseReason  String?
+  dailyLimitHkd Decimal      @default(100) @db.Decimal(12, 2)
+  paused        Boolean      @default(false)
+  pausedAt      DateTime?
+  pauseReason   String?
   // 关联 LTY 现有 ApiKey 表（一对一可空）。员工删除时 ApiKey 也吊销。
-  apiKeyId     String?  @unique
-  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  apiKeyId      String?      @unique
+  apiKey        ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
   // 可选 webhook（员工 paused/unpaused 时 push 通知，v1.1）
-  webhookUrl   String?
+  webhookUrl    String?
   // 实时活跃度：每次 X-Api-Key 鉴权成功时更新 → 看板算 "在跑/待命/离线"
-  lastActiveAt DateTime?
+  lastActiveAt  DateTime?
   // 组织树（自引用）—— Step 1 schema 一次性放好，UI 在 Step 4 暴露。
   // 删上司时不连带删下属（SetNull），下属隶属字段自动清空。
-  reportsToId  String?
-  reportsTo    AiEmployee?  @relation("AiEmployeeSupervisor", fields: [reportsToId], references: [id], onDelete: SetNull)
-  reports      AiEmployee[] @relation("AiEmployeeSupervisor")
+  reportsToId   String?
+  reportsTo     AiEmployee?  @relation("AiEmployeeSupervisor", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reports       AiEmployee[] @relation("AiEmployeeSupervisor")
   // 上司池白名单：必须 isSupervisor=true 才能在他人"隶属上司"下拉里被选到
-  isSupervisor Boolean      @default(false)
-  meta         Json?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  isSupervisor  Boolean      @default(false)
+  meta          Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   // 反向：所有 token 调用历史
-  tokenUsages  TokenUsage[]
+  tokenUsages    TokenUsage[]
+  // 反向：AI 成本月度入账记录（按员工分笔）
+  aiCostBookings AiCostBooking[]
 
   @@index([active, paused])
   @@index([deptSlug])
@@ -852,7 +857,7 @@ model TokenUsage {
   id           String     @id @default(cuid())
   employee     AiEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employeeId   String
-  model        String     // "claude-sonnet-4-6" / "gpt-5" / "gpt-4o" / etc
+  model        String // "claude-sonnet-4-6" / "gpt-5" / "gpt-4o" / etc
   inputTokens  Int
   outputTokens Int
   // 服务端 computeCostHkd() 算出来的金额（HKD）
@@ -864,6 +869,87 @@ model TokenUsage {
   @@index([createdAt])
   @@index([employeeId, createdAt])
   @@index([model])
+}
+
+// ---- AI 平台月订阅成本（Coze Credit / Perplexity / Manus / MiniMax 等） ----
+//
+// 跟 TokenUsage（按调用变动成本）互补：这张表存固定月订阅，由老板手动录入。
+// 用途：月底凭证编制员算公司 AI 总成本时，把 token 浮动 + 订阅固定 一起合算
+// 出 HKD 总额，按 vendor 拆笔写 voucher。
+//
+// 字段不绑 enum，允许老板将来加新 vendor 时不用改 schema。常见 vendor:
+//   COZE_CREDIT       Coze 套餐月费 (老板原版 400/月 GUI 包月)
+//   PERPLEXITY        Perplexity Pro / Enterprise
+//   MANUS             Manus Pro
+//   MINIMAX           MiniMax Pro
+//   OPENAI_DIRECT     ChatGPT Team / API 月套餐
+//   ANTHROPIC_DIRECT  Claude Pro / Team
+//   OTHER             兜底
+model AiCostSubscription {
+  id                    String    @id @default(cuid())
+  vendor                String // 自由文本，建议从上面常见列表选；老板也可自定义
+  displayName           String // 给老板看的展示名，如 "Perplexity Pro · Yoyo 账号"
+  monthlyHkd            Decimal   @db.Decimal(12, 2) // 月费 HKD（外币订阅老板录入时已折算）
+  // 原始月费 + 币种（审计 / 汇率波动追溯用），可空
+  monthlyAmountOriginal Decimal?  @db.Decimal(12, 2)
+  currencyOriginal      String? // "USD" / "HKD" / "CNY" / etc
+  // 每月哪天扣（1-28，避开 29-31 跨月）
+  billingDay            Int       @default(1)
+  // 用途科目（借方）— 默认「管理费用-AI 服务费」，老板可改
+  purposeAccount        String    @default("管理费用-AI 服务费")
+  // 扣自科目（贷方）— 默认走平台预付挂账，例「Coze 平台预付」
+  fundingAccount        String
+  // 订阅起止日期 —— 月底按日期过滤决定本月是否计费
+  startedAt             DateTime
+  endedAt               DateTime?
+  // 是否启用（暂停的订阅 startedAt..endedAt 不变，仅 active=false 表示别再算）
+  active                Boolean   @default(true)
+  notes                 String?
+  // 老板录入审计
+  createdById           String?
+  createdBy             User?     @relation("AiSubscriptionCreator", fields: [createdById], references: [id])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  bookings AiCostBooking[]
+
+  @@index([vendor])
+  @@index([active, startedAt])
+}
+
+// ---- AI 成本月度入账记录（防重复入账） ----
+//
+// 凭证编制员每月把 AI 成本写成 voucher 时，往这张表写一行；下次再调
+// period-summary 时看到 alreadyBooked=true 跳过，避免双重入账。
+//
+// 一个 month + scope（员工或订阅）唯一键，按 C 选项老板要按 AI 员工 / 订阅
+// 分笔，所以一个月会有多行（每个 active AI 一行 token 费 + 每个 active
+// subscription 一行月费）。
+model AiCostBooking {
+  id             String              @id @default(cuid())
+  // YYYY-MM 字符串，例 "2026-04"
+  month          String
+  // 二选一：要么是按员工的 token 费，要么是按订阅的月费
+  // 看 PR-C 实现细节，这里 schema 允许两种模式
+  aiEmployeeId   String?
+  aiEmployee     AiEmployee?         @relation(fields: [aiEmployeeId], references: [id], onDelete: SetNull)
+  subscriptionId String?
+  subscription   AiCostSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  // 入账的 voucher（弱关联，删 voucher 时 SetNull 不级联删 booking 记录）
+  voucherId      String?
+  voucher        Voucher?            @relation("AiCostBookingVoucher", fields: [voucherId], references: [id], onDelete: SetNull)
+  // 落账金额（HKD），冗余存便于历史查询不依赖 voucher 行
+  totalHkd       Decimal             @db.Decimal(12, 2)
+  // 自由附加：{ tokenCallsCount, modelBreakdown, ... }
+  meta           Json?
+  bookedAt       DateTime            @default(now())
+  bookedById     String?
+  bookedBy       User?               @relation("AiCostBookedBy", fields: [bookedById], references: [id])
+
+  // 一个月份 × scope 仅入账一次（员工或订阅）
+  @@unique([month, aiEmployeeId, subscriptionId])
+  @@index([month])
+  @@index([voucherId])
 }
 
 // ---- 财务主数据：钱包 ----
@@ -1002,6 +1088,9 @@ model Voucher {
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 反向：AI 成本月度入账记录（如本 voucher 是 AI 成本入账时填）
+  aiCostBookings AiCostBooking[] @relation("AiCostBookingVoucher")
 
   @@index([status, date])
   @@index([createdAt])
