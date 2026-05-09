@@ -42,6 +42,8 @@ import {
   ReportPathHealthCard,
   type AiHealthRow,
 } from '@/components/ai-dashboard/ReportPathHealthCard';
+import { UnbookedAiCostCard } from '@/components/ai-dashboard/UnbookedAiCostCard';
+import { computePeriodSummary, hkMonthOf } from '@/lib/ai-cost-period';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,6 +175,15 @@ export default async function DeptAiPage({
     hasApiKey: !!e.apiKey,
   }));
 
+  // AI 成本入账卡：算上月 + 本月汇总（Token + 订阅 + alreadyBooked 标记）
+  // 上月用 HK 时区"今天 - 30 天"反推，本月用今天反推
+  const lastMonthStr = hkMonthOf(new Date(Date.now() - 30 * 24 * 3600_000));
+  const currentMonthStr = hkMonthOf(new Date());
+  const [lastMonthCost, currentMonthCost] = await Promise.all([
+    computePeriodSummary(lastMonthStr),
+    computePeriodSummary(currentMonthStr),
+  ]);
+
   // 序列化为 client-friendly ActivityRow（Date → ISO 字符串）
   const activityRows: ActivityRow[] = todayActivities.map((a) => ({
     id: a.id,
@@ -239,6 +250,13 @@ export default async function DeptAiPage({
           全部健康 → 一行绿色 OK；有问题 → 红字列名字。占位优先于 paused list 因为
           plugin 挂了的话整张看板的 token 数据都不准，得先修这个 */}
       <ReportPathHealthCard rows={healthRows} />
+
+      {/* 1.7 未入账 AI 成本卡 — 上月 + 本月待入账金额 + 凭证编制员该跑了的提醒 */}
+      <UnbookedAiCostCard
+        lastMonth={lastMonthCost}
+        currentMonth={currentMonthCost}
+        isSuperAdmin={isSuperAdmin}
+      />
 
       {/* 2. 暂停员工 + 解锁审批 */}
       {pausedEmployees.length > 0 && (

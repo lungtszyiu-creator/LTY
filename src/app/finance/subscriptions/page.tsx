@@ -111,7 +111,88 @@ export default async function FinanceSubscriptionsPage() {
       </section>
 
       <SubscriptionsClient initial={rows} />
+
+      <VoucherClerkSopCard />
     </div>
+  );
+}
+
+/**
+ * 凭证编制员 SOP 折叠卡 — 给老板对照让 AI 怎么调 period-summary 自动入账。
+ * 默认折叠，点开看完整调用流。
+ */
+function VoucherClerkSopCard() {
+  return (
+    <section className="mt-6 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+      <details>
+        <summary className="cursor-pointer text-sm font-semibold text-violet-900">
+          📖 凭证编制员 SOP — 月底怎么把 AI 成本入账（点开看）
+        </summary>
+        <div className="mt-3 space-y-3 text-[13px] text-slate-700">
+          <p>
+            每月 1 号凭证编制员 AI 跑这套流程把上月 AI 成本写成 voucher 入账（按
+            员工/订阅分笔）：
+          </p>
+          <ol className="ml-5 list-decimal space-y-2">
+            <li>
+              <strong>查上月汇总</strong>：调{' '}
+              <code className="rounded bg-white px-1 font-mono text-[11px]">
+                GET /api/v1/ai-cost/period-summary?month=2026-04
+              </code>{' '}
+              （X-Api-Key: 凭证编制员的 lty_xxx），拿到 \`tokenCosts[]\` + \`subscriptions[]\`，
+              过滤 \`alreadyBooked: false\` 的条目。
+            </li>
+            <li>
+              <strong>每个 token 员工写一笔 voucher</strong>（POST /api/finance/vouchers）：
+              <pre className="mt-1 overflow-x-auto rounded bg-slate-900 p-2 font-mono text-[10px] leading-relaxed text-slate-100">
+{`{
+  "date": "2026-05-01",
+  "summary": "2026-04 AI Token 成本 · {employeeName} · HKD {totalHkd}",
+  "debitAccount": "管理费用-AI 服务费",
+  "creditAccount": "Coze 平台预付",  // 或 OpenAI/Anthropic 平台预付按 model
+  "amount": {totalHkd},
+  "currency": "HKD",
+  "createdByAi": "voucher_clerk",
+  "notes": "{modelBreakdown 简述}"
+}`}
+              </pre>
+            </li>
+            <li>
+              <strong>每个订阅写一笔 voucher</strong>，用 \`subscription.purposeAccount\` /
+              \`fundingAccount\` 作为 用途/扣自 科目，金额 = \`monthlyHkd\`。摘要例
+              \`"2026-04 月费 · Perplexity Pro · HKD 155.00"\`。
+            </li>
+            <li>
+              <strong>每写完一笔立刻调 mark-booked</strong>（防重）：
+              <pre className="mt-1 overflow-x-auto rounded bg-slate-900 p-2 font-mono text-[10px] leading-relaxed text-slate-100">
+{`POST /api/v1/ai-cost/mark-booked
+{
+  "month": "2026-04",
+  "aiEmployeeId": "...",      // 二选一
+  "subscriptionId": "...",    // 二选一
+  "voucherId": "<刚写的>",
+  "totalHkd": <金额>,
+  "meta": { "modelBreakdown": [...] }  // 可选
+}`}
+              </pre>
+              撞重复返 409 + 现有 bookingId，凭证编制员要看到 409 就跳过该笔（说明
+              别的 AI 或老板已经手动入过了）。
+            </li>
+            <li>
+              <strong>Telegram 汇总通知老板</strong>：跑完后发一条 TG 写「上月 AI 成本入账完成
+              · N 笔 voucher · HKD X 总额 · 详情看 /finance/vouchers?status=AI_DRAFT」。
+              老板进 /finance 审 voucher 过账即可。
+            </li>
+          </ol>
+          <p className="text-[11px] text-slate-500">
+            完整接口签名 + 错误码见{' '}
+            <code className="rounded bg-white px-1">/api/v1/ai-cost/period-summary</code> 跟{' '}
+            <code className="rounded bg-white px-1">/api/v1/ai-cost/mark-booked</code> 的 doc
+            注释。
+          </p>
+        </div>
+      </details>
+    </section>
   );
 }
 
