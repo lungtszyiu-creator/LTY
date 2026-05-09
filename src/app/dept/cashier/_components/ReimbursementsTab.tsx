@@ -92,16 +92,25 @@ export async function ReimbursementsTab({ canEdit }: { canEdit: boolean }) {
             })}
           </ul>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[120px]" />{/* 申请人 */}
+                <col className="w-[100px]" />{/* 类型 */}
+                <col />{/* 标题 — 撑剩余 */}
+                <col className="w-[140px]" />{/* 金额 */}
+                <col className="w-[100px]" />{/* 部门 */}
+                <col className="w-[110px]" />{/* 费用日期 */}
+                <col className="w-[80px]" />{/* 状态 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">申请人</th>
-                  <th className="px-4 py-2 text-left">类型</th>
-                  <th className="px-4 py-2 text-left">标题</th>
-                  <th className="px-4 py-2 text-left">金额</th>
-                  <th className="px-4 py-2 text-left">部门</th>
-                  <th className="px-4 py-2 text-left">费用日期</th>
-                  <th className="px-4 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">申请人</th>
+                  <th className="px-3 py-2 text-left">类型</th>
+                  <th className="px-3 py-2 text-left">标题</th>
+                  <th className="px-3 py-2 text-left">金额</th>
+                  <th className="px-3 py-2 text-left">部门</th>
+                  <th className="px-3 py-2 text-left">费用日期</th>
+                  <th className="px-3 py-2 text-left">状态</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,26 +118,35 @@ export async function ReimbursementsTab({ canEdit }: { canEdit: boolean }) {
                   const sm = CASHIER_REIMB_STATUS_META[r.status] ?? CASHIER_REIMB_STATUS_META.PENDING;
                   return (
                     <tr key={r.id} className="border-t border-slate-100 hover:bg-rose-50/40">
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={r.applicant.name ?? r.applicant.email ?? undefined}
+                      >
                         {r.applicant.name ?? r.applicant.email}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td className="truncate px-3 py-2 align-top text-xs text-slate-600">
                         {CASHIER_REIMB_CATEGORY_LABEL[r.category] ?? r.category}
                       </td>
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/dept/cashier/reimbursements/${r.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/dept/cashier/reimbursements/${r.id}`}
+                          className="block break-words leading-snug"
+                          title={r.title}
+                        >
                           {r.title}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap font-semibold tabular-nums text-slate-700">
+                      <td className="px-3 py-2 align-top whitespace-nowrap font-semibold tabular-nums text-slate-700">
                         {r.currency} {formatMoney(r.amount)}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">{r.department ?? '—'}</td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500 tabular-nums">
+                      <td className="truncate px-3 py-2 align-top text-xs text-slate-600" title={r.department ?? undefined}>
+                        {r.department ?? '—'}
+                      </td>
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-500 tabular-nums">
                         {r.occurredOn?.toISOString().slice(0, 10) ?? '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
                           {sm.label}
                         </span>
                       </td>

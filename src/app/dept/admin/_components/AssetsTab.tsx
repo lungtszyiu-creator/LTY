@@ -94,17 +94,25 @@ export async function AssetsTab({ canEdit }: { canEdit: boolean }) {
               );
             })}
           </ul>
-          {/* Desktop */}
+          {/* Desktop：table-fixed + colgroup 防长「编号」/ 长「位置」推右列 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[12%]" />{/* 编号 */}
+                <col />{/* 名称 — 撑剩余 */}
+                <col className="w-[100px]" />{/* 类别 */}
+                <col className="w-[18%]" />{/* 位置 */}
+                <col className="w-[120px]" />{/* 责任人 */}
+                <col className="w-[80px]" />{/* 状态 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">编号</th>
-                  <th className="px-4 py-2 text-left">名称</th>
-                  <th className="px-4 py-2 text-left">类别</th>
-                  <th className="px-4 py-2 text-left">位置</th>
-                  <th className="px-4 py-2 text-left">责任人</th>
-                  <th className="px-4 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">编号</th>
+                  <th className="px-3 py-2 text-left">名称</th>
+                  <th className="px-3 py-2 text-left">类别</th>
+                  <th className="px-3 py-2 text-left">位置</th>
+                  <th className="px-3 py-2 text-left">责任人</th>
+                  <th className="px-3 py-2 text-left">状态</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,25 +120,40 @@ export async function AssetsTab({ canEdit }: { canEdit: boolean }) {
                   const meta = STATUS_META[a.status] ?? STATUS_META.IN_USE;
                   return (
                     <tr key={a.id} className="border-t border-slate-100 hover:bg-amber-50/40">
-                      <td className="px-4 py-2 whitespace-nowrap font-mono text-xs text-slate-500">
-                        <Link href={`/dept/admin/assets/${a.id}`} className="block">
+                      <td
+                        className="truncate px-3 py-2 align-top font-mono text-xs text-slate-500"
+                        title={a.assetCode ?? undefined}
+                      >
+                        <Link href={`/dept/admin/assets/${a.id}`} className="block truncate">
                           {a.assetCode ?? '—'}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/dept/admin/assets/${a.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/dept/admin/assets/${a.id}`}
+                          className="block break-words leading-snug"
+                          title={a.name}
+                        >
                           {a.name}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td className="truncate px-3 py-2 align-top text-xs text-slate-600">
                         {CATEGORY_LABEL[a.category] ?? a.category}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">{a.location ?? '—'}</td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={a.location ?? undefined}
+                      >
+                        {a.location ?? '—'}
+                      </td>
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={a.responsible?.name ?? a.responsible?.email ?? undefined}
+                      >
                         {a.responsible ? a.responsible.name ?? a.responsible.email : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${meta.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${meta.cls}`}>
                           {meta.label}
                         </span>
                       </td>

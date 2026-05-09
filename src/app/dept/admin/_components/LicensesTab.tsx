@@ -111,17 +111,25 @@ export async function LicensesTab({ canEdit }: { canEdit: boolean }) {
               );
             })}
           </ul>
-          {/* Desktop：表格 */}
+          {/* Desktop：table-fixed + colgroup 防长「证号」/ 长「名称」推右列 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[100px]" />{/* 类型 */}
+                <col />{/* 名称 — 撑剩余 */}
+                <col className="w-[18%]" />{/* 证号 */}
+                <col className="w-[160px]" />{/* 到期日 */}
+                <col className="w-[120px]" />{/* 责任人 */}
+                <col className="w-[80px]" />{/* 状态 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">类型</th>
-                  <th className="px-4 py-2 text-left">名称 / 对方</th>
-                  <th className="px-4 py-2 text-left">证号</th>
-                  <th className="px-4 py-2 text-left">到期日</th>
-                  <th className="px-4 py-2 text-left">责任人</th>
-                  <th className="px-4 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">类型</th>
+                  <th className="px-3 py-2 text-left">名称 / 对方</th>
+                  <th className="px-3 py-2 text-left">证号</th>
+                  <th className="px-3 py-2 text-left">到期日</th>
+                  <th className="px-3 py-2 text-left">责任人</th>
+                  <th className="px-3 py-2 text-left">状态</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,20 +138,27 @@ export async function LicensesTab({ canEdit }: { canEdit: boolean }) {
                   const dl = daysLeft(l.expireAt);
                   return (
                     <tr key={l.id} className="border-t border-slate-100 hover:bg-amber-50/40">
-                      <td className="px-4 py-2 whitespace-nowrap text-slate-600">
-                        <Link href={`/dept/admin/licenses/${l.id}`} className="block">
+                      <td className="truncate px-3 py-2 align-top text-slate-600">
+                        <Link href={`/dept/admin/licenses/${l.id}`} className="block truncate">
                           {TYPE_LABEL[l.type] ?? l.type}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/dept/admin/licenses/${l.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/dept/admin/licenses/${l.id}`}
+                          className="block break-words leading-snug"
+                          title={l.name}
+                        >
                           {l.name}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap font-mono text-xs text-slate-500">
+                      <td
+                        className="truncate px-3 py-2 align-top font-mono text-xs text-slate-500"
+                        title={l.identifier ?? undefined}
+                      >
                         {l.identifier ?? '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600 tabular-nums">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600 tabular-nums">
                         {l.expireAt ? (
                           <>
                             {l.expireAt.toISOString().slice(0, 10)}
@@ -157,11 +172,14 @@ export async function LicensesTab({ canEdit }: { canEdit: boolean }) {
                           <span className="text-slate-400">永久</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={l.responsible?.name ?? l.responsible?.email ?? undefined}
+                      >
                         {l.responsible ? l.responsible.name ?? l.responsible.email : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${meta.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${meta.cls}`}>
                           {meta.label}
                         </span>
                       </td>

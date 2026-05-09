@@ -337,29 +337,43 @@ function PendingSection({ inboxQueue }: { inboxQueue: InboxQueueJson | null }) {
               </li>
             ))}
           </ul>
-          {/* Desktop：表格 */}
+          {/* Desktop：table-fixed + colgroup —— 之前文件名超长会撑爆「文件」列把
+              右栏（猜的部门 / 置信度 / 处理时间）推出可视区，老板看不到右半边。
+              修：限定列宽 + break-all 让 ASCII 路径自然换行，长摘要 line-clamp 截断 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[40%]" />{/* 文件 */}
+                <col className="w-[110px]" />{/* 猜的部门 */}
+                <col />{/* 摘要 — 撑剩余 */}
+                <col className="w-[90px]" />{/* 置信度 */}
+                <col className="w-[120px]" />{/* 处理时间 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">文件</th>
-                  <th className="px-4 py-2 text-left">猜的部门</th>
-                  <th className="px-4 py-2 text-left">摘要</th>
-                  <th className="px-4 py-2 text-right">置信度</th>
-                  <th className="px-4 py-2 text-right">处理时间</th>
+                  <th className="px-3 py-2 text-left">文件</th>
+                  <th className="px-3 py-2 text-left">猜的部门</th>
+                  <th className="px-3 py-2 text-left">摘要</th>
+                  <th className="px-3 py-2 text-right">置信度</th>
+                  <th className="px-3 py-2 text-right">处理时间</th>
                 </tr>
               </thead>
               <tbody>
                 {inboxQueue.pending.map((p) => (
                   <tr key={p.path} className="border-t border-slate-100 hover:bg-rose-50/30">
-                    <td className="px-4 py-2 font-mono text-xs text-slate-700">
-                      {p.path.replace(/^raw\/_inbox\/_pending\//, '')}
+                    <td className="px-3 py-2 align-top">
+                      <div
+                        className="break-all font-mono text-[11px] leading-snug text-slate-700"
+                        title={p.path}
+                      >
+                        {p.path.replace(/^raw\/_inbox\/_pending\//, '')}
+                      </div>
                       {p.tags && p.tags.length > 0 && (
-                        <div className="mt-1 flex gap-1">
+                        <div className="mt-1 flex flex-wrap gap-1">
                           {p.tags.slice(0, 3).map((t) => (
                             <span
                               key={t}
-                              className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
+                              className="whitespace-nowrap rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
                             >
                               {t}
                             </span>
@@ -367,14 +381,19 @@ function PendingSection({ inboxQueue }: { inboxQueue: InboxQueueJson | null }) {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-700">
+                    <td className="px-3 py-2 align-top whitespace-nowrap text-slate-700">
                       <DeptBadge dept={p.guessed_dept} />
                     </td>
-                    <td className="px-4 py-2 text-slate-600">{p.summary}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right">
+                    <td
+                      className="px-3 py-2 align-top text-xs text-slate-600"
+                      title={p.summary ?? undefined}
+                    >
+                      <div className="line-clamp-3 break-words leading-snug">{p.summary}</div>
+                    </td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap text-right">
                       <ConfidenceBadge value={p.confidence} />
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-right text-xs text-slate-400">
+                    <td className="px-3 py-2 align-top whitespace-nowrap text-right text-[11px] text-slate-400">
                       {formatTime(p.processed_at)}
                     </td>
                   </tr>

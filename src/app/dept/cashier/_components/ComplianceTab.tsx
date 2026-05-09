@@ -81,17 +81,27 @@ export async function ComplianceTab({
           暂无{CASHIER_COMPLIANCE_CATEGORY_LABEL[sub]}记录
         </div>
       ) : (
+        // table-fixed + colgroup 防长「编号」/ 长「名称」撑列把右边推出去
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col />{/* 名称 撑剩余 */}
+              <col className="w-[16%]" />{/* 编号 */}
+              <col className="w-[80px]" />{/* 周期 */}
+              <col className="w-[150px]" />{/* 下次截止 */}
+              <col className="w-[120px]" />{/* 负责人 */}
+              <col className="w-[80px]" />{/* 层级 */}
+              <col className="w-[80px]" />{/* 状态 */}
+            </colgroup>
             <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-2 text-left">名称</th>
-                <th className="px-4 py-2 text-left">编号</th>
-                <th className="px-4 py-2 text-left">周期</th>
-                <th className="px-4 py-2 text-left">下次截止</th>
-                <th className="px-4 py-2 text-left">负责人</th>
-                <th className="px-4 py-2 text-left">层级</th>
-                <th className="px-4 py-2 text-left">状态</th>
+                <th className="px-3 py-2 text-left">名称</th>
+                <th className="px-3 py-2 text-left">编号</th>
+                <th className="px-3 py-2 text-left">周期</th>
+                <th className="px-3 py-2 text-left">下次截止</th>
+                <th className="px-3 py-2 text-left">负责人</th>
+                <th className="px-3 py-2 text-left">层级</th>
+                <th className="px-3 py-2 text-left">状态</th>
               </tr>
             </thead>
             <tbody>
@@ -101,12 +111,22 @@ export async function ComplianceTab({
                 const dl = daysUntil(e.nextDueAt);
                 return (
                   <tr key={e.id} className="border-t border-slate-100 hover:bg-rose-50/40">
-                    <td className="px-4 py-2 text-slate-800">{e.name}</td>
-                    <td className="px-4 py-2 whitespace-nowrap font-mono text-xs text-slate-500">
+                    <td className="break-words px-3 py-2 align-top text-slate-800" title={e.name}>
+                      {e.name}
+                    </td>
+                    <td
+                      className="truncate px-3 py-2 align-top font-mono text-xs text-slate-500"
+                      title={e.identifier ?? undefined}
+                    >
                       {e.identifier ?? '—'}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">{e.cycle ?? '—'}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600 tabular-nums">
+                    <td
+                      className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                      title={e.cycle ?? undefined}
+                    >
+                      {e.cycle ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600 tabular-nums">
                       {e.nextDueAt?.toISOString().slice(0, 10) ?? '—'}
                       {dl !== null && (
                         <span
@@ -118,19 +138,22 @@ export async function ComplianceTab({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                    <td
+                      className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                      title={e.responsible?.name ?? e.responsible?.email ?? e.responsibleName ?? undefined}
+                    >
                       {e.responsible ? e.responsible.name ?? e.responsible.email : e.responsibleName ?? '—'}
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 align-top whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${lm.cls}`}
+                        className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ring-1 ${lm.cls}`}
                         title={lm.hint}
                       >
                         {lm.label}
                       </span>
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
+                    <td className="px-3 py-2 align-top whitespace-nowrap">
+                      <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
                         {sm.label}
                       </span>
                     </td>

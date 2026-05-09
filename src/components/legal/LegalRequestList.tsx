@@ -92,18 +92,27 @@ export function LegalRequestList({
               );
             })}
           </ul>
-          {/* Desktop：表格 */}
+          {/* Desktop：table-fixed + colgroup 防长「标题」推后续列 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col />{/* 标题 — 撑剩余 */}
+                <col className="w-[110px]" />{/* 类型 */}
+                <col className="w-[80px]" />{/* 优先级 */}
+                <col className="w-[120px]" />{/* 发起人 */}
+                <col className="w-[120px]" />{/* 负责人 */}
+                <col className="w-[80px]" />{/* 状态 */}
+                <col className="w-[110px]" />{/* 创建 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">标题</th>
-                  <th className="px-4 py-2 text-left">类型</th>
-                  <th className="px-4 py-2 text-left">优先级</th>
-                  <th className="px-4 py-2 text-left">发起人</th>
-                  <th className="px-4 py-2 text-left">负责人</th>
-                  <th className="px-4 py-2 text-left">状态</th>
-                  <th className="px-4 py-2 text-left">创建</th>
+                  <th className="px-3 py-2 text-left">标题</th>
+                  <th className="px-3 py-2 text-left">类型</th>
+                  <th className="px-3 py-2 text-left">优先级</th>
+                  <th className="px-3 py-2 text-left">发起人</th>
+                  <th className="px-3 py-2 text-left">负责人</th>
+                  <th className="px-3 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">创建</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,32 +121,42 @@ export function LegalRequestList({
                   const pm = LEGAL_PRIORITY_META[r.priority] ?? LEGAL_PRIORITY_META.NORMAL;
                   return (
                     <tr key={r.id} className="border-t border-slate-100 hover:bg-sky-50/40">
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/dept/${deptSlug}/requests/${r.id}`} className="block">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/dept/${deptSlug}/requests/${r.id}`}
+                          className="block break-words leading-snug"
+                          title={r.title}
+                        >
                           {r.title}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td className="truncate px-3 py-2 align-top text-xs text-slate-600">
                         {r.category ? LEGAL_CATEGORY_LABEL[r.category] ?? r.category : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${pm.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${pm.cls}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${pm.dot}`} />
                           {pm.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={r.requester?.name ?? r.requester?.email ?? undefined}
+                      >
                         {r.requester ? r.requester.name ?? r.requester.email : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td
+                        className="truncate px-3 py-2 align-top text-xs text-slate-600"
+                        title={r.assignee?.name ?? r.assignee?.email ?? undefined}
+                      >
                         {r.assignee ? r.assignee.name ?? r.assignee.email : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
                           {sm.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500 tabular-nums">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-500 tabular-nums">
                         {r.createdAt.toISOString().slice(0, 10)}
                       </td>
                     </tr>
