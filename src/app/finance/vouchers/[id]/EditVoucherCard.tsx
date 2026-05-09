@@ -186,7 +186,7 @@ export function EditVoucherCard({ initial }: { initial: Initial }) {
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="借方科目">
+          <Field label="用途科目 (借方)">
             <input
               maxLength={100}
               list="account-options-edit"
@@ -195,7 +195,7 @@ export function EditVoucherCard({ initial }: { initial: Initial }) {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
             />
           </Field>
-          <Field label="贷方科目">
+          <Field label="扣自科目 (贷方)">
             <input
               maxLength={100}
               list="account-options-edit"

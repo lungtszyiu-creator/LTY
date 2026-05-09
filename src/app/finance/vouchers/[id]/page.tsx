@@ -71,10 +71,10 @@ export default async function VoucherDetailPage({
         </div>
       </header>
 
-      {/* 借贷方块 */}
+      {/* 用途/扣自方块 — 原会计「借/贷方」改成老板看得懂的「用途 (借)/扣自 (贷)」 */}
       <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DebitCreditCard label="借方" account={voucher.debitAccount} amount={voucher.amount.toString()} currency={voucher.currency} accent="rose" />
-        <DebitCreditCard label="贷方" account={voucher.creditAccount} amount={voucher.amount.toString()} currency={voucher.currency} accent="emerald" />
+        <DebitCreditCard label="用途 (借)" account={voucher.debitAccount} amount={voucher.amount.toString()} currency={voucher.currency} accent="rose" />
+        <DebitCreditCard label="扣自 (贷)" account={voucher.creditAccount} amount={voucher.amount.toString()} currency={voucher.currency} accent="emerald" />
       </section>
 
       {/* 核心字段表 */}
@@ -82,8 +82,8 @@ export default async function VoucherDetailPage({
         <dl className="divide-y divide-slate-200/60">
           <Row label="日期">{voucher.date.toISOString().slice(0, 10)}</Row>
           <Row label="摘要">{voucher.summary}</Row>
-          <Row label="借方科目"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{voucher.debitAccount}</code></Row>
-          <Row label="贷方科目"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{voucher.creditAccount}</code></Row>
+          <Row label="用途科目 (借方)"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{voucher.debitAccount}</code></Row>
+          <Row label="扣自科目 (贷方)"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{voucher.creditAccount}</code></Row>
           <Row label="金额">
             <span className="font-mono tabular-nums text-base font-semibold">
               {voucher.amount.toString()} {voucher.currency}

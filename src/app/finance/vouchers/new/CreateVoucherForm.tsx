@@ -132,7 +132,11 @@ export function CreateVoucherForm() {
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="借方科目" required hint="资产增加 / 费用增加 / 负债减少">
+        <Field
+          label="用途科目 (借方)"
+          required
+          hint="这笔钱算什么 — 费用 / 入账 / 资产新增 / 负债减少"
+        >
           <input
             required
             maxLength={100}
@@ -140,10 +144,14 @@ export function CreateVoucherForm() {
             value={debitAccount}
             onChange={(e) => setDebitAccount(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
-            placeholder="例如：其他货币资金-HKD银行"
+            placeholder="例如：管理费用-差旅费 / 其他货币资金-HKD银行"
           />
         </Field>
-        <Field label="贷方科目" required hint="资产减少 / 收入增加 / 负债增加">
+        <Field
+          label="扣自科目 (贷方)"
+          required
+          hint="钱从哪个账户扣 — 资产减少 / 收入入账 / 负债增加"
+        >
           <input
             required
             maxLength={100}
@@ -151,7 +159,7 @@ export function CreateVoucherForm() {
             value={creditAccount}
             onChange={(e) => setCreditAccount(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
-            placeholder="例如：其他货币资金-USDT钱包"
+            placeholder="例如：其他货币资金-USDT钱包 / 应付账款"
           />
         </Field>
       </div>
