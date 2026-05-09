@@ -53,14 +53,13 @@ export function UnbookedAiCostCard({
         >
           💰 AI 成本入账
         </h2>
-        {isSuperAdmin && (
-          <Link
-            href="/finance/subscriptions"
-            className="text-[11px] text-violet-800 hover:underline"
-          >
-            → 管理订阅 / 看 SOP
-          </Link>
-        )}
+        {/* 订阅页 5/10 起全员可填，链接给所有人，不再 isSuperAdmin gate */}
+        <Link
+          href="/dept/ai/subscriptions"
+          className="text-[11px] text-violet-800 hover:underline"
+        >
+          → 管理订阅 / 看 SOP
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -1,13 +1,19 @@
 /**
- * AI 平台月订阅单条 CRUD（仅 SUPER_ADMIN）
+ * AI 平台月订阅单条 CRUD（全员可读可改，2026-05-10 老板放开）
  *
  * PATCH  → 改任意字段（停用 active=false / 改月费 / 改科目 / 设 endedAt 等）
- * DELETE → 软删（active=false + endedAt=now() 而不是真删，保留入账历史关联）
+ * DELETE → 软删（active=false + endedAt=now() 不真删，保留入账历史关联，
+ *          软删完任何人都能再次 PATCH 把 active 改回 true 救回来）
+ *
+ * 全员可改的安全保障：
+ *   - 软删可逆（不真删行）
+ *   - createdById 字段记着首次录入人，撕逼时有据
+ *   - 看板透明文化：每条改动看板能查
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { requireSuperAdmin } from '@/lib/permissions';
+import { requireUser } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +37,7 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   try {
-    await requireSuperAdmin();
+    await requireUser();
     let body: unknown;
     try {
       body = await req.json();
@@ -110,7 +116,7 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ) {
   try {
-    await requireSuperAdmin();
+    await requireUser();
     const existing = await prisma.aiCostSubscription.findUnique({
       where: { id: params.id },
       select: { id: true, active: true },
