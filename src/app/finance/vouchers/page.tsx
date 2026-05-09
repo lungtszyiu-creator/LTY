@@ -66,6 +66,18 @@ function buildHref(status: StatusKey, range: RangeKey): string {
   return q ? `/finance/vouchers?${q}` : '/finance/vouchers';
 }
 
+function buildExportHref(status: StatusKey, range: RangeKey): string {
+  const params = new URLSearchParams();
+  if (status !== 'ALL') params.set('status', status);
+  const start = rangeStart(range);
+  if (start) params.set('from', start.toISOString().slice(0, 10));
+  // to 默认今天（包含今天）
+  const today = new Date();
+  params.set('to', today.toISOString().slice(0, 10));
+  const q = params.toString();
+  return q ? `/api/finance/vouchers/export?${q}` : '/api/finance/vouchers/export';
+}
+
 export default async function VouchersListPage({
   searchParams,
 }: {
@@ -120,14 +132,23 @@ export default async function VouchersListPage({
             )}
           </p>
         </div>
-        {access.level === 'EDITOR' && (
-          <Link
-            href="/finance/vouchers/new"
-            className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-rose-700"
+        <div className="flex items-center gap-2">
+          <a
+            href={buildExportHref(status, range)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            title="按当前过滤条件导出 CSV，Excel 直接打开"
           >
-            + 新建凭证
-          </Link>
-        )}
+            ⤓ 导出 CSV
+          </a>
+          {access.level === 'EDITOR' && (
+            <Link
+              href="/finance/vouchers/new"
+              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-rose-700"
+            >
+              + 新建凭证
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* 状态过滤 */}

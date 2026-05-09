@@ -136,10 +136,10 @@ export default async function FinancePage({
         <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
       </section>
 
-      {/* 子页面快速入口 —— 6 张大卡片，移动端 2 列 / 桌面 6 列；订阅卡片仅 SUPER_ADMIN 看到 */}
+      {/* 子页面快速入口 —— 6 张基础卡 + 订阅卡（仅 SUPER_ADMIN）；移动端 2 列 / sm 3 列 / lg 自适应 */}
       <section
         className={`mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 ${
-          access.isSuperAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
+          access.isSuperAdmin ? 'lg:grid-cols-7' : 'lg:grid-cols-6'
         }`}
       >
         <SubPageCard
@@ -150,10 +150,17 @@ export default async function FinancePage({
           accent="rose"
         />
         <SubPageCard
+          href="/finance/preview"
+          emoji="🔍"
+          label="对账试算"
+          hint="本月 / 季 / 年"
+          accent="fuchsia"
+        />
+        <SubPageCard
           href="/finance/vouchers"
           emoji="📒"
           label="凭证"
-          hint="全部状态"
+          hint="全部状态 + CSV"
           accent="emerald"
         />
         <SubPageCard
@@ -760,7 +767,7 @@ function SubPageCard({
   emoji: string;
   label: string;
   hint?: string;
-  accent: 'rose' | 'amber' | 'sky' | 'violet' | 'emerald';
+  accent: 'rose' | 'amber' | 'sky' | 'violet' | 'emerald' | 'fuchsia';
 }) {
   const map = {
     rose: 'border-rose-200/60 hover:border-rose-300 hover:bg-rose-50/40',
@@ -768,6 +775,7 @@ function SubPageCard({
     sky: 'border-sky-200/60 hover:border-sky-300 hover:bg-sky-50/40',
     violet: 'border-violet-200/60 hover:border-violet-300 hover:bg-violet-50/40',
     emerald: 'border-emerald-200/60 hover:border-emerald-300 hover:bg-emerald-50/40',
+    fuchsia: 'border-fuchsia-200/60 hover:border-fuchsia-300 hover:bg-fuchsia-50/40',
   } as const;
   return (
     <Link
