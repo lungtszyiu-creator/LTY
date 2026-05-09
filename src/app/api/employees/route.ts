@@ -33,69 +33,120 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  await requireAdmin();
-  const employees = await prisma.aiEmployee.findMany({
-    orderBy: [{ active: 'desc' }, { paused: 'desc' }, { layer: 'asc' }, { createdAt: 'desc' }],
-    include: {
-      apiKey: {
-        select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+  try {
+    await requireAdmin();
+    const employees = await prisma.aiEmployee.findMany({
+      orderBy: [{ active: 'desc' }, { paused: 'desc' }, { layer: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        apiKey: {
+          select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+        },
+        reportsTo: { select: { id: true, name: true } },
+        _count: { select: { reports: true } },
       },
-      reportsTo: { select: { id: true, name: true } },
-      _count: { select: { reports: true } },
-    },
-  });
-  return NextResponse.json({ employees });
+    });
+    // ⚠️ Prisma Decimal 默认 JSON 序列化成字符串 ("100")，
+    // 前端表单 useState(row.dailyLimitHkd) 拿到字符串，老板不改输入框
+    // 直接保存 → PATCH body 里 dailyLimitHkd 是 "100" → Zod
+    // .number() 拒收 → 422 "Expected number, received string"。
+    // 这里强制 Number() 跟 /employees/page.tsx 服务端首屏 SSR 路径一致。
+    const rows = employees.map((e) => ({
+      ...e,
+      dailyLimitHkd: Number(e.dailyLimitHkd),
+      reportsCount: e._count.reports,
+    }));
+    return NextResponse.json({ employees: rows });
+  } catch (e) {
+    if (e instanceof Response) return e as unknown as NextResponse;
+    console.error('[employees GET] uncaught:', e);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', hint: e instanceof Error ? e.message : '服务端未知错误' },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
-  const data = createSchema.parse(await req.json());
+  // 跟 PATCH 同步包 try/catch，让 Zod / requireAdmin 错误返 JSON 不返空 body
+  try {
+    const admin = await requireAdmin();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'INVALID_JSON', hint: '请求 body 不是合法 JSON' },
+        { status: 400 },
+      );
+    }
+    const data = createSchema.parse(body);
 
-  // 如要生成 key，先建 ApiKey 行（用 LTY 现有 lib/api-auth.ts）
-  let apiKeyRow: { id: string } | null = null;
-  let plaintextKey: string | null = null;
-  if (data.generateApiKey) {
-    const { plaintext, hashed, prefix } = generateApiKey();
-    plaintextKey = plaintext;
-    apiKeyRow = await prisma.apiKey.create({
+    // 如要生成 key，先建 ApiKey 行（用 LTY 现有 lib/api-auth.ts）
+    let apiKeyRow: { id: string } | null = null;
+    let plaintextKey: string | null = null;
+    if (data.generateApiKey) {
+      const { plaintext, hashed, prefix } = generateApiKey();
+      plaintextKey = plaintext;
+      apiKeyRow = await prisma.apiKey.create({
+        data: {
+          name: data.apiKeyName ?? `${data.name} - ${new Date().toISOString().slice(0, 10)}`,
+          hashedKey: hashed,
+          keyPrefix: prefix,
+          scope: data.apiKeyScope ?? 'AI_EMPLOYEE:default',
+          active: true,
+          createdById: admin.id,
+        },
+        select: { id: true },
+      });
+    }
+
+    const employee = await prisma.aiEmployee.create({
       data: {
-        name: data.apiKeyName ?? `${data.name} - ${new Date().toISOString().slice(0, 10)}`,
-        hashedKey: hashed,
-        keyPrefix: prefix,
-        scope: data.apiKeyScope ?? 'AI_EMPLOYEE:default',
-        active: true,
-        createdById: admin.id,
+        name: data.name,
+        role: data.role,
+        deptSlug: data.deptSlug ?? null,
+        layer: data.layer ?? 3,
+        dailyLimitHkd: data.dailyLimitHkd ?? 1000,
+        webhookUrl: data.webhookUrl ?? null,
+        apiKeyId: apiKeyRow?.id ?? null,
       },
-      select: { id: true },
+      include: {
+        apiKey: {
+          select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+        },
+      },
     });
-  }
 
-  const employee = await prisma.aiEmployee.create({
-    data: {
-      name: data.name,
-      role: data.role,
-      deptSlug: data.deptSlug ?? null,
-      layer: data.layer ?? 3,
-      dailyLimitHkd: data.dailyLimitHkd ?? 1000,
-      webhookUrl: data.webhookUrl ?? null,
-      apiKeyId: apiKeyRow?.id ?? null,
-    },
-    include: {
-      apiKey: {
-        select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+    return NextResponse.json(
+      {
+        // Decimal → number 给前端用
+        employee: { ...employee, dailyLimitHkd: Number(employee.dailyLimitHkd) },
+        // 仅生成 key 时返 plaintext —— 一次性！
+        plaintext_key: plaintextKey,
+        _warning: plaintextKey
+          ? '请立刻复制保存。本明文 Key 不会再出现，离开本响应后无法找回。'
+          : undefined,
       },
-    },
-  });
-
-  return NextResponse.json(
-    {
-      employee,
-      // 仅生成 key 时返 plaintext —— 一次性！
-      plaintext_key: plaintextKey,
-      _warning: plaintextKey
-        ? '请立刻复制保存。本明文 Key 不会再出现，离开本响应后无法找回。'
-        : undefined,
-    },
-    { status: 201 },
-  );
+      { status: 201 },
+    );
+  } catch (e) {
+    if (e instanceof Response) return e as unknown as NextResponse;
+    if (e instanceof z.ZodError) {
+      const first = e.issues[0];
+      const fieldPath = first?.path.join('.');
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          hint: `字段 ${fieldPath ?? '?'} 不合法：${first?.message ?? '未知校验错误'}`,
+          issues: e.issues,
+        },
+        { status: 422 },
+      );
+    }
+    console.error('[employees POST] uncaught:', e);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', hint: e instanceof Error ? e.message : '服务端未知错误' },
+      { status: 500 },
+    );
+  }
 }

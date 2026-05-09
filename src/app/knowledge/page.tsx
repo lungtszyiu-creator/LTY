@@ -399,7 +399,12 @@ function ScribeActivitySection({ dashboard }: { dashboard: DashboardJson | null 
                 <span className="truncate font-mono text-xs text-slate-600">{a.file}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
-                {typeof a.confidence === 'number' && <ConfidenceBadge value={a.confidence} />}
+                {/* post_hoc / gone 状态下，confidence 是仓库员当时的快照，不再有意义。
+                    管家已纠正最终归宿，不显示老分数避免误导。 */}
+                {typeof a.confidence === 'number' &&
+                  !['archived_post_hoc', 'rejected_post_hoc', 'gone'].includes(a.action) && (
+                    <ConfidenceBadge value={a.confidence} />
+                  )}
                 <time>{formatTime(a.at)}</time>
               </div>
             </li>
