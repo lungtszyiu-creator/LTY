@@ -43,7 +43,6 @@ const ADMIN_LINKS = [
   { href: '/admin/finance/access',       label: '财务访问授权' },
   { href: '/admin/vault-etl',            label: 'Vault → 看板 导入' },
   { href: '/employees',                  label: 'AI 员工档案' },
-  { href: '/admin/ai-onboarding',        label: 'AI 接入向导' },
   { href: '/admin/api-keys',             label: 'API Key 管理（全部门）' },
   { href: '/admin/notifications',        label: '通知日志' },
   { href: '/admin/notifications/settings', label: '通知设置' },
@@ -159,8 +158,8 @@ export default function Nav({ fontScale = 'base' }: { fontScale?: FontScale }) {
   // /admin/api-keys 总管理仅 SUPER_ADMIN（避免跨部门越权 —— 部门 LEAD 应该
   // 去自己部门页发本部门 scope，而不是进总管理页能选 FINANCE_*）。
   // /admin/vault-etl 一次性数据导入，写库操作，必须仅 SUPER_ADMIN。
-  // /admin/ai-onboarding 现在 ADMIN+ 都能看（让各部门 ADMIN 自己接 token 监控）
   // 注：/overview 已搬到 /dept/ai 全员可见（解锁按钮内部条件渲染 SUPER_ADMIN）
+  // 注：AI 接入向导已搬到 /dept/ai/onboarding 全员可见（不在管理菜单了）
   const SUPER_ONLY_LINKS = new Set([
     '/admin/api-keys',
     '/admin/vault-etl',

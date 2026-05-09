@@ -182,11 +182,16 @@ export default async function DeptAiPage({
             全员可见
           </span>
         </div>
-        {isAdminPlus && (
-          <Link href="/employees" className="text-xs text-violet-800 hover:underline">
-            → AI 员工档案管理（管理员）
+        <div className="flex items-baseline gap-3 text-xs">
+          <Link href="/dept/ai/onboarding" className="text-violet-800 hover:underline">
+            → AI 接入向导
           </Link>
-        )}
+          {isAdminPlus && (
+            <Link href="/employees" className="text-violet-800 hover:underline">
+              → AI 员工档案管理（管理员）
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* 1. 今日 hero */}
