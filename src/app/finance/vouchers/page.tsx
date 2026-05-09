@@ -215,9 +215,11 @@ export default async function VouchersListPage({
                     <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-slate-500">
                       <span
                         className="truncate"
-                        title={`${v.debitAccount} → ${v.creditAccount}`}
+                        title={`用途 ${v.debitAccount} · 扣自 ${v.creditAccount}`}
                       >
-                        {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                        <span className="text-slate-400">用途</span>{' '}
+                        {shortenEthAddressesIn(v.debitAccount)}{' '}
+                        <span className="text-slate-400">· 扣自</span>{' '}
                         {shortenEthAddressesIn(v.creditAccount)}
                       </span>
                       <span className="shrink-0 tabular-nums">
@@ -271,8 +273,18 @@ export default async function VouchersListPage({
                   <th className="px-3 py-2 text-left">日期</th>
                   <th className="px-3 py-2 text-left">凭证号</th>
                   <th className="px-3 py-2 text-left">摘要</th>
-                  <th className="px-3 py-2 text-left">借</th>
-                  <th className="px-3 py-2 text-left">贷</th>
+                  <th className="px-3 py-2 text-left">
+                    用途
+                    <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">
+                      (借)
+                    </span>
+                  </th>
+                  <th className="px-3 py-2 text-left">
+                    扣自
+                    <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">
+                      (贷)
+                    </span>
+                  </th>
                   <th className="px-3 py-2 text-right">金额</th>
                   <th className="px-3 py-2 text-left">状态</th>
                   <th className="px-3 py-2 text-left">来源</th>

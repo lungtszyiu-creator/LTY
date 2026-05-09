@@ -173,7 +173,7 @@ export function VoucherActions({
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="例如：金额跟单据不一致 / 借贷方科目错误 / 重复入账..."
+            placeholder="例如：金额跟单据不一致 / 用途或扣自科目错误 / 重复入账..."
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
           <div className="flex gap-2">

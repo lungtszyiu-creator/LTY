@@ -344,11 +344,13 @@ export default async function FinanceDashboardPage() {
                 >
                   <div
                     className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800"
-                    title={`${v.summary} · ${v.debitAccount} → ${v.creditAccount}`}
+                    title={`${v.summary} · 用途 ${v.debitAccount} · 扣自 ${v.creditAccount}`}
                   >
                     {v.summary}
                     <span className="ml-2 text-[11px] text-slate-500">
-                      {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                      <span className="text-slate-400">用途</span>{' '}
+                      {shortenEthAddressesIn(v.debitAccount)}{' '}
+                      <span className="text-slate-400">· 扣自</span>{' '}
                       {shortenEthAddressesIn(v.creditAccount)}
                     </span>
                   </div>

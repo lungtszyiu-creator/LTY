@@ -373,9 +373,11 @@ function OverviewTab({
                           这种关键 hint 给吃掉了，看不出来是 USDT 钱包还是银行户 */}
                       <span
                         className="truncate"
-                        title={`${v.debitAccount} → ${v.creditAccount}`}
+                        title={`用途 ${v.debitAccount} · 扣自 ${v.creditAccount}`}
                       >
-                        {shortenEthAddressesIn(v.debitAccount)} →{' '}
+                        <span className="text-slate-400">用途</span>{' '}
+                        {shortenEthAddressesIn(v.debitAccount)}{' '}
+                        <span className="text-slate-400">· 扣自</span>{' '}
                         {shortenEthAddressesIn(v.creditAccount)}
                       </span>
                       <span className="shrink-0 tabular-nums">
@@ -400,15 +402,20 @@ function OverviewTab({
               ))}
             </ul>
             {/* Desktop：表格 ——
-                之前问题：贷列里 AI 写的「其他货币资金-0x3cbDE679...749c钱包」用了
+                之前问题：扣自列里 AI 写的「其他货币资金-0x3cbDE679...749c钱包」用了
                 whitespace-nowrap，autosize 把 200+ px 横向空间占走，剩下给摘要的
                 空间不够，中文按字断行成"出 / 差 / 差 / 旅 / 报 / 销"。
                 修法：
                 1. 表格用 table-fixed + 显式列宽（colgroup），布局可预测
-                2. 借/贷 长地址用 shortenEthAddressesIn() 压成 0x6 字符…4 字符
+                2. 用途/扣自长地址用 shortenEthAddressesIn() 压成 0x6 字符…4 字符
                 3. 摘要用 break-words 自然换行（不再被挤成 4em 宽逐字断）
-                4. 借/贷/摘要超出列宽 truncate + title attr 鼠标 hover 看完整
-                5. 操作列内的"审核→"+删除按钮用 flex-wrap 防小屏挤爆 */}
+                4. 用途/扣自/摘要超出列宽 truncate + title attr 鼠标 hover 看完整
+                5. 操作列内的"审核→"+删除按钮用 flex-wrap 防小屏挤爆
+
+                术语：原会计「借/贷」改成老板看得懂的「用途/扣自」(2026-05-10)
+                  - 借 = 这笔钱算什么科目 / 入到哪 → "用途"
+                  - 贷 = 钱从哪个账户走 → "扣自"
+                  小字副标题保留 (借)/(贷) 给将来审计 / 跟会计师沟通用。 */}
             <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
@@ -424,8 +431,18 @@ function OverviewTab({
                   <tr>
                     <th className="px-3 py-2 text-left">日期</th>
                     <th className="px-3 py-2 text-left">摘要</th>
-                    <th className="px-3 py-2 text-left">借</th>
-                    <th className="px-3 py-2 text-left">贷</th>
+                    <th className="px-3 py-2 text-left">
+                      用途
+                      <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">
+                        (借)
+                      </span>
+                    </th>
+                    <th className="px-3 py-2 text-left">
+                      扣自
+                      <span className="ml-1 text-[9px] font-normal normal-case tracking-normal text-slate-400">
+                        (贷)
+                      </span>
+                    </th>
                     <th className="px-3 py-2 text-right">金额</th>
                     <th className="px-3 py-2 text-left">来源</th>
                     <th className="px-3 py-2 text-right">操作</th>
