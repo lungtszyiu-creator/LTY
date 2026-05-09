@@ -4,7 +4,7 @@
  * 给三处用：
  *  1. /api/v1/ai-cost/period-summary — 凭证编制员调，月底拿数据写 voucher
  *  2. /dept/ai 顶部「未入账」卡片 server-side 直接调
- *  3. /finance/subscriptions SOP 卡片例子展示
+ *  3. /dept/ai/subscriptions SOP 卡片例子展示（5/10 从 /finance 搬过来）
  *
  * 算法：
  *  - 给定 month (yyyy-mm)：

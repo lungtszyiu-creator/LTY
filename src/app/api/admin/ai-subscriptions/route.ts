@@ -1,16 +1,21 @@
 /**
- * AI 平台月订阅 CRUD（仅 SUPER_ADMIN）
+ * AI 平台月订阅 CRUD（全员可读可填，2026-05-10 老板放开）
  *
  * GET  → 列表（按 active 排，活跃在前；同 active 按 vendor + startedAt）
- * POST → 新建（老板录入 Coze Credit / Perplexity / Manus / MiniMax 等月订阅）
+ * POST → 新建（任何 active 员工录入 Coze Credit / Perplexity / Manus /
+ *        MiniMax 等月订阅 — 协同填写减少老板单点工作）
  *
- * 老板用法：/finance/subscriptions 页面调本接口录入 / 列出。月底凭证编制员
- * 算 AI 成本时通过 PR-C 的 period-summary endpoint 自动汇总入账。
+ * 入口：/dept/ai/subscriptions（原 /finance/subscriptions 已搬，老板把订阅
+ * 当作 AI 部范畴而不是财务）。月底凭证编制员通过 PR-C 的 period-summary
+ * endpoint 自动汇总入账。
+ *
+ * 路径仍在 /api/admin/ 是历史原因（建表时只 SUPER_ADMIN 可改），不再代表
+ * "管理员限制"。等下个 PR 闲了再 mv 到 /api/ai-subscriptions。
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { requireSuperAdmin } from '@/lib/permissions';
+import { requireUser } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +37,7 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    await requireSuperAdmin();
+    await requireUser();
     const subs = await prisma.aiCostSubscription.findMany({
       orderBy: [{ active: 'desc' }, { vendor: 'asc' }, { startedAt: 'desc' }],
       include: {
@@ -59,7 +64,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const admin = await requireSuperAdmin();
+    const user = await requireUser();
     let body: unknown;
     try {
       body = await req.json();
@@ -85,7 +90,7 @@ export async function POST(req: NextRequest) {
         endedAt: data.endedAt ? new Date(data.endedAt) : null,
         active: data.active ?? true,
         notes: data.notes ?? null,
-        createdById: admin.id,
+        createdById: user.id,
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },

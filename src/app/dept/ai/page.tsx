@@ -43,6 +43,7 @@ import {
   type AiHealthRow,
 } from '@/components/ai-dashboard/ReportPathHealthCard';
 import { UnbookedAiCostCard } from '@/components/ai-dashboard/UnbookedAiCostCard';
+import { AiSubpageNav } from '@/components/ai-dashboard/AiSubpageNav';
 import { computePeriodSummary, hkMonthOf } from '@/lib/ai-cost-period';
 
 export const dynamic = 'force-dynamic';
@@ -217,23 +218,16 @@ export default async function DeptAiPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI 部</h1>
           <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800 ring-1 ring-violet-300">
             全员可见
           </span>
         </div>
-        <div className="flex items-baseline gap-3 text-xs">
-          <Link href="/dept/ai/onboarding" className="text-violet-800 hover:underline">
-            → AI 接入向导
-          </Link>
-          {isAdminPlus && (
-            <Link href="/employees" className="text-violet-800 hover:underline">
-              → AI 员工档案管理（管理员）
-            </Link>
-          )}
-        </div>
+        {/* 子页面下拉 nav — 老板 5/10：AI 部所有功能集中在一个下拉里。
+            员工档案是 ADMIN+ 内容，AiSubpageNav 内部按权限过滤。 */}
+        <AiSubpageNav isAdminPlus={isAdminPlus} />
       </header>
 
       {/* 1. 今日 hero */}

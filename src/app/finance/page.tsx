@@ -136,12 +136,9 @@ export default async function FinancePage({
         <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
       </section>
 
-      {/* 子页面快速入口 —— 6 张基础卡 + 订阅卡（仅 SUPER_ADMIN）；移动端 2 列 / sm 3 列 / lg 自适应 */}
-      <section
-        className={`mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 ${
-          access.isSuperAdmin ? 'lg:grid-cols-7' : 'lg:grid-cols-6'
-        }`}
-      >
+      {/* 子页面快速入口 —— 6 张大卡片（AI 订阅 5/10 搬到 AI 部全员可填，
+          /finance 首页不再列那条入口）；移动端 2 列 / sm 3 列 / lg 6 列 */}
+      <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
         <SubPageCard
           href="/finance/dashboard"
           emoji="📊"
@@ -184,15 +181,6 @@ export default async function FinancePage({
           hint="录入工作台"
           accent="violet"
         />
-        {access.isSuperAdmin && (
-          <SubPageCard
-            href="/finance/subscriptions"
-            emoji="💳"
-            label="AI 订阅"
-            hint="月费录入"
-            accent="rose"
-          />
-        )}
       </section>
 
       {/* Tabs */}
