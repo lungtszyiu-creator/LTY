@@ -21,6 +21,7 @@ import { prisma } from '@/lib/db';
 import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { VaultBrowser } from '@/components/vault/VaultBrowser';
 
 export const dynamic = 'force-dynamic';
 
@@ -211,6 +212,18 @@ export default async function HrPage() {
         <NavCard href="/docs" emoji="📖" label="员工手册" hint="LTY /docs" />
         <NavCard href="/faq" emoji="❓" label="公开问答" hint="FAQ" />
         <NavCard href="/announcements" emoji="📣" label="公司制度 / 公告" hint="" />
+      </section>
+
+      {/* Vault 文档浏览（raw/人事部/）—— 实际 PDF / 合同 / 政策 */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+          📁 Vault 文档（raw/人事部/）
+        </h2>
+        <VaultBrowser
+          apiPath="/api/dept/vault-tree"
+          initialPath="raw/人事部"
+          repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E4%BA%BA%E4%BA%8B%E9%83%A8"
+        />
       </section>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (

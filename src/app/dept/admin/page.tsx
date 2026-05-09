@@ -13,14 +13,16 @@ import { LicensesTab } from './_components/LicensesTab';
 import { AssetsTab } from './_components/AssetsTab';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { VaultBrowser } from '@/components/vault/VaultBrowser';
 
 export const dynamic = 'force-dynamic';
 
-type TabKey = 'licenses' | 'assets' | 'facilities' | 'emergency' | 'inspection' | 'it' | 'supplies';
+type TabKey = 'licenses' | 'assets' | 'vault' | 'facilities' | 'emergency' | 'inspection' | 'it' | 'supplies';
 
 const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'licenses', label: '证照合同', ready: true },
   { key: 'assets', label: '固定资产', ready: true },
+  { key: 'vault', label: '📁 vault 文档', ready: true },
   { key: 'facilities', label: '会议室', ready: false },
   { key: 'emergency', label: '应急演练', ready: false },
   { key: 'inspection', label: '月度巡检', ready: false },
@@ -90,6 +92,13 @@ export default async function AdminDeptPage({
       <div className="mt-5">
         {tab === 'licenses' && <LicensesTab canEdit={canEdit} />}
         {tab === 'assets' && <AssetsTab canEdit={canEdit} />}
+        {tab === 'vault' && (
+          <VaultBrowser
+            apiPath="/api/dept/vault-tree"
+            initialPath="raw/行政部"
+            repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E8%A1%8C%E6%94%BF%E9%83%A8"
+          />
+        )}
         {(tab === 'facilities' || tab === 'emergency' || tab === 'inspection' || tab === 'it' || tab === 'supplies') && (
           <StubTab tabKey={tab} />
         )}
@@ -148,6 +157,7 @@ function StubTab({ tabKey }: { tabKey: TabKey }) {
   const map: Record<TabKey, string> = {
     licenses: '',
     assets: '',
+    vault: '',
     facilities: '会议室预定 + 设备清单（v1.1 上线）',
     emergency: '应急演练记录 + 应急联系人（v1.1 上线）',
     inspection: '月度巡检记录（v1.1 上线）',
