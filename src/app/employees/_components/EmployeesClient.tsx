@@ -291,11 +291,16 @@ export function EmployeesClient({
               return (
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="px-4 py-2 align-top">
-                    <div className="flex items-center gap-2">
-                      <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
-                      <span className="font-medium text-slate-800">{row.name}</span>
+                    {/* 长名字（"CFO 财务总监"等）+ 「👑 上司」chip 同行很容易在窄列里逐字
+                        断行 — flex-wrap 配 whitespace-nowrap 保证名字 / chip 各自不被
+                        切开，宽度不够时 chip 自然落到下一行而不是中间断字 */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <div className="flex items-center gap-2">
+                        <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
+                        <span className="whitespace-nowrap font-medium text-slate-800">{row.name}</span>
+                      </div>
                       {row.isSupervisor && (
-                        <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
+                        <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
                           👑 上司
                         </span>
                       )}
@@ -359,7 +364,7 @@ export function EmployeesClient({
                             : '设为上司，加入「隶属上司」下拉的可选池'
                         }
                       >
-                        👑 {row.isSupervisor ? '取消上司' : '设为上司'}
+                        <span className="whitespace-nowrap">👑 {row.isSupervisor ? '取消上司' : '设为上司'}</span>
                       </button>
                       <button
                         type="button"
@@ -401,12 +406,14 @@ export function EmployeesClient({
             <li key={row.id} className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
-                    <span className="truncate font-semibold text-slate-800">{row.name}</span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <LiveDot status={computeLive(row.active, row.lastActiveAt)} />
+                      <span className="truncate font-semibold text-slate-800">{row.name}</span>
+                    </div>
                     {row.isSupervisor && (
-                      <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
-                        👑
+                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-300/70">
+                        👑 上司
                       </span>
                     )}
                   </div>

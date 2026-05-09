@@ -38,114 +38,176 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  await requireAdmin();
-  const employee = await prisma.aiEmployee.findUnique({
-    where: { id: params.id },
-    include: {
-      apiKey: {
-        select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+  try {
+    await requireAdmin();
+    const employee = await prisma.aiEmployee.findUnique({
+      where: { id: params.id },
+      include: {
+        apiKey: {
+          select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+        },
+        reportsTo: { select: { id: true, name: true } },
+        reports: { select: { id: true, name: true, role: true } },
       },
-      reportsTo: { select: { id: true, name: true } },
-      reports: { select: { id: true, name: true, role: true } },
-    },
-  });
-  if (!employee) {
-    return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    });
+    if (!employee) {
+      return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    }
+    return NextResponse.json({ employee });
+  } catch (e) {
+    if (e instanceof Response) return e as unknown as NextResponse;
+    console.error('[employees GET] uncaught:', e);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', hint: e instanceof Error ? e.message : '服务端未知错误' },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ employee });
 }
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  await requireAdmin();
-  const data = patchSchema.parse(await req.json());
+  // ⚠️ 用 try/catch 包整段 — 之前 zod parse 抛 ZodError 没人接，
+  // requireAdmin throw Response 在 Next route handler 也会变成 500 空 body，
+  // 客户端 await r.json() 直接 "Unexpected end of JSON input" 看不到原因。
+  // 现在统一返 JSON 错误体，前端能渲染 hint。
+  try {
+    await requireAdmin();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'INVALID_JSON', hint: '请求 body 不是合法 JSON' },
+        { status: 400 },
+      );
+    }
+    const data = patchSchema.parse(body);
 
-  const existing = await prisma.aiEmployee.findUnique({
-    where: { id: params.id },
-    select: { id: true, isSupervisor: true },
-  });
-  if (!existing) {
-    return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
-  }
+    const existing = await prisma.aiEmployee.findUnique({
+      where: { id: params.id },
+      select: { id: true, isSupervisor: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    }
 
-  // 防呆：不能把自己设成自己的上司
-  if (data.reportsToId === params.id) {
+    // 防呆：不能把自己设成自己的上司
+    if (data.reportsToId === params.id) {
+      return NextResponse.json(
+        { error: 'cannot_report_to_self', hint: '员工不能指自己当上司' },
+        { status: 422 },
+      );
+    }
+
+    // 防呆：reportsToId 必须指向一个 isSupervisor=true && active 的员工
+    if (data.reportsToId) {
+      const supervisor = await prisma.aiEmployee.findUnique({
+        where: { id: data.reportsToId },
+        select: { isSupervisor: true, active: true },
+      });
+      if (!supervisor) {
+        return NextResponse.json(
+          { error: 'supervisor_not_found', hint: '上司不存在（id 找不到）' },
+          { status: 422 },
+        );
+      }
+      if (!supervisor.isSupervisor) {
+        return NextResponse.json(
+          { error: 'not_in_supervisor_pool', hint: '目标员工不在上司池内（先把他设为上司）' },
+          { status: 422 },
+        );
+      }
+      if (!supervisor.active) {
+        return NextResponse.json(
+          { error: 'supervisor_inactive', hint: '目标员工已停用' },
+          { status: 422 },
+        );
+      }
+    }
+
+    // 取消上司身份时（true → false），自动清空所有下属的 reportsToId
+    // 用事务保证一致性
+    if (existing.isSupervisor && data.isSupervisor === false) {
+      const updated = await prisma.$transaction([
+        prisma.aiEmployee.updateMany({
+          where: { reportsToId: params.id },
+          data: { reportsToId: null },
+        }),
+        prisma.aiEmployee.update({
+          where: { id: params.id },
+          data: cleanPatchData(data),
+          include: {
+            apiKey: {
+              select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+            },
+            reportsTo: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
+      return NextResponse.json({ employee: updated[1], orphanedReports: updated[0].count });
+    }
+
+    const employee = await prisma.aiEmployee.update({
+      where: { id: params.id },
+      data: cleanPatchData(data),
+      include: {
+        apiKey: {
+          select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
+        },
+        reportsTo: { select: { id: true, name: true } },
+      },
+    });
+    return NextResponse.json({ employee });
+  } catch (e) {
+    // requireAdmin 抛的 Response —— 直接透传
+    if (e instanceof Response) {
+      return e as unknown as NextResponse;
+    }
+    if (e instanceof z.ZodError) {
+      const first = e.issues[0];
+      const fieldPath = first?.path.join('.');
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          hint: `字段 ${fieldPath ?? '?'} 不合法：${first?.message ?? '未知校验错误'}`,
+          issues: e.issues,
+        },
+        { status: 422 },
+      );
+    }
+    console.error('[employees PATCH] uncaught:', e);
     return NextResponse.json(
-      { error: 'cannot_report_to_self', hint: '员工不能指自己当上司' },
-      { status: 422 },
+      {
+        error: 'INTERNAL_ERROR',
+        hint: e instanceof Error ? e.message : '服务端未知错误',
+      },
+      { status: 500 },
     );
   }
-
-  // 防呆：reportsToId 必须指向一个 isSupervisor=true && active 的员工
-  if (data.reportsToId) {
-    const supervisor = await prisma.aiEmployee.findUnique({
-      where: { id: data.reportsToId },
-      select: { isSupervisor: true, active: true },
-    });
-    if (!supervisor) {
-      return NextResponse.json(
-        { error: 'supervisor_not_found' },
-        { status: 422 },
-      );
-    }
-    if (!supervisor.isSupervisor) {
-      return NextResponse.json(
-        { error: 'not_in_supervisor_pool', hint: '目标员工不在上司池内（先把他设为上司）' },
-        { status: 422 },
-      );
-    }
-    if (!supervisor.active) {
-      return NextResponse.json(
-        { error: 'supervisor_inactive', hint: '目标员工已停用' },
-        { status: 422 },
-      );
-    }
-  }
-
-  // 取消上司身份时（true → false），自动清空所有下属的 reportsToId
-  // 用事务保证一致性
-  if (existing.isSupervisor && data.isSupervisor === false) {
-    const updated = await prisma.$transaction([
-      prisma.aiEmployee.updateMany({
-        where: { reportsToId: params.id },
-        data: { reportsToId: null },
-      }),
-      prisma.aiEmployee.update({
-        where: { id: params.id },
-        data: cleanPatchData(data),
-        include: {
-          apiKey: {
-            select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
-          },
-          reportsTo: { select: { id: true, name: true } },
-        },
-      }),
-    ]);
-    return NextResponse.json({ employee: updated[1], orphanedReports: updated[0].count });
-  }
-
-  const employee = await prisma.aiEmployee.update({
-    where: { id: params.id },
-    data: cleanPatchData(data),
-    include: {
-      apiKey: {
-        select: { id: true, keyPrefix: true, scope: true, active: true, revokedAt: true, lastUsedAt: true },
-      },
-      reportsTo: { select: { id: true, name: true } },
-    },
-  });
-  return NextResponse.json({ employee });
 }
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  try {
+    return await deleteHandler(params.id);
+  } catch (e) {
+    if (e instanceof Response) return e as unknown as NextResponse;
+    console.error('[employees DELETE] uncaught:', e);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', hint: e instanceof Error ? e.message : '服务端未知错误' },
+      { status: 500 },
+    );
+  }
+}
+
+async function deleteHandler(id: string): Promise<NextResponse> {
   const admin = await requireSuperAdmin();
   const existing = await prisma.aiEmployee.findUnique({
-    where: { id: params.id },
+    where: { id },
     select: { id: true, apiKeyId: true, _count: { select: { tokenUsages: true } } },
   });
   if (!existing) {
@@ -174,7 +236,7 @@ export async function DELETE(
       });
     }
     // 下属的 reportsToId 自动 SetNull（schema FK 级），不用手动清
-    await tx.aiEmployee.delete({ where: { id: params.id } });
+    await tx.aiEmployee.delete({ where: { id } });
   });
   return NextResponse.json({ ok: true });
 }
