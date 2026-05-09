@@ -564,8 +564,11 @@ function DeptBadge({ dept }: { dept: string }) {
 function ActionBadge({ action }: { action: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     archived: { label: '已归档', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    archived_post_hoc: { label: '管家已归档', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
     pending: { label: '待审', cls: 'bg-rose-50 text-rose-700 ring-rose-200' },
     rejected: { label: '驳回', cls: 'bg-slate-100 text-slate-600 ring-slate-200' },
+    rejected_post_hoc: { label: '管家已驳回', cls: 'bg-slate-100 text-slate-600 ring-slate-200' },
+    gone: { label: '已删', cls: 'bg-slate-100 text-slate-400 ring-slate-200' },
   };
   const m = map[action] ?? { label: action, cls: 'bg-slate-50 text-slate-600 ring-slate-200' };
   return (
