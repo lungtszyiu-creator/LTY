@@ -92,6 +92,28 @@ export default async function AiOnboardingPage() {
         </p>
       </section>
 
+      {/* API 触发 prompt 生成器入口 */}
+      <section className="mb-6 rounded-xl border border-violet-300 bg-violet-100/40 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-violet-900">
+              🛠 进阶：让你的 AI 改成「外部 API 触发」省 Credit
+            </h2>
+            <p className="mt-1 text-[12px] text-violet-800">
+              在 Coze GUI 里手动测试烧 Credit (400/月套餐限额)，外部 API 触发烧 Coze tokens (OpenAI 原价透传不抽成)。
+              点 → 选你的部门 + AI 员工 + 触发方式 (TG bot / 看板按钮 / cron / webhook) → 自动生成填好的
+              prompt + 触发代码模板，你粘贴给 Claude/ChatGPT，AI 一步步带做。
+            </p>
+          </div>
+          <Link
+            href="/admin/ai-onboarding/api-trigger"
+            className="shrink-0 rounded-lg bg-violet-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-violet-800"
+          >
+            打开 prompt 生成器 →
+          </Link>
+        </div>
+      </section>
+
       {/* 步骤 ① · plugin schema */}
       <CozePluginSchemaCard tokenUsageUrl={tokenUsageUrl} />
 
