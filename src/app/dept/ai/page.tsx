@@ -38,6 +38,10 @@ import { getCompanyDailyBudgetHkd } from '@/lib/pricing';
 import { HistoricalSection } from '@/components/ai-dashboard/HistoricalSection';
 import { UnpauseButton } from '@/components/ai-dashboard/UnpauseButton';
 import { AiActivityFeed, type ActivityRow } from '@/components/ai-dashboard/AiActivityFeed';
+import {
+  ReportPathHealthCard,
+  type AiHealthRow,
+} from '@/components/ai-dashboard/ReportPathHealthCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,6 +91,7 @@ export default async function DeptAiPage({
     employeeStats,
     recentEmployees,
     todayActivities,
+    healthRowsRaw,
   ] = await Promise.all([
     spendByRange(todayStart, todayEnd),
     callCountByRange(todayStart, todayEnd),
@@ -140,7 +145,33 @@ export default async function DeptAiPage({
         },
       },
     }),
+    // 上报路径健康检查 — 拿所有 active AI 的 lastActiveAt vs apiKey.lastUsedAt
+    // 对比，找出 plugin 装坏 / 没装的（卡片在前端 diagnose() 计算各档）
+    prisma.aiEmployee.findMany({
+      where: { active: true },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        deptSlug: true,
+        paused: true,
+        lastActiveAt: true,
+        apiKey: { select: { lastUsedAt: true } },
+      },
+    }),
   ]);
+
+  const healthRows: AiHealthRow[] = healthRowsRaw.map((e) => ({
+    id: e.id,
+    name: e.name,
+    role: e.role,
+    deptSlug: e.deptSlug,
+    paused: e.paused,
+    lastActiveAt: e.lastActiveAt?.toISOString() ?? null,
+    lastUsedAt: e.apiKey?.lastUsedAt?.toISOString() ?? null,
+    hasApiKey: !!e.apiKey,
+  }));
 
   // 序列化为 client-friendly ActivityRow（Date → ISO 字符串）
   const activityRows: ActivityRow[] = todayActivities.map((a) => ({
@@ -203,6 +234,11 @@ export default async function DeptAiPage({
         yesterdaySpend={yesterdaySpend}
         dodPct={dodPct}
       />
+
+      {/* 1.5 上报路径健康检查 — 比 lastUsedAt vs lastActiveAt 找 plugin 挂了的 AI。
+          全部健康 → 一行绿色 OK；有问题 → 红字列名字。占位优先于 paused list 因为
+          plugin 挂了的话整张看板的 token 数据都不准，得先修这个 */}
+      <ReportPathHealthCard rows={healthRows} />
 
       {/* 2. 暂停员工 + 解锁审批 */}
       {pausedEmployees.length > 0 && (
