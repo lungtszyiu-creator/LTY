@@ -25,3 +25,4 @@ prisma/dev.db-journal
 .idea
 .claude
 tsconfig.tsbuildinfo
+.vercel
