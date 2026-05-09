@@ -619,8 +619,9 @@ function CreateDialog({
           name: name.trim(),
           role: role.trim(),
           deptSlug: deptSlug || null,
-          layer,
-          dailyLimitHkd,
+          // 见 EditDialog.submit 注释：number input 在某些路径会回传字符串
+          layer: Number(layer),
+          dailyLimitHkd: Number(dailyLimitHkd),
           generateApiKey: generateKey,
           apiKeyScope: generateKey ? apiKeyScope : undefined,
           apiKeyName: generateKey ? `${name.trim()} - 默认` : undefined,
@@ -768,8 +769,10 @@ function EditDialog({
   const [name, setName] = useState(row.name);
   const [role, setRole] = useState(row.role);
   const [deptSlug, setDeptSlug] = useState(row.deptSlug ?? '');
-  const [layer, setLayer] = useState(row.layer);
-  const [dailyLimitHkd, setDailyLimitHkd] = useState(row.dailyLimitHkd);
+  // /api/employees GET 把 Decimal 序列化成字符串塞回来，强制 Number()
+  // 防止 state 里挂着 "100" 字符串
+  const [layer, setLayer] = useState(Number(row.layer));
+  const [dailyLimitHkd, setDailyLimitHkd] = useState(Number(row.dailyLimitHkd));
   const [webhookUrl, setWebhookUrl] = useState(row.webhookUrl ?? '');
   const [isSupervisor, setIsSupervisor] = useState(row.isSupervisor);
   const [reportsToId, setReportsToId] = useState(row.reportsToId ?? '');
@@ -823,8 +826,11 @@ function EditDialog({
           name: name.trim(),
           role: role.trim(),
           deptSlug: deptSlug || null,
-          layer,
-          dailyLimitHkd,
+          // ⚠️ /api/employees GET 序列化 Decimal 成字符串，refresh() 后这两个
+          // 字段在 state 里可能是 "100" / "3" 形态。Number() 兜底一次保证
+          // 永远以数字发出去（防 zod "Expected number, received string"）。
+          layer: Number(layer),
+          dailyLimitHkd: Number(dailyLimitHkd),
           webhookUrl: webhookUrl.trim() || null,
           isSupervisor,
           reportsToId: reportsToId || null,
