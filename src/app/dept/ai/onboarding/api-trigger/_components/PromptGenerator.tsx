@@ -286,7 +286,7 @@ function buildPrompt(employee: Employee | undefined, kind: TriggerKind, dashboar
 # LTY 项目背景（事实，不要问我）
 - Coze workspace 名: LTY Group
 - 看板 base URL: ${dashboardUrl}
-- 看板 token 监控接入页: ${dashboardUrl}/admin/ai-onboarding
+- 看板 token 监控接入页: ${dashboardUrl}/dept/ai/onboarding
 - 看板 workspace 共享 plugin: LTY_Token_Report (老板昨晚已 Publish)
 - 看板 endpoint: POST /api/v1/token-usage (header X-Api-Key, body 含 model + inputChars + outputChars)
 
@@ -333,7 +333,7 @@ function buildSopMessage(employee: Employee | undefined, dashboardUrl: string): 
   if (!employee) return '';
   return `Hi，按这 6 步把你部门 AI（${employee.name}）接进 token 监控:
 1. 看板 ${dashboardUrl}/employees → 找「${employee.name}」→ 编辑 → 🔄 重新生成 Key（如果你没保存明文）→ 复制保存
-2. 看板 ${dashboardUrl}/admin/ai-onboarding/api-trigger → 选你的员工 + 触发方式 → 复制 ③ 那段 prompt
+2. 看板 ${dashboardUrl}/dept/ai/onboarding/api-trigger → 选你的员工 + 触发方式 → 复制 ③ 那段 prompt
 3. 把 prompt 粘贴给 Claude/ChatGPT，AI 会一步步教你部署触发器代码
 4. 在 Coze workspace 的工作流大模型节点输出后加 LTY_Token_Report.reportTokenUsage plugin 节点，X-Api-Key 用你保存的明文 key
 5. publish 工作流 + Test run 一次
