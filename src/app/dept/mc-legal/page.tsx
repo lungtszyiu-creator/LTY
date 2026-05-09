@@ -11,15 +11,17 @@ import { LEGAL_DEPT_META, type LegalRequestRow } from '@/lib/legal-shared';
 import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { VaultBrowser } from './_components/VaultBrowser';
 
 export const dynamic = 'force-dynamic';
 
 const META = LEGAL_DEPT_META.mc;
 
-type TabKey = 'requests' | 'services' | 'ai' | 'notifications';
+type TabKey = 'requests' | 'vault' | 'services' | 'ai' | 'notifications';
 
-const TABS: { key: TabKey; label: string; ready: boolean }[] = [
+const TABS: { key: TabKey; label: string; ready: boolean; superAdminOnly?: boolean }[] = [
   { key: 'requests', label: '需求', ready: true },
+  { key: 'vault', label: '📁 vault 文档', ready: true, superAdminOnly: true },
   { key: 'services', label: '服务目录', ready: false },
   { key: 'ai', label: 'AI 问答', ready: false },
   { key: 'notifications', label: '通知', ready: false },
@@ -104,11 +106,17 @@ export default async function McLegalPage({
         <KpiCard label="紧急" value={urgentCount} accent={urgentCount > 0 ? 'rose' : 'sky'} />
       </section>
 
-      <TabBar current={tab} basePath={`/dept/${META.slug}`} />
+      <TabBar current={tab} basePath={`/dept/${META.slug}`} isSuperAdmin={ctx.isSuperAdmin} />
 
       <div className="mt-5">
         {tab === 'requests' && <LegalRequestList requests={rows} deptSlug={META.slug} canEdit={canEdit} />}
-        {tab !== 'requests' && <StubTab tabKey={tab} />}
+        {tab === 'vault' && ctx.isSuperAdmin && <VaultBrowser />}
+        {tab === 'vault' && !ctx.isSuperAdmin && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/40 px-6 py-12 text-center text-sm text-rose-700">
+            🔒 vault 文档仅老板可见
+          </div>
+        )}
+        {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
       </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
@@ -124,13 +132,21 @@ export default async function McLegalPage({
   );
 }
 
-function TabBar({ current, basePath }: { current: TabKey; basePath: string }) {
+function TabBar({
+  current,
+  basePath,
+  isSuperAdmin,
+}: {
+  current: TabKey;
+  basePath: string;
+  isSuperAdmin: boolean;
+}) {
   return (
     <nav
       role="tablist"
       className="-mx-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-4 sm:mx-0 sm:rounded-xl sm:border sm:bg-white sm:px-1.5 sm:py-1"
     >
-      {TABS.map((t) => {
+      {TABS.filter((t) => !t.superAdminOnly || isSuperAdmin).map((t) => {
         const active = current === t.key;
         const href = t.key === 'requests' ? basePath : `${basePath}?tab=${t.key}`;
         return (
@@ -162,6 +178,7 @@ function TabBar({ current, basePath }: { current: TabKey; basePath: string }) {
 function StubTab({ tabKey }: { tabKey: TabKey }) {
   const map: Record<TabKey, string> = {
     requests: '',
+    vault: '',
     services: 'MC Markets 法务服务目录 — v1.1 上线',
     ai: 'AI 法务助手对话窗口 — v1.1 上线（独立 MC Coze workspace）',
     notifications: '法务通知流 — v1.1 上线',
