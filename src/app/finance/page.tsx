@@ -20,12 +20,13 @@ import { VaultIngestButton } from './vault-ingest-button';
 import { VoucherDeleteButton } from './voucher-delete-button';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { VaultBrowser } from '@/components/vault/VaultBrowser';
 import { AddWalletBankBar } from './_components/AddWalletBankBar';
 import { shortenEthAddressesIn } from '@/lib/finance-format';
 
 export const dynamic = 'force-dynamic';
 
-type TabKey = 'overview' | 'snapshots' | 'activity';
+type TabKey = 'overview' | 'snapshots' | 'activity' | 'vault';
 
 export default async function FinancePage({
   searchParams,
@@ -37,7 +38,9 @@ export default async function FinancePage({
   const access = await requireFinanceView();
   const sp = await searchParams;
   const tab: TabKey =
-    sp.tab === 'snapshots' ? 'snapshots' : sp.tab === 'activity' ? 'activity' : 'overview';
+    sp.tab === 'snapshots' ? 'snapshots' :
+    sp.tab === 'activity' ? 'activity' :
+    sp.tab === 'vault' ? 'vault' : 'overview';
 
   // 并行抓数据（不管哪个 tab 都跑完，admin 页面流量低，简化优先）
   const [
@@ -205,6 +208,13 @@ export default async function FinancePage({
           />
         )}
         {tab === 'activity' && <ActivityTab recentActivity={recentActivity} />}
+        {tab === 'vault' && (
+          <VaultBrowser
+            apiPath="/api/dept/vault-tree"
+            initialPath="raw/财务部"
+            repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E8%B4%A2%E5%8A%A1%E9%83%A8"
+          />
+        )}
       </div>
 
       {/* 财务部 AI 员工 API Key（仅 SUPER_ADMIN）—— FINANCE_* 是跨部门 scope，
@@ -256,6 +266,7 @@ function TabBar({ current, pendingCount }: { current: TabKey; pendingCount: numb
     { key: 'overview', label: '概览', badge: pendingCount },
     { key: 'snapshots', label: '余额快照' },
     { key: 'activity', label: 'AI 活动' },
+    { key: 'vault', label: '📁 vault 文档' },
   ];
   return (
     <nav

@@ -13,15 +13,17 @@ import { LEGAL_DEPT_META, type LegalRequestRow } from '@/lib/legal-shared';
 import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
+import { VaultBrowser } from '@/components/vault/VaultBrowser';
 
 export const dynamic = 'force-dynamic';
 
 const META = LEGAL_DEPT_META.lty;
 
-type TabKey = 'requests' | 'services' | 'ai' | 'notifications';
+type TabKey = 'requests' | 'vault' | 'services' | 'ai' | 'notifications';
 
 const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'requests', label: '需求', ready: true },
+  { key: 'vault', label: '📁 vault 文档', ready: true },
   { key: 'services', label: '服务目录', ready: false },
   { key: 'ai', label: 'AI 问答', ready: false },
   { key: 'notifications', label: '通知', ready: false },
@@ -102,7 +104,14 @@ export default async function LtyLegalPage({
 
       <div className="mt-5">
         {tab === 'requests' && <LegalRequestList requests={rows} deptSlug={META.slug} canEdit={canEdit} />}
-        {tab !== 'requests' && <StubTab tabKey={tab} />}
+        {tab === 'vault' && (
+          <VaultBrowser
+            apiPath="/api/dept/vault-tree"
+            initialPath="raw/法务部"
+            repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E6%B3%95%E5%8A%A1%E9%83%A8"
+          />
+        )}
+        {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
       </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
@@ -156,6 +165,7 @@ function TabBar({ current, basePath }: { current: TabKey; basePath: string }) {
 function StubTab({ tabKey }: { tabKey: TabKey }) {
   const map: Record<TabKey, string> = {
     requests: '',
+    vault: '',
     services: '常见法务服务目录（合同模板 / 知产申请 / 合规检查 / 争议处理）— v1.1 上线',
     ai: 'AI 法务助手对话窗口 — v1.1 上线（接 Coze plugin）',
     notifications: '法务通知流（@assignee / 状态变更 / 截止日提醒）— v1.1 上线',
