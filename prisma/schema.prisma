@@ -1148,6 +1148,11 @@ model PendingUpload {
   // 上传人手填的"这是什么文件 / 给知识管家的提示" —— 老板和知识库管家
   // 都看得到，方便后续整理（老板要求）。
   description  String?
+  // 目标 vault：决定 BlobSync 同步到哪个本地仓库 + push 到哪个 GitHub repo
+  //   "lty-vault"        = LTY 旭珑业务（默认 · 所有 active 员工可传）
+  //   "mc-legal-vault"   = MC 法务部隔离仓库（仅 SUPER_ADMIN）
+  // 严禁混存：宪法红线，MC 客户机密数据物理隔离。
+  targetVault  String    @default("lty-vault")
   status       String    @default("pending") // "pending" | "downloaded" | "failed"
   downloadedAt DateTime?
   vaultPath    String? // 落到 vault 的相对路径，downloaded 时填
@@ -1156,6 +1161,7 @@ model PendingUpload {
   updatedAt    DateTime  @updatedAt
 
   @@index([status, createdAt])
+  @@index([targetVault, status])
 }
 
 // =====================================================

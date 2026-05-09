@@ -96,7 +96,11 @@ export default async function KnowledgePage() {
       <RoleStrip dashboard={dashboard} />
 
       {/* 上传文件入口（手机随时扔，Mac worker 拉走） */}
-      <UploadSection recentUploads={recentUploads} canSummonCurator={ctx.canSummonCurator} />
+      <UploadSection
+        recentUploads={recentUploads}
+        canSummonCurator={ctx.canSummonCurator}
+        isSuperAdmin={ctx.isSuperAdmin}
+      />
 
       {/* 待审待办 */}
       <PendingSection inboxQueue={inboxQueue} />
@@ -191,9 +195,11 @@ function RoleStrip({ dashboard }: { dashboard: DashboardJson | null }) {
 function UploadSection({
   recentUploads,
   canSummonCurator,
+  isSuperAdmin,
 }: {
   recentUploads: RecentUpload[];
   canSummonCurator: boolean;
+  isSuperAdmin: boolean;
 }) {
   return (
     <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -204,7 +210,7 @@ function UploadSection({
             手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
             drudge 09:50 自动归档，或老板召唤管家立刻处理。
           </p>
-          <UploadButton />
+          <UploadButton isSuperAdmin={isSuperAdmin} />
         </div>
 
         {canSummonCurator ? (

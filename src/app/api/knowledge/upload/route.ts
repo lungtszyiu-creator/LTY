@@ -52,6 +52,18 @@ export async function POST(request: Request): Promise<NextResponse> {
             ? meta.description.trim().slice(0, 1000)
             : null;
 
+        // targetVault：决定文件最终落到哪个 vault repo
+        // - lty-vault（默认）：所有 active 员工可传 LTY 业务文件
+        // - mc-legal-vault：MC 法务部独立仓库，**仅 SUPER_ADMIN** 可传
+        // 这是宪法红线 — MC 客户数据严禁混存到 lty-vault repo
+        let targetVault = 'lty-vault';
+        if (meta.targetVault === 'mc-legal-vault') {
+          if (dbUser.role !== 'SUPER_ADMIN') {
+            throw new Error('FORBIDDEN: 仅 SUPER_ADMIN 可上传到 mc-legal-vault');
+          }
+          targetVault = 'mc-legal-vault';
+        }
+
         return {
           // allowedContentTypes 故意不设 = 任意类型放行
           // （之前误填 '*/*' 触发 Vercel SDK literal 字符串匹配，zip 被拒）
@@ -60,6 +72,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             uploaderId: dbUser.id,
             originalFilename: meta.originalFilename ?? 'unknown',
             description,
+            targetVault,
           }),
         };
       },
@@ -77,6 +90,7 @@ export async function POST(request: Request): Promise<NextResponse> {
               sizeBytes: 0, // blob.size 可能没填；Mac 端 download 时实际 size 会更准
               uploaderId: meta.uploaderId ?? '',
               description: meta.description ?? null,
+              targetVault: meta.targetVault === 'mc-legal-vault' ? 'mc-legal-vault' : 'lty-vault',
               status: 'pending',
             },
           });

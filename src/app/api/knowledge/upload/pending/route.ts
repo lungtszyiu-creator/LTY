@@ -33,6 +33,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       // 老板手填的说明，Mac 端 BlobSync 写到 raw/_inbox/from_dashboard/<日期>/.notes.json
       // 让仓库员/管家归档时能读到（"这是 Q1 财务月报"等提示）
       description: true,
+      // 目标 vault：Mac 端 BlobSync 按此路由到 lty-vault 或 mc-legal-vault 本地路径
+      targetVault: true,
       createdAt: true,
     },
   });
