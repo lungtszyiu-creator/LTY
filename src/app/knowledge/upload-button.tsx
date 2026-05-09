@@ -47,11 +47,13 @@ const MAX_BYTES = 200 * 1024 * 1024;
 const FOLDER_MAX_FILES = 500;
 const FOLDER_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB 总量
 
-export default function UploadButton() {
+export default function UploadButton({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [description, setDescription] = useState('');
+  // 目标 vault：仅 SUPER_ADMIN 看到 mc-legal-vault 选项；非老板永远 lty-vault
+  const [targetVault, setTargetVault] = useState<'lty-vault' | 'mc-legal-vault'>('lty-vault');
   const router = useRouter();
 
   function pickFile(file: File) {
@@ -132,6 +134,7 @@ export default function UploadButton() {
         clientPayload: JSON.stringify({
           originalFilename: file.name,
           description: trimmedDesc || undefined,
+          targetVault: targetVault === 'mc-legal-vault' ? 'mc-legal-vault' : undefined,
         }),
         onUploadProgress: ({ percentage }) => {
           setState({ kind: 'uploading', filename: file.name, progressPct: Math.round(percentage) });
@@ -184,6 +187,7 @@ export default function UploadButton() {
             // ✅ 这里给完整相对路径，Mac sync 端拿这个重建子目录
             originalFilename: relPath,
             description: trimmedDesc || undefined,
+            targetVault: targetVault === 'mc-legal-vault' ? 'mc-legal-vault' : undefined,
           }),
           onUploadProgress: ({ percentage }) => {
             setState((prev) => {
@@ -273,6 +277,11 @@ export default function UploadButton() {
               {(state.file.size / 1024 / 1024).toFixed(1)} MB
             </span>
           </div>
+          <VaultSelector
+            isSuperAdmin={isSuperAdmin}
+            targetVault={targetVault}
+            setTargetVault={setTargetVault}
+          />
           <DescriptionField description={description} setDescription={setDescription} />
           <div className="mt-2 flex gap-2">
             <button
@@ -314,6 +323,11 @@ export default function UploadButton() {
               <li className="text-slate-400">… 共 {state.files.length} 个</li>
             )}
           </ul>
+          <VaultSelector
+            isSuperAdmin={isSuperAdmin}
+            targetVault={targetVault}
+            setTargetVault={setTargetVault}
+          />
           <DescriptionField
             description={description}
             setDescription={setDescription}
@@ -429,6 +443,60 @@ export default function UploadButton() {
         ≤ 200 MB / 文件 · 文件夹 ≤ 500 个 / 2 GB · 落{' '}
         <code className="rounded bg-slate-100 px-1">~/LTY旭珑/raw/_inbox/from_dashboard/</code>
       </p>
+    </div>
+  );
+}
+
+/**
+ * 目标 vault 选择器（仅 SUPER_ADMIN 可见）
+ *
+ * 默认 lty-vault；SUPER_ADMIN 可切换 mc-legal-vault 上传到隔离仓库。
+ * 非老板角色不显示这个 UI（始终 lty-vault），避免误传 MC 客户机密数据。
+ */
+function VaultSelector({
+  isSuperAdmin,
+  targetVault,
+  setTargetVault,
+}: {
+  isSuperAdmin: boolean;
+  targetVault: 'lty-vault' | 'mc-legal-vault';
+  setTargetVault: (v: 'lty-vault' | 'mc-legal-vault') => void;
+}) {
+  if (!isSuperAdmin) return null;
+  return (
+    <div className="mb-2 rounded-lg border border-amber-200/60 bg-amber-50/60 px-2.5 py-1.5">
+      <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-amber-700">
+        目标 vault（仅老板可选）
+      </div>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => setTargetVault('lty-vault')}
+          className={`flex-1 rounded px-2 py-1 text-xs font-medium transition ${
+            targetVault === 'lty-vault'
+              ? 'bg-violet-600 text-white'
+              : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          🏢 LTY 业务
+        </button>
+        <button
+          type="button"
+          onClick={() => setTargetVault('mc-legal-vault')}
+          className={`flex-1 rounded px-2 py-1 text-xs font-medium transition ${
+            targetVault === 'mc-legal-vault'
+              ? 'bg-rose-600 text-white'
+              : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          🔒 MC 法务
+        </button>
+      </div>
+      {targetVault === 'mc-legal-vault' && (
+        <div className="mt-1 text-[10px] text-rose-700">
+          ⚠️ 上传到 MC 法务隔离仓库（mc-legal-vault repo），不进 LTY vault
+        </div>
+      )}
     </div>
   );
 }
