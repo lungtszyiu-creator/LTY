@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const data = createSchema.parse(await req.json());
 
-  const wallet = await prisma.cryptoWallet.create({ data });
+  // ETH 地址 EIP-55 是 mixed case，但底层是同一地址 — 统一存小写防 dedup 重复
+  const normalized = { ...data, address: data.address.toLowerCase() };
+  const wallet = await prisma.cryptoWallet.create({ data: normalized });
   return NextResponse.json(wallet, { status: 201 });
 }
