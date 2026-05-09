@@ -155,17 +155,25 @@ export default async function HrEmployeesPage({
               );
             })}
           </ul>
-          {/* Desktop：表格 */}
+          {/* Desktop：table-fixed + colgroup 防长「姓名 / 邮箱」/ 长「部门 + 职位」推右列 */}
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[18%]" />{/* 姓名 */}
+                <col />{/* 部门 + 职位 — 撑剩余 */}
+                <col className="w-[140px]" />{/* 类型 / 地点 */}
+                <col className="w-[110px]" />{/* 入职 */}
+                <col className="w-[120px]" />{/* 试用 / 证件 */}
+                <col className="w-[80px]" />{/* 状态 */}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">姓名</th>
-                  <th className="px-4 py-2 text-left">部门 / 职位</th>
-                  <th className="px-4 py-2 text-left">类型 / 地点</th>
-                  <th className="px-4 py-2 text-left">入职日期</th>
-                  <th className="px-4 py-2 text-left">试用期/合同/证件</th>
-                  <th className="px-4 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">姓名</th>
+                  <th className="px-3 py-2 text-left">部门 / 职位</th>
+                  <th className="px-3 py-2 text-left">类型 / 地点</th>
+                  <th className="px-3 py-2 text-left">入职日期</th>
+                  <th className="px-3 py-2 text-left">试用期/合同/证件</th>
+                  <th className="px-3 py-2 text-left">状态</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,22 +183,32 @@ export default async function HrEmployeesPage({
                   const idDays = daysLeft(e.idExpireAt);
                   return (
                     <tr key={e.id} className="border-t border-slate-100 hover:bg-rose-50/40">
-                      <td className="px-4 py-2 text-slate-800">
-                        <Link href={`/dept/hr/employees/${e.id}`} className="block font-medium">
+                      <td className="px-3 py-2 align-top text-slate-800">
+                        <Link
+                          href={`/dept/hr/employees/${e.id}`}
+                          className="block truncate font-medium"
+                          title={e.user.name ?? e.user.email ?? undefined}
+                        >
                           {e.user.name ?? e.user.email}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-xs text-slate-600">
-                        {e.department ?? '—'}
-                        {e.positionTitle && <div className="text-[11px] text-slate-400">{e.positionTitle}</div>}
+                      <td className="px-3 py-2 align-top text-xs text-slate-600">
+                        <div className="truncate" title={e.department ?? undefined}>
+                          {e.department ?? '—'}
+                        </div>
+                        {e.positionTitle && (
+                          <div className="truncate text-[11px] text-slate-400" title={e.positionTitle}>
+                            {e.positionTitle}
+                          </div>
+                        )}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600">
+                      <td className="px-3 py-2 align-top truncate whitespace-nowrap text-xs text-slate-600">
                         {EMP_TYPE_LABEL[e.employmentType] ?? e.employmentType} · {e.workLocation === 'REMOTE' ? '远程' : '坐班'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600 tabular-nums">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600 tabular-nums">
                         {e.hireDate ? e.hireDate.toISOString().slice(0, 10) : '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-[11px] text-slate-500">
+                      <td className="px-3 py-2 align-top whitespace-nowrap text-[11px] text-slate-500">
                         {probDays !== null && probDays >= 0 && probDays <= 30 && (
                           <div className="text-amber-700">试用 {probDays}d</div>
                         )}
@@ -199,8 +217,8 @@ export default async function HrEmployeesPage({
                         )}
                         {!(probDays !== null && probDays <= 30) && !(idDays !== null && idDays <= 60) && '—'}
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
+                      <td className="px-3 py-2 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
                           {sm.label}
                         </span>
                       </td>

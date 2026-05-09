@@ -141,41 +141,53 @@ export default async function FxRatesPage() {
                 );
               })}
             </ul>
-            {/* Desktop：表格 */}
+            {/* Desktop：table-fixed + 长「来源说明」truncate 防把右栏推出去 */}
             <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[110px]" />{/* 日期 */}
+                  <col className="w-[110px]" />{/* 币对 */}
+                  <col className="w-[100px]" />{/* 来源 */}
+                  <col className="w-[140px]" />{/* 汇率 */}
+                  <col className="w-[80px]" />{/* 官方 */}
+                  <col />{/* 来源说明 — 撑剩余 */}
+                </colgroup>
                 <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="px-4 py-2 text-left">日期</th>
-                    <th className="px-4 py-2 text-left">币对</th>
-                    <th className="px-4 py-2 text-left">来源</th>
-                    <th className="px-4 py-2 text-right">汇率</th>
-                    <th className="px-4 py-2 text-left">官方</th>
-                    <th className="px-4 py-2 text-left">来源说明</th>
+                    <th className="px-3 py-2 text-left">日期</th>
+                    <th className="px-3 py-2 text-left">币对</th>
+                    <th className="px-3 py-2 text-left">来源</th>
+                    <th className="px-3 py-2 text-right">汇率</th>
+                    <th className="px-3 py-2 text-left">官方</th>
+                    <th className="px-3 py-2 text-left">来源说明</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentRows.map((r) => {
                     const sm = SOURCE_META[r.source] ?? { label: r.source, cls: 'bg-slate-50 text-slate-600 ring-slate-200' };
+                    const noteText = r.createdByAi ? `🤖 ${r.createdByAi}` : r.notes ?? '—';
                     return (
                       <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/40">
-                        <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-600 tabular-nums">
+                        <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-slate-600 tabular-nums">
                           {r.date.toISOString().slice(0, 10)}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap font-medium text-slate-800">{r.pair}</td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
+                        <td className="px-3 py-2 align-top truncate font-medium text-slate-800">{r.pair}</td>
+                        <td className="px-3 py-2 align-top whitespace-nowrap">
+                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${sm.cls}`}>
                             {sm.label}
                           </span>
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-right font-mono tabular-nums text-slate-900">
+                        <td className="px-3 py-2 align-top whitespace-nowrap text-right font-mono tabular-nums text-slate-900">
                           {Number(r.rate).toFixed(6)}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-xs">
+                        <td className="px-3 py-2 align-top whitespace-nowrap text-xs">
                           {r.isOfficial ? <span className="text-emerald-700">✓</span> : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-xs text-slate-500">
-                          {r.createdByAi ? `🤖 ${r.createdByAi}` : r.notes ?? '—'}
+                        <td
+                          className="truncate px-3 py-2 align-top text-xs text-slate-500"
+                          title={noteText}
+                        >
+                          {noteText}
                         </td>
                       </tr>
                     );
