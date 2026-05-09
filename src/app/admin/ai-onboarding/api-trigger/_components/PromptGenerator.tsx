@@ -26,6 +26,30 @@ type DeptOption = { slug: string; name: string };
 
 type TriggerKind = 'tg-bot' | 'dashboard-button' | 'vercel-cron' | 'webhook';
 
+/** Bot/Agent → Workflow 迁移 prompt — 同事自己 AI 不熟时复制粘贴给 Claude/ChatGPT */
+const MIGRATION_PROMPT = `我在 LTY 旭珑公司 Coze workspace (LTY Group) 有一个 Bot/Agent 类型的 AI 员工，要改成 Workflow 类型让我能用 API 触发省 Credit。**详细到一行行点击操作**。
+
+# 我的 Bot/Agent 信息
+- 名字：___FILL_ME___ (例：人事考勤助手 / 沟通管家 / 等)
+- 主要功能：___FILL_ME___ (一句话描述这个 AI 干啥)
+- 当前 System Prompt / Persona：___FILL_ME___ (从 Coze 后台 Bot 编辑页复制)
+- 调用了哪些 plugin / 知识库：___FILL_ME___ (列出来，例：LTY_Telegram、LTY_Dashboard_HR、my_knowledge_base 等)
+
+# Coze workspace 名: LTY Group
+
+# 帮我做这 5 件事
+1. 在 Coze workspace 怎么新建 Workflow（不是 Bot / Agent）— 给我点击路径
+2. 在新 Workflow 怎么加 3 个最基本节点：Start → 大模型节点 → End
+3. 怎么把 Bot/Agent 的 System Prompt 迁到大模型节点的 Prompt 框
+4. 怎么挂上原 Agent 的 plugin / 知识库到大模型节点 Skills 列表
+5. publish 后怎么从 URL 拿 workflow_id
+
+# 不用问我
+- Coze 平台基础知识 (你直接给操作步骤)
+- 我会自己复制 Prompt 字段值
+
+详细到「点哪个按钮 → 看到什么 → 再点哪个」。完事我接着用看板的 prompt 生成器接 API 触发。`;
+
 const TRIGGER_LABELS: Record<TriggerKind, { title: string; tag: string; hint: string }> = {
   'tg-bot': {
     title: 'A · Telegram bot @ 触发',
@@ -86,6 +110,59 @@ export function PromptGenerator({
 
   return (
     <div className="space-y-5">
+      {/* Agent → Workflow 迁移指南（同事多数还是 Agent 类型，先迁完再用下面生成器） */}
+      <section className="rounded-xl border border-amber-300 bg-amber-100/40 p-4">
+        <details open>
+          <summary className="cursor-pointer text-sm font-semibold text-amber-900">
+            ⚠️ 还没 Workflow（你的 AI 是 Agent / Bot 类型）？先看这段 5 分钟迁移指南
+          </summary>
+          <div className="mt-3 space-y-3 text-[12px] text-slate-700">
+            <p>
+              Coze 有两种 AI 类型：<strong>Bot/Agent</strong>（聊天机器人，多轮对话）vs{' '}
+              <strong>Workflow</strong>（流程图节点编排）。<strong>外部 API 触发只支持 Workflow</strong>。
+              如果你的 AI 是 Bot/Agent（LTY Group 大部分都是），先按下面 5 步改成 Workflow，再用下方生成器。
+            </p>
+            <ol className="list-decimal space-y-1.5 pl-5">
+              <li>
+                Coze workspace → Library → 顶部 tab 切「<strong>Workflow</strong>」→ 点
+                「+ Resource」→ 选「Workflow」新建（<strong>不是 Bot 也不是 Agent</strong>）
+              </li>
+              <li>
+                进原 Agent / Bot 编辑页 → 复制 <strong>Persona / System Prompt</strong>（角色设定那段长文本）
+              </li>
+              <li>
+                新 Workflow 画布加 3 个最基本节点：<strong>Start</strong>（input 字段如 user_message） →
+                <strong>大模型节点</strong>（Prompt 框粘贴上一步复制的 System Prompt + 选模型 GPT-4o / Gemini / Claude） →
+                <strong>End</strong>（output 接大模型节点 output）
+              </li>
+              <li>
+                原 Agent 的 <strong>Skills</strong>（plugin / 知识库 / 变量 / 长期记忆）→ 在新大模型节点右侧
+                panel 的「Skill」段一一加回（plugin 选已发布的，比如 LTY_Token_Report 跟你部门的业务 plugin）
+              </li>
+              <li>
+                顶部右上 <strong>Publish</strong> → 发布后编辑器 URL 末段那串数字就是
+                <code className="ml-1 rounded bg-white px-1 font-mono">workflow_id</code>，记下来填到下面 ③ prompt
+                的 ___FILL_ME___ 里
+              </li>
+            </ol>
+            <div className="mt-3 rounded-lg border border-amber-300 bg-white p-3">
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <span className="text-[11px] font-medium text-amber-900">
+                  不熟操作？复制下面这段 prompt → 粘贴给 Claude/ChatGPT，AI 一步步教你迁移：
+                </span>
+                <CopyBtn text={MIGRATION_PROMPT} />
+              </div>
+              <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-900 p-2 font-mono text-[10px] leading-relaxed text-slate-100">
+                {MIGRATION_PROMPT}
+              </pre>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              ✅ 已经有 Workflow → 把上面这段折叠起来，直接用下方生成器。
+            </p>
+          </div>
+        </details>
+      </section>
+
       {/* 选项区 */}
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
