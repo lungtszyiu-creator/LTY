@@ -40,6 +40,13 @@ export default async function VoucherDetailPage({
 
   if (!voucher) notFound();
 
+  // 拉 audit log 时间线（按创建时间倒序）
+  const auditLogs = await prisma.voucherAuditLog.findMany({
+    where: { voucherId: id },
+    orderBy: { createdAt: 'desc' },
+    include: { changedBy: { select: { name: true, email: true } } },
+  });
+
   const meta = STATUS_META[voucher.status] ?? {
     label: voucher.status,
     cls: 'bg-slate-100 text-slate-600 ring-slate-200',
@@ -128,53 +135,171 @@ export default async function VoucherDetailPage({
         )}
       </section>
 
-      {/* 老板操作区（VIEWER 看不到） */}
-      {access.level === 'EDITOR' && (
-        <>
-          {(voucher.status === 'AI_DRAFT' || voucher.status === 'BOSS_REVIEWING') && (
-            <section className="mb-4">
-              <EditVoucherCard
-                initial={{
-                  id: voucher.id,
-                  date: voucher.date.toISOString().slice(0, 10),
-                  summary: voucher.summary,
-                  debitAccount: voucher.debitAccount,
-                  creditAccount: voucher.creditAccount,
-                  amount: voucher.amount.toString(),
-                  currency: voucher.currency,
-                  notes: voucher.notes,
-                  relatedTxIdsArr: (() => {
-                    if (!voucher.relatedTxIds) return [];
-                    try {
-                      const parsed = JSON.parse(voucher.relatedTxIds);
-                      return Array.isArray(parsed) ? parsed.map(String) : [];
-                    } catch {
-                      return [];
-                    }
-                  })(),
-                }}
-              />
-            </section>
-          )}
-          <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600">
-              老板操作
-            </h2>
-            <VoucherActions
-              voucherId={voucher.id}
-              status={voucher.status as never}
-              isSuperAdmin={access.isSuperAdmin}
-            />
-          </section>
-        </>
+      {/* 修改字段区（EDITOR 和 VIEWER 都能用；AI_DRAFT / BOSS_REVIEWING 状态下显示）*/}
+      {(voucher.status === 'AI_DRAFT' || voucher.status === 'BOSS_REVIEWING') && (
+        <section className="mb-4">
+          <EditVoucherCard
+            initial={{
+              id: voucher.id,
+              date: voucher.date.toISOString().slice(0, 10),
+              summary: voucher.summary,
+              debitAccount: voucher.debitAccount,
+              creditAccount: voucher.creditAccount,
+              amount: voucher.amount.toString(),
+              currency: voucher.currency,
+              notes: voucher.notes,
+              relatedTxIdsArr: (() => {
+                if (!voucher.relatedTxIds) return [];
+                try {
+                  const parsed = JSON.parse(voucher.relatedTxIds);
+                  return Array.isArray(parsed) ? parsed.map(String) : [];
+                } catch {
+                  return [];
+                }
+              })(),
+            }}
+            viewerHint={access.level === 'VIEWER'}
+          />
+        </section>
       )}
+
+      {/* 老板操作区（仅 EDITOR）—— 批准 / 驳回 / 作废 */}
+      {access.level === 'EDITOR' && (
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600">
+            老板操作
+          </h2>
+          <VoucherActions
+            voucherId={voucher.id}
+            status={voucher.status as never}
+            isSuperAdmin={access.isSuperAdmin}
+          />
+        </section>
+      )}
+
       {access.level === 'VIEWER' && (
-        <div className="rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
-          👁 你是只读账号，无法审批。
+        <div className="mb-6 rounded-xl border border-sky-200/60 bg-sky-50/40 p-4 text-xs text-sky-900">
+          出纳可改 AI 草稿凭证（每次留痕给老板审），但批准/驳回/作废只能老板做。
         </div>
       )}
+
+      {/* 操作时间线 */}
+      <AuditTimeline
+        logs={auditLogs.map((l) => ({
+          id: l.id,
+          action: l.action,
+          who: l.changedBy?.name ?? l.changedBy?.email ?? (l.byAi ? `AI · ${l.byAi}` : '系统'),
+          when: l.createdAt,
+          reason: l.reason,
+          before: l.beforeJson,
+          after: l.afterJson,
+        }))}
+      />
     </div>
   );
+}
+
+function AuditTimeline({
+  logs,
+}: {
+  logs: Array<{
+    id: string;
+    action: string;
+    who: string;
+    when: Date;
+    reason: string | null;
+    before: string | null;
+    after: string | null;
+  }>;
+}) {
+  if (logs.length === 0) {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
+          操作时间线
+        </h2>
+        <div className="text-xs text-slate-400">本凭证尚无操作记录（schema 升级前的凭证不显示历史）</div>
+      </section>
+    );
+  }
+  const ACTION_META: Record<string, { label: string; cls: string }> = {
+    create: { label: '创建', cls: 'bg-amber-50 text-amber-700 ring-amber-200' },
+    edit: { label: '修改', cls: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    approve: { label: '批准', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+    reject: { label: '驳回', cls: 'bg-slate-100 text-slate-700 ring-slate-200' },
+    void: { label: '作废', cls: 'bg-rose-50 text-rose-700 ring-rose-200' },
+    delete: { label: '删除', cls: 'bg-rose-100 text-rose-800 ring-rose-300' },
+  };
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+        操作时间线（共 {logs.length} 条）
+      </h2>
+      <ul className="space-y-3">
+        {logs.map((l) => {
+          const meta = ACTION_META[l.action] ?? {
+            label: l.action,
+            cls: 'bg-slate-50 text-slate-600 ring-slate-200',
+          };
+          const beforeObj = l.before ? safeParseJson(l.before) : null;
+          const afterObj = l.after ? safeParseJson(l.after) : null;
+          return (
+            <li key={l.id} className="border-l-2 border-slate-200 pl-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${meta.cls}`}>
+                    {meta.label}
+                  </span>
+                  <span className="text-sm font-medium text-slate-800">{l.who}</span>
+                </div>
+                <time className="text-[11px] text-slate-400 tabular-nums">
+                  {l.when.toISOString().slice(0, 16).replace('T', ' ')}
+                </time>
+              </div>
+              {l.reason && (
+                <div className="mt-1 text-xs text-slate-600">
+                  <span className="text-slate-400">理由：</span>
+                  {l.reason}
+                </div>
+              )}
+              {beforeObj !== null && afterObj !== null ? (
+                <div className="mt-1.5 grid grid-cols-1 gap-1 rounded-lg bg-slate-50/60 p-2 text-[11px] sm:grid-cols-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">变更前</div>
+                    <pre className="mt-0.5 whitespace-pre-wrap break-all font-mono text-rose-700/80">
+                      {JSON.stringify(beforeObj, null, 0)}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">变更后</div>
+                    <pre className="mt-0.5 whitespace-pre-wrap break-all font-mono text-emerald-700/80">
+                      {JSON.stringify(afterObj, null, 0)}
+                    </pre>
+                  </div>
+                </div>
+              ) : null}
+              {beforeObj === null && afterObj !== null ? (
+                <div className="mt-1.5 rounded-lg bg-slate-50/60 p-2 text-[11px]">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400">初始值</div>
+                  <pre className="mt-0.5 whitespace-pre-wrap break-all font-mono text-slate-700">
+                    {JSON.stringify(afterObj, null, 0)}
+                  </pre>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function safeParseJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

@@ -38,7 +38,7 @@ type Initial = {
   relatedTxIdsArr: string[];
 };
 
-export function EditVoucherCard({ initial }: { initial: Initial }) {
+export function EditVoucherCard({ initial, viewerHint = false }: { initial: Initial; viewerHint?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -119,13 +119,20 @@ export function EditVoucherCard({ initial }: { initial: Initial }) {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-      >
-        ✏️ 修改字段
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          ✏️ 修改字段
+        </button>
+        {viewerHint && (
+          <span className="text-[11px] text-sky-700">
+            出纳修改会留痕给老板审
+          </span>
+        )}
+      </div>
     );
   }
 

@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { getSession } from '@/lib/auth';
+import { writeVoucherAudit, diffVoucherFields } from '@/lib/voucher-audit';
 
 export async function GET(
   req: NextRequest,
@@ -77,11 +78,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // 审批仅老板（EDITOR session 或 FINANCE_ADMIN scope）
-  const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN'], 'EDIT');
-  if (auth instanceof NextResponse) return auth;
-
-  const { id } = await params;
+  // 先 parse body 决定 action，再分别校验权限
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -93,17 +90,26 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  const data = parsed.data;
 
+  // 权限分级：
+  // - edit：VIEWER 即可（出纳改 AI_DRAFT 凭证）—— 但每改一次都写 audit log 给老板看
+  // - approve / reject / void：仅 EDITOR（老板）
+  const requiredLevel: 'VIEW' | 'EDIT' = data.action === 'edit' ? 'VIEW' : 'EDIT';
+  const auth = await requireAuthOrApiKey(req, ['FINANCE_ADMIN'], requiredLevel);
+  if (auth instanceof NextResponse) return auth;
+
+  const { id } = await params;
   const voucher = await prisma.voucher.findUnique({ where: { id } });
   if (!voucher) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
   }
 
   const userId = auth.kind === 'session' ? auth.userId : null;
-  const data = parsed.data;
+  const byAi = auth.kind === 'apikey' ? auth.ctx.scope.split(':')[1] ?? null : null;
   const now = new Date();
 
-  // 状态机校验
+  // ---- approve ----
   if (data.action === 'approve') {
     if (voucher.status !== 'AI_DRAFT' && voucher.status !== 'BOSS_REVIEWING') {
       return NextResponse.json(
@@ -114,16 +120,20 @@ export async function PATCH(
     const voucherNumber = await generateVoucherNumber(voucher.date);
     const updated = await prisma.voucher.update({
       where: { id },
-      data: {
-        status: 'POSTED',
-        voucherNumber,
-        postedAt: now,
-        postedById: userId,
-      },
+      data: { status: 'POSTED', voucherNumber, postedAt: now, postedById: userId },
+    });
+    await writeVoucherAudit({
+      voucherId: id,
+      action: 'approve',
+      before: { status: voucher.status, voucherNumber: voucher.voucherNumber },
+      after: { status: 'POSTED', voucherNumber },
+      changedById: userId,
+      byAi,
     });
     return NextResponse.json(updated);
   }
 
+  // ---- reject ----
   if (data.action === 'reject') {
     if (voucher.status !== 'AI_DRAFT' && voucher.status !== 'BOSS_REVIEWING') {
       return NextResponse.json(
@@ -140,11 +150,20 @@ export async function PATCH(
           : `[REJECTED at ${now.toISOString()}]: ${data.reason}`,
       },
     });
+    await writeVoucherAudit({
+      voucherId: id,
+      action: 'reject',
+      before: { status: voucher.status },
+      after: { status: 'REJECTED' },
+      changedById: userId,
+      byAi,
+      reason: data.reason,
+    });
     return NextResponse.json(updated);
   }
 
+  // ---- edit ----（VIEWER+ 都能做）
   if (data.action === 'edit') {
-    // 只允许编辑未过账状态：POSTED 必须先 VOID 留痕；REJECTED/VOIDED 是终态
     if (voucher.status !== 'AI_DRAFT' && voucher.status !== 'BOSS_REVIEWING') {
       return NextResponse.json(
         {
@@ -181,11 +200,33 @@ export async function PATCH(
         { status: 400 },
       );
     }
+
+    // 构造变更前快照（仅含本次实际改动字段）
+    const beforeSnap: Record<string, unknown> = {};
+    for (const key of Object.keys(updateData)) {
+      beforeSnap[key] = (voucher as unknown as Record<string, unknown>)[key];
+    }
     const updated = await prisma.voucher.update({ where: { id }, data: updateData });
+    const afterSnap: Record<string, unknown> = {};
+    for (const key of Object.keys(updateData)) {
+      afterSnap[key] = (updated as unknown as Record<string, unknown>)[key];
+    }
+
+    const diff = diffVoucherFields(beforeSnap, afterSnap);
+    if (diff) {
+      await writeVoucherAudit({
+        voucherId: id,
+        action: 'edit',
+        before: diff.before,
+        after: diff.after,
+        changedById: userId,
+        byAi,
+      });
+    }
     return NextResponse.json(updated);
   }
 
-  // void
+  // ---- void ----
   if (voucher.status !== 'POSTED') {
     return NextResponse.json(
       { error: 'INVALID_TRANSITION', from: voucher.status, to: 'VOIDED' },
@@ -200,6 +241,15 @@ export async function PATCH(
         ? `${voucher.notes}\n\n[VOIDED at ${now.toISOString()}]: ${data.reason}`
         : `[VOIDED at ${now.toISOString()}]: ${data.reason}`,
     },
+  });
+  await writeVoucherAudit({
+    voucherId: id,
+    action: 'void',
+    before: { status: 'POSTED' },
+    after: { status: 'VOIDED' },
+    changedById: userId,
+    byAi,
+    reason: data.reason,
   });
   return NextResponse.json(updated);
 }
