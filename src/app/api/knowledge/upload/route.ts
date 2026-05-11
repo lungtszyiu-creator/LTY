@@ -54,12 +54,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         // targetVault：决定文件最终落到哪个 vault repo
         // - lty-vault（默认）：所有 active 员工可传 LTY 业务文件
-        // - mc-legal-vault：MC 法务部独立仓库，**仅 SUPER_ADMIN** 可传
+        // - mc-legal-vault：MC 法务部独立仓库，仅 SUPER_ADMIN + 法务部（lty-legal / mc-legal）成员可传
         // 这是宪法红线 — MC 客户数据严禁混存到 lty-vault repo
+        // 2026-05-12 放宽：Maggie 等 LTY 法务部同事日常协作 MC 法务事务，需要可选 MC 路由
         let targetVault = 'lty-vault';
         if (meta.targetVault === 'mc-legal-vault') {
-          if (dbUser.role !== 'SUPER_ADMIN') {
-            throw new Error('FORBIDDEN: 仅 SUPER_ADMIN 可上传到 mc-legal-vault');
+          const { userCanRouteMcLegal } = await import('@/lib/knowledge-access');
+          const ok = await userCanRouteMcLegal(dbUser.id);
+          if (!ok) {
+            throw new Error('FORBIDDEN: 仅老板 + 法务部成员可上传到 mc-legal-vault');
           }
           targetVault = 'mc-legal-vault';
         }

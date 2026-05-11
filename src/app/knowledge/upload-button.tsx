@@ -47,13 +47,21 @@ const MAX_BYTES = 200 * 1024 * 1024;
 const FOLDER_MAX_FILES = 500;
 const FOLDER_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB 总量
 
-export default function UploadButton({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
+export default function UploadButton({
+  isSuperAdmin = false,
+  canRouteMcLegal = false,
+}: {
+  isSuperAdmin?: boolean;
+  canRouteMcLegal?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [description, setDescription] = useState('');
-  // 目标 vault：仅 SUPER_ADMIN 看到 mc-legal-vault 选项；非老板永远 lty-vault
+  // 目标 vault：法务部成员 + SUPER_ADMIN 看到 mc-legal-vault 选项；其他人永远 lty-vault
   const [targetVault, setTargetVault] = useState<'lty-vault' | 'mc-legal-vault'>('lty-vault');
+  // 保留 isSuperAdmin 字段以兼容老调用方（未来可能给老板专属 UI 标识用，目前无差异）
+  void isSuperAdmin;
   const router = useRouter();
 
   function pickFile(file: File) {
@@ -278,7 +286,7 @@ export default function UploadButton({ isSuperAdmin = false }: { isSuperAdmin?: 
             </span>
           </div>
           <VaultSelector
-            isSuperAdmin={isSuperAdmin}
+            canRouteMcLegal={canRouteMcLegal}
             targetVault={targetVault}
             setTargetVault={setTargetVault}
           />
@@ -324,7 +332,7 @@ export default function UploadButton({ isSuperAdmin = false }: { isSuperAdmin?: 
             )}
           </ul>
           <VaultSelector
-            isSuperAdmin={isSuperAdmin}
+            canRouteMcLegal={canRouteMcLegal}
             targetVault={targetVault}
             setTargetVault={setTargetVault}
           />
@@ -448,25 +456,26 @@ export default function UploadButton({ isSuperAdmin = false }: { isSuperAdmin?: 
 }
 
 /**
- * 目标 vault 选择器（仅 SUPER_ADMIN 可见）
+ * 目标 vault 选择器
  *
- * 默认 lty-vault；SUPER_ADMIN 可切换 mc-legal-vault 上传到隔离仓库。
- * 非老板角色不显示这个 UI（始终 lty-vault），避免误传 MC 客户机密数据。
+ * 默认 lty-vault；canRouteMcLegal=true 时可切换 mc-legal-vault 上传到隔离仓库。
+ * 谁 canRouteMcLegal：SUPER_ADMIN + 法务部成员（lty-legal / mc-legal）
+ * 其他部门员工不显示这个 UI（始终 lty-vault），避免误传 MC 客户机密数据。
  */
 function VaultSelector({
-  isSuperAdmin,
+  canRouteMcLegal,
   targetVault,
   setTargetVault,
 }: {
-  isSuperAdmin: boolean;
+  canRouteMcLegal: boolean;
   targetVault: 'lty-vault' | 'mc-legal-vault';
   setTargetVault: (v: 'lty-vault' | 'mc-legal-vault') => void;
 }) {
-  if (!isSuperAdmin) return null;
+  if (!canRouteMcLegal) return null;
   return (
     <div className="mb-2 rounded-lg border border-amber-200/60 bg-amber-50/60 px-2.5 py-1.5">
       <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-amber-700">
-        目标 vault（仅老板可选）
+        目标 vault
       </div>
       <div className="flex gap-1.5">
         <button

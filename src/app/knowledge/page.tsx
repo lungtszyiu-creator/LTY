@@ -100,6 +100,7 @@ export default async function KnowledgePage() {
         recentUploads={recentUploads}
         canSummonCurator={ctx.canSummonCurator}
         isSuperAdmin={ctx.isSuperAdmin}
+        canRouteMcLegal={ctx.canRouteMcLegal}
       />
 
       {/* 待审待办 */}
@@ -196,10 +197,12 @@ function UploadSection({
   recentUploads,
   canSummonCurator,
   isSuperAdmin,
+  canRouteMcLegal,
 }: {
   recentUploads: RecentUpload[];
   canSummonCurator: boolean;
   isSuperAdmin: boolean;
+  canRouteMcLegal: boolean;
 }) {
   return (
     <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -210,7 +213,7 @@ function UploadSection({
             手机也能扔。文件落 <code className="rounded bg-white px-1">raw/_inbox/from_dashboard/&lt;日期&gt;/</code>，
             drudge 09:50 自动归档，或老板召唤管家立刻处理。
           </p>
-          <UploadButton isSuperAdmin={isSuperAdmin} />
+          <UploadButton isSuperAdmin={isSuperAdmin} canRouteMcLegal={canRouteMcLegal} />
         </div>
 
         {canSummonCurator ? (
