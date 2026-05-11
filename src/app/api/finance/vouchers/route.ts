@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAuthOrApiKey } from '@/lib/api-auth';
 import { logAiActivity } from '@/lib/ai-log';
+import { writeVoucherAudit } from '@/lib/voucher-audit';
 
 // ---- GET：列表 ----
 export async function GET(req: NextRequest) {
@@ -58,10 +59,13 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // 创建凭证：AI（voucher_clerk / cfo）+ EDITOR（老板）+ VIEWER（出纳） 都能用。
+  // 出纳手动建凭证用于补救 AI 失效场景（OCR plugin 跑挂、bridge 超时等）。
+  // 所有创建都写 audit log，老板能在凭证详情页看到来源。
   const auth = await requireAuthOrApiKey(req, [
     'FINANCE_AI:voucher_clerk',
     'FINANCE_AI:cfo',
-  ], 'EDIT');
+  ], 'VIEW');
   if (auth instanceof NextResponse) return auth;
 
   const body = await req.json();
@@ -107,6 +111,23 @@ export async function POST(req: NextRequest) {
       vaultWritten: !!data.vaultPath,
     });
   }
+
+  // 写 voucher audit log（任何创建都留痕，老板能看谁建的）
+  await writeVoucherAudit({
+    voucherId: voucher.id,
+    action: 'create',
+    before: null,
+    after: {
+      summary: voucher.summary,
+      debitAccount: voucher.debitAccount,
+      creditAccount: voucher.creditAccount,
+      amount: voucher.amount.toString(),
+      currency: voucher.currency,
+      status: voucher.status,
+    },
+    changedById: auth.kind === 'session' ? auth.userId : null,
+    byAi: auth.kind === 'apikey' ? auth.ctx.scope.split(':')[1] ?? null : null,
+  });
 
   return NextResponse.json(voucher, { status: 201 });
 }

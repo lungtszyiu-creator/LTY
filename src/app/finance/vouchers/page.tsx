@@ -140,10 +140,15 @@ export default async function VouchersListPage({
           >
             ⤓ 导出 CSV
           </a>
-          {access.level === 'EDITOR' && (
+          {/* EDITOR (老板) 和 VIEWER (出纳) 都能建，VIEWER 会写 audit log */}
+          {(access.level === 'EDITOR' || access.level === 'VIEWER') && (
             <Link
               href="/finance/vouchers/new"
-              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-rose-700"
+              className={`inline-flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition ${
+                access.level === 'EDITOR'
+                  ? 'bg-rose-600 text-white hover:bg-rose-700'
+                  : 'bg-sky-600 text-white hover:bg-sky-700'
+              }`}
             >
               + 新建凭证
             </Link>

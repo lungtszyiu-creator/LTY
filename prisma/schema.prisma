@@ -130,6 +130,7 @@ model User {
   payrollProfile         EmployeePayrollProfile? @relation("PayrollProfile")
   vouchersCreated        Voucher[]               @relation("VoucherCreator")
   vouchersPosted         Voucher[]               @relation("VoucherPoster")
+  voucherAuditChanges    VoucherAuditLog[]       @relation("VoucherAuditChanger")
   // AI 成本订阅 / 月度入账反向关系
   aiSubscriptionsCreated AiCostSubscription[]    @relation("AiSubscriptionCreator")
   aiCostBookingsBy       AiCostBooking[]         @relation("AiCostBookedBy")
@@ -1092,7 +1093,39 @@ model Voucher {
   // 反向：AI 成本月度入账记录（如本 voucher 是 AI 成本入账时填）
   aiCostBookings AiCostBooking[] @relation("AiCostBookingVoucher")
 
+  // 反向：操作审计痕迹（任意一次修改 / 批准 / 驳回 / 作废都写一条 audit log）
+  auditLogs VoucherAuditLog[] @relation("VoucherAudit")
+
   @@index([status, date])
+  @@index([createdAt])
+}
+
+// ---- 凭证操作审计 ----
+// 凭证每次 create / edit / approve / reject / void / delete 都写一条；
+// 老板与出纳都可在凭证详情页看到完整改动时间线，保证账目可追溯（合规要求）。
+model VoucherAuditLog {
+  id        String  @id @default(cuid())
+  voucherId String
+  voucher   Voucher @relation("VoucherAudit", fields: [voucherId], references: [id], onDelete: Cascade)
+
+  // 'create' | 'edit' | 'approve' | 'reject' | 'void' | 'delete'
+  action String
+
+  // 操作者（任一必填）
+  changedById String?
+  changedBy   User?   @relation("VoucherAuditChanger", fields: [changedById], references: [id])
+  byAi        String? // AI role 如 'voucher_clerk' / 'chain_bookkeeper'
+
+  // 变更前 / 变更后字段快照（JSON）。create 时 before=null；delete 时 after=null
+  beforeJson String?
+  afterJson  String?
+
+  // 操作原因 / 备注（reject / void 必填理由；edit 选填）
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([voucherId, createdAt])
   @@index([createdAt])
 }
 
