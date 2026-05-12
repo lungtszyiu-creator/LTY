@@ -52,6 +52,7 @@ export const SCOPE_PRESETS: ScopePreset[] = [
 
   // 👥 HR
   { group: '👥 人事部', prefix: 'HR_', value: 'HR_AI:hr_clerk', label: '人事管家', desc: '写候选人 / 员工档案 / 试用期监控' },
+  { group: '👥 人事部', prefix: 'HR_', value: 'HR_AI:hr_onboard', label: '入职建档员', desc: '只能写新员工档案 + 更新在职状态（窄）' },
   { group: '👥 人事部', prefix: 'HR_', value: 'HR_ADMIN', label: '👑 人事全权', desc: '人事部全读写（慎发）', danger: true },
   { group: '👥 人事部', prefix: 'HR_', value: 'HR_READONLY', label: '人事只读', desc: '看板被动展示用' },
 
