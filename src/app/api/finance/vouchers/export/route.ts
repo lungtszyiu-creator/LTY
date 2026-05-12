@@ -37,25 +37,42 @@ export async function GET(req: NextRequest) {
   const status = sp.get('status'); // ALL or specific
   const from = sp.get('from'); // YYYY-MM-DD
   const to = sp.get('to');
+  const dim = sp.get('dim') === 'created' ? 'created' : 'date'; // 维度：业务日(date) / 入账日(created)
+  const q = (sp.get('q') ?? '').trim();
   const limit = Math.min(Number(sp.get('limit') ?? '5000'), 10000);
 
-  const where: { status?: string; date?: { gte?: Date; lt?: Date } } = {};
+  type DateFilter = { gte?: Date; lt?: Date };
+  const where: {
+    status?: string;
+    date?: DateFilter;
+    createdAt?: DateFilter;
+    OR?: Array<{ summary?: { contains: string; mode: 'insensitive' }; debitAccount?: { contains: string; mode: 'insensitive' }; creditAccount?: { contains: string; mode: 'insensitive' } }>;
+  } = {};
   if (status && status !== 'ALL') where.status = status;
   if (from || to) {
-    where.date = {};
-    if (from) where.date.gte = new Date(from + 'T00:00:00.000Z');
+    const d: DateFilter = {};
+    if (from) d.gte = new Date(from + 'T00:00:00.000Z');
     if (to) {
       // to 是闭区间含当天，所以要加一天
       const t = new Date(to + 'T00:00:00.000Z');
       t.setUTCDate(t.getUTCDate() + 1);
-      where.date.lt = t;
+      d.lt = t;
     }
+    if (dim === 'created') where.createdAt = d;
+    else where.date = d;
+  }
+  if (q) {
+    where.OR = [
+      { summary: { contains: q, mode: 'insensitive' } },
+      { debitAccount: { contains: q, mode: 'insensitive' } },
+      { creditAccount: { contains: q, mode: 'insensitive' } },
+    ];
   }
 
   const vouchers = await prisma.voucher.findMany({
     where,
     take: limit,
-    orderBy: { date: 'asc' },
+    orderBy: dim === 'created' ? { createdAt: 'asc' } : { date: 'asc' },
     include: {
       createdBy: { select: { name: true } },
       postedBy: { select: { name: true } },

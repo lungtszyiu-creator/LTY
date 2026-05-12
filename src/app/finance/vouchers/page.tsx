@@ -1,12 +1,15 @@
 /**
  * 凭证列表 (/finance/vouchers)
  *
- * 老板/出纳查全部凭证（所有状态 + 日期过滤）。
+ * 老板/出纳查全部凭证（所有状态 + 多维度日期过滤）。
  * /finance 主页只显示 AI_DRAFT 待审，要看 POSTED/VOIDED 必须来这里。
  *
  * URL 参数：
  *   ?status=ALL|AI_DRAFT|BOSS_REVIEWING|POSTED|REJECTED|VOIDED  默认 ALL
  *   ?range=today|7d|30d|90d|all                                  默认 30d
+ *   ?dim=date|created  默认 date（业务发生日；created=入账日）
+ *   ?from=YYYY-MM-DD&to=YYYY-MM-DD  自定义日期，传入则 range 失效
+ *   ?q=keyword  在 summary / debitAccount / creditAccount 模糊搜索
  */
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
@@ -18,6 +21,7 @@ export const dynamic = 'force-dynamic';
 
 type StatusKey = 'ALL' | 'AI_DRAFT' | 'BOSS_REVIEWING' | 'POSTED' | 'REJECTED' | 'VOIDED';
 type RangeKey = 'today' | '7d' | '30d' | '90d' | 'all';
+type DimKey = 'date' | 'created';
 
 const STATUS_META: Record<Exclude<StatusKey, 'ALL'>, { label: string; cls: string }> = {
   AI_DRAFT: { label: '草稿', cls: 'bg-amber-50 text-amber-700 ring-amber-200' },
@@ -58,30 +62,50 @@ function rangeStart(key: RangeKey): Date | null {
   return t;
 }
 
-function buildHref(status: StatusKey, range: RangeKey): string {
+type Filters = {
+  status: StatusKey;
+  range: RangeKey;
+  dim: DimKey;
+  from: string | null;
+  to: string | null;
+  q: string | null;
+};
+
+function buildHref(f: Filters): string {
   const params = new URLSearchParams();
-  if (status !== 'ALL') params.set('status', status);
-  if (range !== '30d') params.set('range', range);
-  const q = params.toString();
-  return q ? `/finance/vouchers?${q}` : '/finance/vouchers';
+  if (f.status !== 'ALL') params.set('status', f.status);
+  if (f.range !== 'all') params.set('range', f.range);
+  if (f.dim !== 'created') params.set('dim', f.dim);
+  if (f.from) params.set('from', f.from);
+  if (f.to) params.set('to', f.to);
+  if (f.q) params.set('q', f.q);
+  const qs = params.toString();
+  return qs ? `/finance/vouchers?${qs}` : '/finance/vouchers';
 }
 
-function buildExportHref(status: StatusKey, range: RangeKey): string {
+function buildExportHref(f: Filters): string {
   const params = new URLSearchParams();
-  if (status !== 'ALL') params.set('status', status);
-  const start = rangeStart(range);
-  if (start) params.set('from', start.toISOString().slice(0, 10));
-  // to 默认今天（包含今天）
-  const today = new Date();
-  params.set('to', today.toISOString().slice(0, 10));
-  const q = params.toString();
-  return q ? `/api/finance/vouchers/export?${q}` : '/api/finance/vouchers/export';
+  if (f.status !== 'ALL') params.set('status', f.status);
+  if (f.dim !== 'created') params.set('dim', f.dim);
+  if (f.q) params.set('q', f.q);
+  // 自定义日期优先
+  if (f.from || f.to) {
+    if (f.from) params.set('from', f.from);
+    if (f.to) params.set('to', f.to);
+  } else {
+    const start = rangeStart(f.range);
+    if (start) params.set('from', start.toISOString().slice(0, 10));
+    const today = new Date();
+    params.set('to', today.toISOString().slice(0, 10));
+  }
+  const qs = params.toString();
+  return qs ? `/api/finance/vouchers/export?${qs}` : '/api/finance/vouchers/export';
 }
 
 export default async function VouchersListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; range?: string }>;
+  searchParams: Promise<{ status?: string; range?: string; dim?: string; from?: string; to?: string; q?: string }>;
 }) {
   const access = await requireFinanceView();
   const sp = await searchParams;
@@ -91,16 +115,55 @@ export default async function VouchersListPage({
   ).includes(sp.status as never)
     ? (sp.status as StatusKey)
     : 'ALL';
+  // 默认 = 入账日 + 全部范围 + 按入账时间倒序 = "截止此刻所有入账凭证，最新在最上"
+  // 老板/出纳进来第一眼能扫今天有没有做错。要切业务日/限定月份 用 URL 参数显式切。
   const range: RangeKey = (['today', '7d', '30d', '90d', 'all'] as const).includes(
     sp.range as never,
   )
     ? (sp.range as RangeKey)
-    : '30d';
+    : 'all';
+  const dim: DimKey = sp.dim === 'date' ? 'date' : 'created';
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const fromStr = sp.from && dateRe.test(sp.from) ? sp.from : null;
+  const toStr = sp.to && dateRe.test(sp.to) ? sp.to : null;
+  const qStr = sp.q ? sp.q.trim() : null;
 
-  const where: { status?: string; date?: { gte: Date } } = {};
+  const filters: Filters = { status, range, dim, from: fromStr, to: toStr, q: qStr };
+
+  type DateFilter = { gte?: Date; lt?: Date };
+  const where: {
+    status?: string;
+    date?: DateFilter;
+    createdAt?: DateFilter;
+    OR?: Array<{ summary?: { contains: string; mode: 'insensitive' }; debitAccount?: { contains: string; mode: 'insensitive' }; creditAccount?: { contains: string; mode: 'insensitive' } }>;
+  } = {};
   if (status !== 'ALL') where.status = status;
-  const start = rangeStart(range);
-  if (start) where.date = { gte: start };
+
+  // 日期范围：自定义优先；否则按 range chip
+  const dateFilter: DateFilter = {};
+  if (fromStr || toStr) {
+    if (fromStr) dateFilter.gte = new Date(fromStr + 'T00:00:00.000Z');
+    if (toStr) {
+      const t = new Date(toStr + 'T00:00:00.000Z');
+      t.setUTCDate(t.getUTCDate() + 1);
+      dateFilter.lt = t;
+    }
+  } else {
+    const start = rangeStart(range);
+    if (start) dateFilter.gte = start;
+  }
+  if (dateFilter.gte || dateFilter.lt) {
+    if (dim === 'created') where.createdAt = dateFilter;
+    else where.date = dateFilter;
+  }
+
+  if (qStr) {
+    where.OR = [
+      { summary: { contains: qStr, mode: 'insensitive' } },
+      { debitAccount: { contains: qStr, mode: 'insensitive' } },
+      { creditAccount: { contains: qStr, mode: 'insensitive' } },
+    ];
+  }
 
   const [vouchers, totalCount] = await Promise.all([
     prisma.voucher.findMany({
@@ -124,7 +187,21 @@ export default async function VouchersListPage({
           </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">凭证</h1>
           <p className="mt-1 text-xs text-slate-500">
-            全部凭证（所有状态）· 共 {totalCount} 条
+            {dim === 'created' && !fromStr && !toStr && range === 'all' && !qStr ? (
+              <>
+                <b className="text-slate-700">截止此刻所有入账凭证</b>（按入账时间倒序）· 共 {totalCount} 条
+              </>
+            ) : (
+              <>
+                共 {totalCount} 条 · 维度：{dim === 'date' ? '业务发生日' : '入账日'}
+                {(fromStr || toStr) && (
+                  <span className="ml-1 text-amber-700">
+                    （自定义日期 {fromStr ?? '...'} → {toStr ?? '...'}）
+                  </span>
+                )}
+                {qStr && <span className="ml-1 text-fuchsia-700">（搜索 &quot;{qStr}&quot;）</span>}
+              </>
+            )}
             {access.level === 'EDITOR' && (
               <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200">
                 👑 全权
@@ -134,7 +211,7 @@ export default async function VouchersListPage({
         </div>
         <div className="flex items-center gap-2">
           <a
-            href={buildExportHref(status, range)}
+            href={buildExportHref(filters)}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             title="按当前过滤条件导出 CSV，Excel 直接打开"
           >
@@ -167,7 +244,7 @@ export default async function VouchersListPage({
           return (
             <Link
               key={t.key}
-              href={buildHref(t.key, range)}
+              href={buildHref({ ...filters, status: t.key })}
               role="tab"
               aria-selected={active}
               scroll={false}
@@ -183,18 +260,106 @@ export default async function VouchersListPage({
         })}
       </nav>
 
-      {/* 日期过滤 */}
+      {/* 维度切换：业务日 vs 入账日 */}
+      <div className="mb-3 flex items-center gap-2 text-xs">
+        <span className="text-slate-500">日期维度：</span>
+        <Link
+          href={buildHref({ ...filters, dim: 'date' })}
+          scroll={false}
+          className={`inline-flex items-center rounded-full px-3 py-1 ring-1 transition ${
+            dim === 'date' ? 'bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-300 font-medium' : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50'
+          }`}
+          title="按业务发生日过滤（如差旅费 4 月发生）"
+        >
+          业务日
+        </Link>
+        <Link
+          href={buildHref({ ...filters, dim: 'created' })}
+          scroll={false}
+          className={`inline-flex items-center rounded-full px-3 py-1 ring-1 transition ${
+            dim === 'created' ? 'bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-300 font-medium' : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50'
+          }`}
+          title="按凭证入账日过滤（无论业务发生在哪天，看今天录了哪些账）"
+        >
+          入账日
+        </Link>
+        {(fromStr || toStr) && (
+          <Link
+            href={buildHref({ ...filters, from: null, to: null })}
+            scroll={false}
+            className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200"
+            title="清除自定义日期"
+          >
+            清除自定义日期 ✕
+          </Link>
+        )}
+      </div>
+
+      {/* 自定义日期范围（GET 表单，提交回到本页带 from/to）*/}
+      <form
+        method="GET"
+        action="/finance/vouchers"
+        className="mb-3 flex flex-wrap items-center gap-2 text-xs"
+      >
+        <span className="text-slate-500">自定义日期：</span>
+        <input type="date" name="from" defaultValue={fromStr ?? ''} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+        <span className="text-slate-400">→</span>
+        <input type="date" name="to" defaultValue={toStr ?? ''} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" />
+        <input type="hidden" name="status" value={status === 'ALL' ? '' : status} />
+        <input type="hidden" name="dim" value={dim} />
+        <input type="hidden" name="q" value={qStr ?? ''} />
+        <button type="submit" className="rounded-lg bg-slate-700 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800">应用</button>
+        <span className="text-[11px] text-slate-400">（不填则用下方快捷范围）</span>
+      </form>
+
+      {/* 关键词搜索 */}
+      <form
+        method="GET"
+        action="/finance/vouchers"
+        className="mb-4 flex flex-wrap items-center gap-2 text-xs"
+      >
+        <span className="text-slate-500">关键词搜索：</span>
+        <input
+          type="text"
+          name="q"
+          defaultValue={qStr ?? ''}
+          placeholder="员工名 / 借贷科目 / 摘要 关键字"
+          className="min-w-[200px] rounded-lg border border-slate-300 px-3 py-1 text-xs"
+        />
+        <input type="hidden" name="status" value={status === 'ALL' ? '' : status} />
+        <input type="hidden" name="range" value={range} />
+        <input type="hidden" name="dim" value={dim} />
+        {fromStr && <input type="hidden" name="from" value={fromStr} />}
+        {toStr && <input type="hidden" name="to" value={toStr} />}
+        <button type="submit" className="rounded-lg bg-slate-700 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800">搜</button>
+        {qStr && (
+          <Link
+            href={buildHref({ ...filters, q: null })}
+            scroll={false}
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-200"
+          >
+            清除搜索 ✕
+          </Link>
+        )}
+      </form>
+
+      {/* 日期范围 chip（自定义日期不空时禁用提示） */}
       <nav
         role="tablist"
         aria-label="按日期过滤"
         className="mb-5 flex flex-wrap gap-1.5"
       >
+        {(fromStr || toStr) && (
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700 ring-1 ring-amber-200">
+            已用自定义日期 {fromStr ?? '...'} → {toStr ?? '...'}（下方 chip 失效）
+          </span>
+        )}
         {RANGE_TABS.map((t) => {
-          const active = range === t.key;
+          const active = !fromStr && !toStr && range === t.key;
           return (
             <Link
               key={t.key}
-              href={buildHref(status, t.key)}
+              href={buildHref({ ...filters, range: t.key, from: null, to: null })}
               role="tab"
               aria-selected={active}
               scroll={false}
