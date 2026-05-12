@@ -150,14 +150,33 @@ export function AiActivityFeed({ rows }: { rows: ActivityRow[] }) {
   );
 }
 
+/** 从 payload JSON 安全取 summary / vaultPath（payload 是 String JSON），失败返回 null */
+function parsePayloadSummary(raw: string | null): { summary: string | null; vaultPath: string | null } {
+  if (!raw) return { summary: null, vaultPath: null };
+  try {
+    const p = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      summary: typeof p.summary === 'string' && p.summary.trim() ? p.summary.trim() : null,
+      vaultPath: typeof p.vaultPath === 'string' && p.vaultPath.trim() ? p.vaultPath.trim() : null,
+    };
+  } catch {
+    return { summary: null, vaultPath: null };
+  }
+}
+
 function ActivityRowItem({ a }: { a: ActivityRow }) {
   const time = new Date(a.createdAt).toLocaleTimeString('zh-HK', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   });
-  const label = ACTION_LABEL[a.action] ?? a.action;
   const isFailed = a.status === 'failed';
+
+  // 显示文案：优先 payload.summary（AI 自报的一句话）；否则用 ACTION_LABEL 映射；
+  // 最后 fallback action 字符串本身
+  // 这样新 endpoint /api/v1/activity-log 写的 summary 能在看板直接读到
+  const { summary, vaultPath } = parsePayloadSummary(a.payload);
+  const label = summary ?? ACTION_LABEL[a.action] ?? a.action;
 
   // 业务关联链接（点开看具体那条记录）
   const link = (() => {
@@ -176,6 +195,14 @@ function ActivityRowItem({ a }: { a: ActivityRow }) {
       >
         {label}
         {isFailed && <span className="ml-1 text-[10px] text-rose-600">（失败）</span>}
+        {vaultPath && (
+          <span
+            className="ml-1.5 font-mono text-[10px] text-slate-400"
+            title={vaultPath}
+          >
+            · {vaultPath}
+          </span>
+        )}
       </span>
       {/* 三向分发标记 */}
       <div className="flex shrink-0 items-center gap-1.5 text-[10px]">
