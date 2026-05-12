@@ -117,6 +117,35 @@ export default async function AiOnboardingPage() {
         </div>
       </section>
 
+      {/* AI 工作日记自报 endpoint — 让任何 AI 把自己的成果写到 /dept/ai 工作日记栏目 */}
+      <section className="mb-6 rounded-xl border border-amber-300 bg-amber-100/40 p-4">
+        <h2 className="text-sm font-semibold text-amber-900">
+          🗒 让你的 AI 在看板「工作日记」露脸
+        </h2>
+        <p className="mt-1.5 text-[12px] text-amber-900">
+          你的 AI 干完一项工作（例：写完推文 / 整理完一份资料 / 处理完一笔申报），调一下
+          下面这个 endpoint，<Link href="/dept/ai" className="underline">/dept/ai</Link>{' '}
+          底部「今日 AI 工作日记」栏目会立刻多出一行带摘要的记录，老板和同事一眼看到。
+        </p>
+        <pre className="mt-2.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`POST ${dashboardUrl}/api/v1/activity-log
+X-Api-Key: lty_xxxx...
+Content-Type: application/json
+
+{
+  "action": "write_post",
+  "summary": "整理了 3 篇推文 · 营销部本周话题",
+  "vaultPath": "raw/营销部/posts/2026-W19/",
+  "vaultWritten": true,
+  "telegramSent": false
+}`}
+        </pre>
+        <p className="mt-1.5 text-[10px] text-amber-800">
+          summary 那一句话就是显示在工作日记的标题。vaultPath 选填，写了会以灰色小字附后。
+          action 是分类短词（snake_case），方便后续 AI 工作流分析。
+        </p>
+      </section>
+
       {/* 步骤 ① · plugin schema */}
       <CozePluginSchemaCard tokenUsageUrl={tokenUsageUrl} />
 
