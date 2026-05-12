@@ -117,21 +117,83 @@ export default async function AiOnboardingPage() {
         </div>
       </section>
 
-      {/* AI 工作日记自报 endpoint — 让任何 AI 把自己的成果写到 /dept/ai 工作日记栏目 */}
+      {/* 三档写入 endpoint 总览 — 老板 5/13：行政 AI / HR Bot 都反馈"AI 干完没法把成果真落看板"
+          → 现在 3 个 endpoint 分场景用：日记 / 文件 / 部门专用 DB 表 */}
+      <section className="mb-6 rounded-xl border-2 border-emerald-300 bg-emerald-50/60 p-4">
+        <h2 className="text-sm font-semibold text-emerald-900">
+          🚀 AI 写入看板 · 三个接口对照表
+        </h2>
+        <p className="mt-1.5 text-[12px] text-emerald-900">
+          你的 AI 干完一项工作要把成果"交"到看板上，按 <strong>成果有多重</strong> 选 endpoint：
+        </p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="bg-emerald-100/60">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-semibold text-emerald-900">场景</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-emerald-900">endpoint</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-emerald-900">看板效果</th>
+              </tr>
+            </thead>
+            <tbody className="text-emerald-900">
+              <tr className="border-t border-emerald-200/60">
+                <td className="px-2 py-2 align-top">
+                  <strong>🗒 只写一行日记</strong>
+                  <div className="text-[10px] text-emerald-700">没文件 / 没 DB 行 / 仅声明做了什么</div>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  <code className="rounded bg-white px-1">POST /api/v1/activity-log</code>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  /dept/ai + 所在部门看板「工作日记」多一行
+                </td>
+              </tr>
+              <tr className="border-t border-emerald-200/60">
+                <td className="px-2 py-2 align-top">
+                  <strong>📁 真落一个文件到 vault</strong>
+                  <div className="text-[10px] text-emerald-700">报告 / markdown / PDF / 图片</div>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  <code className="rounded bg-white px-1">POST /api/v1/vault/commit</code>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  文件真提交 GitHub <code className="text-[10px]">lty-vault</code>；同时自动写一条 activity-log（不用重复调）；部门看板 vault tab + /dept/ai 日记 vaultPath 都可点
+                </td>
+              </tr>
+              <tr className="border-t border-emerald-200/60">
+                <td className="px-2 py-2 align-top">
+                  <strong>📋 写一行进部门 DB 表</strong>
+                  <div className="text-[10px] text-emerald-700">员工档案 / 凭证 / 工单 / 资产等业务记录</div>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  <code className="rounded bg-white px-1">POST /api/v1/&lt;dept&gt;/&lt;resource&gt;</code>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  部门看板 KPI / 列表 / 详情页实时刷新；自动写日记
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[10px] text-emerald-800">
+          💡 三个接口可<strong>叠加</strong>：复杂工作（比如行政 AI 完成执照年检）= 先 <code className="rounded bg-white px-1">vault/commit</code>{' '}
+          落审计 PDF + 再 <code className="rounded bg-white px-1">activity-log</code> 补一条总结 ——
+          但单纯文件场景，<code className="rounded bg-white px-1">vault/commit</code> 已经自动写日记，无需重复调。
+        </p>
+      </section>
+
+      {/* ① 轻量级：activity-log（只写一行日记，没文件 / 没 DB 行）*/}
       <section className="mb-6 rounded-xl border border-amber-300 bg-amber-100/40 p-4">
         <h2 className="text-sm font-semibold text-amber-900">
-          🗒 让你的 AI 在看板「工作日记」露脸
+          🗒 ① 写日记 · <code className="rounded bg-amber-50 px-1.5 py-0.5">/api/v1/activity-log</code>
         </h2>
         <p className="mt-1.5 text-[12px] text-amber-900">
-          你的 AI 干完一项工作（例：写完推文 / 整理完一份资料 / 处理完一笔申报），调一下
-          下面这个 endpoint，{' '}
-          <Link href="/dept/ai" className="underline">/dept/ai</Link> 全公司总览
-          <strong className="mx-1">和</strong>该 AI 所在部门看板（按 deptSlug：
-          <code className="rounded bg-amber-50 px-1">admin → /dept/admin</code>、
-          <code className="rounded bg-amber-50 px-1">hr → /dept/hr</code>、
-          <code className="rounded bg-amber-50 px-1">finance|cashier → /dept/cashier</code>、
-          <code className="rounded bg-amber-50 px-1">lty-legal → /dept/lty-legal</code>）
-          都会立刻多出一行带摘要的记录，老板和同事一眼看到。
+          AI 干完轻量工作（"我收到了 / 我看过了 / 我整理了"），只想留个痕迹给老板看，调这个。
+          {' '}<Link href="/dept/ai" className="underline">/dept/ai</Link> 全公司总览
+          <strong className="mx-1">和</strong>所在部门看板（<code className="rounded bg-amber-50 px-1">admin→/dept/admin</code> /
+          {' '}<code className="rounded bg-amber-50 px-1">hr→/dept/hr</code> /
+          {' '}<code className="rounded bg-amber-50 px-1">finance|cashier→/dept/cashier</code> /
+          {' '}<code className="rounded bg-amber-50 px-1">lty-legal→/dept/lty-legal</code>）都会多一行。
         </p>
         <pre className="mt-2.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
 {`POST ${dashboardUrl}/api/v1/activity-log
@@ -141,21 +203,96 @@ Content-Type: application/json
 {
   "action": "write_post",
   "summary": "整理了 3 篇推文 · 营销部本周话题",
-  "vaultPath": "raw/营销部/posts/2026-W19/",
-  "vaultWritten": true,
+  "vaultPath": "raw/营销部/posts/2026-W19/notes.md",
   "telegramSent": false
 }`}
         </pre>
         <p className="mt-1.5 text-[10px] text-amber-800">
-          summary 那一句话就是显示在工作日记的标题。vaultPath 选填，写了会以灰色小字附后，
-          点击直达 lty-vault GitHub 仓库对应路径。
-          action 是分类短词（snake_case），方便后续 AI 工作流分析。
+          ⚠️ 这里的 <code className="rounded bg-amber-50 px-1">vaultPath</code> 只是字符串声明，
+          <strong>不会真创建文件</strong>。要真落文件请用下面的 ② <code className="rounded bg-amber-50 px-1">vault/commit</code>。
         </p>
         <p className="mt-1 text-[10px] text-amber-800">
           想本部门看板显示你的 AI？去{' '}
           <Link href="/employees" className="underline">/employees</Link>{' '}
-          编辑该 AI，把「部门 (deptSlug)」选到对应部门。
+          编辑该 AI 把「归属部门 (deptSlug)」选到对应部门。
         </p>
+      </section>
+
+      {/* ② 重量级：vault/commit（文件真落进 lty-vault GitHub repo）*/}
+      <section className="mb-6 rounded-xl border border-violet-300 bg-violet-100/40 p-4">
+        <h2 className="text-sm font-semibold text-violet-900">
+          📁 ② 落文件 · <code className="rounded bg-violet-50 px-1.5 py-0.5">/api/v1/vault/commit</code>
+          <span className="ml-2 rounded-full bg-violet-200/70 px-1.5 py-0.5 text-[9px] font-medium text-violet-900">
+            5/13 新
+          </span>
+        </h2>
+        <p className="mt-1.5 text-[12px] text-violet-900">
+          AI 干完一项有产出的工作（审计报告 / 执照扫描 / 合同审阅 markdown / 数据分析摘要），
+          调这个把文件<strong>真实</strong>提交到 GitHub{' '}
+          <code className="rounded bg-violet-50 px-1">lungtszyiu-creator/lty-vault</code> repo。同事在
+          所在部门看板「📁 vault 文档」tab 直接看得到；/dept/ai 工作日记的 vaultPath 链接也能点开
+          真实文件内容（之前老板报"无法点开"就是因为 AI 只声明 path 不落文件）。
+        </p>
+        <pre className="mt-2.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`POST ${dashboardUrl}/api/v1/vault/commit
+X-Api-Key: lty_xxxx...
+Content-Type: application/json
+
+{
+  "path": "raw/行政部/2026/执照年检/审计报告.md",
+  "content": "# 营业执照年检审计\\n\\n本次年检共检查...",
+  "summary": "完成执照年检审计报告",
+  "action": "audit_license_renewal"
+}`}
+        </pre>
+        <p className="mt-1.5 text-[10px] text-violet-800">
+          <strong>path 必须按 AI 的 deptSlug 落对应目录</strong>（防越界）：
+          {' '}<code className="rounded bg-violet-50 px-1">admin → raw/行政部/</code> /
+          {' '}<code className="rounded bg-violet-50 px-1">hr → raw/人事部/</code> /
+          {' '}<code className="rounded bg-violet-50 px-1">finance|cashier → raw/财务部/</code> /
+          {' '}<code className="rounded bg-violet-50 px-1">lty-legal → raw/法务部/</code>。
+          MC 法务红线物理隔离，走独立 <code className="rounded bg-violet-50 px-1">mc-legal-vault</code> repo（不在此 endpoint）。
+        </p>
+        <p className="mt-1 text-[10px] text-violet-800">
+          二进制文件（PDF/图片）改用 <code className="rounded bg-violet-50 px-1">contentBase64</code> 字段（与 content 二选一）。
+          单文件 1MB 上限。同 path 已存在 → 409，加时间戳后缀重传。
+        </p>
+        <p className="mt-1 text-[10px] text-violet-800">
+          ✨ <strong>本接口自动帮你写一条 activity-log</strong>（带 vaultPath、vaultWritten=true）—
+          单纯文件场景<strong>不要</strong>再重复调 ① activity-log。
+        </p>
+      </section>
+
+      {/* ③ 部门专用：DB 写入 endpoint（HR 已开 — 其他部门陆续补）*/}
+      <section className="mb-6 rounded-xl border border-rose-300 bg-rose-100/40 p-4">
+        <h2 className="text-sm font-semibold text-rose-900">
+          📋 ③ 写部门 DB 表 · <code className="rounded bg-rose-50 px-1.5 py-0.5">/api/v1/&lt;dept&gt;/&lt;resource&gt;</code>
+        </h2>
+        <p className="mt-1.5 text-[12px] text-rose-900">
+          要把工作成果落成"看板上一条真实业务记录"（员工档案 / 凭证 / 工单 / 资产），
+          各部门有专用 endpoint，写入后<strong>看板 KPI + 列表 + 详情页实时刷新</strong>，并自动写一条 activity-log。
+        </p>
+        <ul className="mt-2 space-y-1.5 text-[11px] text-rose-900">
+          <li>
+            <strong>人事 · 入职建档：</strong>
+            {' '}<code className="rounded bg-rose-50 px-1">POST /api/v1/hr/employee-profile</code>
+            {' / '}
+            <code className="rounded bg-rose-50 px-1">PATCH /api/v1/hr/employee-profile/&lt;id&gt;</code>
+            <span className="ml-1 text-rose-700">
+              · scope <code className="rounded bg-rose-50 px-1">HR_AI:hr_onboard</code> /{' '}
+              <code className="rounded bg-rose-50 px-1">HR_AI:hr_clerk</code> /{' '}
+              <code className="rounded bg-rose-50 px-1">HR_ADMIN</code>
+              {' '}— body: <code className="rounded bg-rose-50 px-1">userEmail</code>{' '}或{' '}
+              <code className="rounded bg-rose-50 px-1">userId</code>{' '}+ position / hireDate / status...
+            </span>
+          </li>
+          <li>
+            <span className="text-rose-700">
+              <strong>其他部门写 DB 接口</strong> — 财务凭证 / 行政证照资产 / 法务工单等：陆续补（按上面 HR 同模式抄）。
+              暂时可用 ② <code className="rounded bg-rose-50 px-1">vault/commit</code> 落 markdown 报告兜底。
+            </span>
+          </li>
+        </ul>
       </section>
 
       {/* 步骤 ① · plugin schema */}
