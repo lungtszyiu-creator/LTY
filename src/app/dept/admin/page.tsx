@@ -14,6 +14,8 @@ import { AssetsTab } from './_components/AssetsTab';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
 import { VaultBrowser } from '@/components/vault/VaultBrowser';
+import { AiActivityFeed } from '@/components/ai-dashboard/AiActivityFeed';
+import { getDeptAiActivitiesToday } from '@/lib/ai-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +43,7 @@ export default async function AdminDeptPage({
   const tab: TabKey = TABS.some((t) => t.key === requested) ? requested : 'licenses';
   const canEdit = ctx.level === 'LEAD' || ctx.isSuperAdmin;
 
-  const [licensesCount, expiringSoonCount, assetsCount, idleAssetsCount] = await Promise.all([
+  const [licensesCount, expiringSoonCount, assetsCount, idleAssetsCount, aiActivities] = await Promise.all([
     prisma.adminLicense.count({ where: { status: { in: ['ACTIVE', 'EXPIRING'] } } }),
     prisma.adminLicense.count({
       where: {
@@ -51,6 +53,7 @@ export default async function AdminDeptPage({
     }),
     prisma.adminFixedAsset.count({ where: { status: { in: ['IN_USE', 'IDLE'] } } }),
     prisma.adminFixedAsset.count({ where: { status: 'IDLE' } }),
+    getDeptAiActivitiesToday(['admin']),
   ]);
 
   return (
@@ -102,6 +105,12 @@ export default async function AdminDeptPage({
         {(tab === 'facilities' || tab === 'emergency' || tab === 'inspection' || tab === 'it' || tab === 'supplies') && (
           <StubTab tabKey={tab} />
         )}
+      </div>
+
+      {/* 行政部 AI 工作日记 — 跟 /dept/ai 同款 section，按 deptSlug 过滤；
+          老板 5/13：行政 AI 自己上报的活动同时显示在本部门看板 + AI 部看板 */}
+      <div className="mt-6">
+        <AiActivityFeed rows={aiActivities} />
       </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (

@@ -23,6 +23,8 @@ import { getScopeChoices } from '@/lib/scope-presets';
 import { ReimbursementsTab } from './_components/ReimbursementsTab';
 import { ReconciliationsTab } from './_components/ReconciliationsTab';
 import { ComplianceTab } from './_components/ComplianceTab';
+import { AiActivityFeed } from '@/components/ai-dashboard/AiActivityFeed';
+import { getDeptAiActivitiesToday } from '@/lib/ai-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,20 +63,24 @@ export default async function CashierPage({
   const subCategory = sp.sub ?? null;
 
   // 读现有 LTY 财务数据：最近 fx 汇率（pair 字段）+ 待审凭证数 + 钱包数
-  const [latestUsdHkd, latestUsdCny, pendingVouchers, activeWallets] = await Promise.all([
-    prisma.fxRate.findFirst({
-      where: { pair: 'USD/HKD' },
-      orderBy: { date: 'desc' },
-      select: { rate: true, date: true },
-    }).catch(() => null),
-    prisma.fxRate.findFirst({
-      where: { pair: 'USD/CNY' },
-      orderBy: { date: 'desc' },
-      select: { rate: true, date: true },
-    }).catch(() => null),
-    prisma.voucher.count({ where: { status: 'AI_DRAFT' } }),
-    prisma.cryptoWallet.count({ where: { isActive: true } }),
-  ]);
+  const [latestUsdHkd, latestUsdCny, pendingVouchers, activeWallets, aiActivities] =
+    await Promise.all([
+      prisma.fxRate.findFirst({
+        where: { pair: 'USD/HKD' },
+        orderBy: { date: 'desc' },
+        select: { rate: true, date: true },
+      }).catch(() => null),
+      prisma.fxRate.findFirst({
+        where: { pair: 'USD/CNY' },
+        orderBy: { date: 'desc' },
+        select: { rate: true, date: true },
+      }).catch(() => null),
+      prisma.voucher.count({ where: { status: 'AI_DRAFT' } }),
+      prisma.cryptoWallet.count({ where: { isActive: true } }),
+      // 财务出纳看板同时显示 deptSlug='cashier' 与 'finance' 的 AI（两支同源
+      // 财务团队的 AI 都聚一起；分页才区分子部门）
+      getDeptAiActivitiesToday(['cashier', 'finance']),
+    ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -204,6 +210,12 @@ export default async function CashierPage({
           </p>
         </div>
       )}
+
+      {/* 财务 AI 今日工作日记 — finance + cashier 两支 AI 聚一起；
+          老板 5/13：财务 AI 自报活动同时显示在本部门看板 + AI 部看板 */}
+      <div className="mt-6">
+        <AiActivityFeed rows={aiActivities} />
+      </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard

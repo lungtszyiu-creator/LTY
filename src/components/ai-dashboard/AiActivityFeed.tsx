@@ -12,6 +12,22 @@
  */
 import Link from 'next/link';
 
+/** vault GitHub repo（lty-vault），vaultPath 拼这个变可点链接 */
+const VAULT_REPO_BASE = 'https://github.com/lungtszyiu-creator/lty-vault';
+
+/** vaultPath → GitHub URL。结尾 `/` = 目录走 tree，否则当文件走 blob（GitHub 自动 redirect 也容错）。
+ *  路径分段 encode 防中文部门名（"行政部"）被当 invalid URL。 */
+function vaultPathToGithubUrl(vaultPath: string): string {
+  const trimmed = vaultPath.replace(/^\/+/, '');
+  const isDir = trimmed.endsWith('/');
+  const cleaned = isDir ? trimmed.slice(0, -1) : trimmed;
+  const encoded = cleaned
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `${VAULT_REPO_BASE}/${isDir ? 'tree' : 'blob'}/main/${encoded}`;
+}
+
 export type ActivityRow = {
   id: string;
   aiRole: string;
@@ -196,12 +212,15 @@ function ActivityRowItem({ a }: { a: ActivityRow }) {
         {label}
         {isFailed && <span className="ml-1 text-[10px] text-rose-600">（失败）</span>}
         {vaultPath && (
-          <span
-            className="ml-1.5 font-mono text-[10px] text-slate-400"
-            title={vaultPath}
+          <a
+            href={vaultPathToGithubUrl(vaultPath)}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-1.5 font-mono text-[10px] text-slate-400 hover:text-rose-700 hover:underline"
+            title={`打开 vault：${vaultPath}`}
           >
             · {vaultPath}
-          </span>
+          </a>
         )}
       </span>
       {/* 三向分发标记 */}

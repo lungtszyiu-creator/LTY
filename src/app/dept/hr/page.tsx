@@ -22,6 +22,8 @@ import { requireDeptView } from '@/lib/dept-access';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
 import { VaultBrowser } from '@/components/vault/VaultBrowser';
+import { AiActivityFeed } from '@/components/ai-dashboard/AiActivityFeed';
+import { getDeptAiActivitiesToday } from '@/lib/ai-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,6 +99,8 @@ export default async function HrPage() {
       _count: { _all: true },
     }),
   ]);
+
+  const aiActivities = await getDeptAiActivitiesToday(['hr']);
 
   const stageMap = Object.fromEntries(
     candidateStageGroups.map((g) => [g.stage, g._count._all]),
@@ -225,6 +229,11 @@ export default async function HrPage() {
           repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E4%BA%BA%E4%BA%8B%E9%83%A8"
         />
       </section>
+
+      {/* 人事 AI 今日工作日记 — 老板 5/13：HR AI 自报活动同步显示在本部门看板 + AI 部看板 */}
+      <div className="mb-6">
+        <AiActivityFeed rows={aiActivities} />
+      </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
         <DeptApiKeysCard

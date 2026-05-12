@@ -26,7 +26,12 @@
  *   5. 更新 AiEmployee.lastActiveAt（也算"在跑"，跟 token-usage 同语义）
  *
  * 返回：
- *   { ok: true, id, createdAt, displayedAt: "/dept/ai 工作日记" }
+ *   { ok: true, id, createdAt, displayedAt: ["/dept/ai", "所在部门看板"] }
+ *
+ * 双看板可见性（老板 5/13 改）：
+ *   - /dept/ai 总览所有部门 AI 活动（透明文化）
+ *   - 各部门看板（/dept/admin /dept/cashier /dept/hr /dept/lty-legal）
+ *     按 AI 员工 deptSlug 过滤，显示本部门 AI 自己干了啥
  *
  * 防呆：
  *   - paused 员工不拒：撞顶后 AI 还有未完成工作要交待时也能写一行
@@ -147,12 +152,17 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
+    // 双看板可见性：本日记同时显示在 (a) /dept/ai 全公司 AI 工作日记总览
+    // (b) AI 员工所在部门看板（按 deptSlug 路由：admin → /dept/admin、
+    // hr → /dept/hr、finance|cashier → /dept/cashier、lty-legal → /dept/lty-legal）。
+    // 老板 5/13 反馈：行政部 AI 自报的活动应在自己部门看板可见，不止 /dept/ai。
     return NextResponse.json({
       ok: true,
       id: log.id,
       createdAt: log.createdAt.toISOString(),
-      displayedAt: '/dept/ai 今日工作日记',
-      hint: '看板已记录。打开 /dept/ai 滚到底「今日 AI 工作日记」栏目能看到这一条。',
+      displayedAt: ['/dept/ai 今日工作日记', '所在部门看板（按 deptSlug 路由）'],
+      hint:
+        '看板已记录。打开 /dept/ai 看 AI 部全公司总览；同时本日记会出现在该 AI 所在部门看板的「今日 AI 工作日记」栏目（按 deptSlug 路由）。',
     }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e as unknown as NextResponse;
