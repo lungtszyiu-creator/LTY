@@ -74,8 +74,8 @@ type Filters = {
 function buildHref(f: Filters): string {
   const params = new URLSearchParams();
   if (f.status !== 'ALL') params.set('status', f.status);
-  if (f.range !== '30d') params.set('range', f.range);
-  if (f.dim !== 'date') params.set('dim', f.dim);
+  if (f.range !== 'all') params.set('range', f.range);
+  if (f.dim !== 'created') params.set('dim', f.dim);
   if (f.from) params.set('from', f.from);
   if (f.to) params.set('to', f.to);
   if (f.q) params.set('q', f.q);
@@ -86,7 +86,7 @@ function buildHref(f: Filters): string {
 function buildExportHref(f: Filters): string {
   const params = new URLSearchParams();
   if (f.status !== 'ALL') params.set('status', f.status);
-  if (f.dim !== 'date') params.set('dim', f.dim);
+  if (f.dim !== 'created') params.set('dim', f.dim);
   if (f.q) params.set('q', f.q);
   // 自定义日期优先
   if (f.from || f.to) {
@@ -115,12 +115,14 @@ export default async function VouchersListPage({
   ).includes(sp.status as never)
     ? (sp.status as StatusKey)
     : 'ALL';
+  // 默认 = 入账日 + 全部范围 + 按入账时间倒序 = "截止此刻所有入账凭证，最新在最上"
+  // 老板/出纳进来第一眼能扫今天有没有做错。要切业务日/限定月份 用 URL 参数显式切。
   const range: RangeKey = (['today', '7d', '30d', '90d', 'all'] as const).includes(
     sp.range as never,
   )
     ? (sp.range as RangeKey)
-    : '30d';
-  const dim: DimKey = sp.dim === 'created' ? 'created' : 'date';
+    : 'all';
+  const dim: DimKey = sp.dim === 'date' ? 'date' : 'created';
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   const fromStr = sp.from && dateRe.test(sp.from) ? sp.from : null;
   const toStr = sp.to && dateRe.test(sp.to) ? sp.to : null;
@@ -185,7 +187,21 @@ export default async function VouchersListPage({
           </Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">凭证</h1>
           <p className="mt-1 text-xs text-slate-500">
-            全部凭证（所有状态）· 共 {totalCount} 条
+            {dim === 'created' && !fromStr && !toStr && range === 'all' && !qStr ? (
+              <>
+                <b className="text-slate-700">截止此刻所有入账凭证</b>（按入账时间倒序）· 共 {totalCount} 条
+              </>
+            ) : (
+              <>
+                共 {totalCount} 条 · 维度：{dim === 'date' ? '业务发生日' : '入账日'}
+                {(fromStr || toStr) && (
+                  <span className="ml-1 text-amber-700">
+                    （自定义日期 {fromStr ?? '...'} → {toStr ?? '...'}）
+                  </span>
+                )}
+                {qStr && <span className="ml-1 text-fuchsia-700">（搜索 &quot;{qStr}&quot;）</span>}
+              </>
+            )}
             {access.level === 'EDITOR' && (
               <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200">
                 👑 全权
