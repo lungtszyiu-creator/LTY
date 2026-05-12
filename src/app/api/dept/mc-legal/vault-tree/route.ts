@@ -4,7 +4,9 @@
  * GET /api/dept/mc-legal/vault-tree?path=<rel/path>
  *
  * 用 GitHub Contents API 读 lungtszyiu-creator/mc-legal-vault repo 的目录列表。
- * 仅 SUPER_ADMIN 可调（宪法红线 — MC 客户机密数据）。
+ * 2026-05-12 放宽：SUPER_ADMIN + MC 法务部成员（mc-legal）可调。
+ *   宪法红线 MC 数据物理隔离的防护对象 = 营销/技术/财务等"非法务"部门，
+ *   MC 法务部成员自己当然能看 MC vault。
  *
  * 环境变量：MC_VAULT_GITHUB_TOKEN（fine-grained PAT，对 mc-legal-vault repo Contents Read）
  *
@@ -12,6 +14,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,16 +31,25 @@ type GhEntry = {
 };
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // 鉴权：仅 SUPER_ADMIN
+  // 鉴权：SUPER_ADMIN 或 MC 法务部（mc-legal）成员
   const session = await getSession();
   if (!session?.user) {
     return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 });
   }
   if (session.user.role !== 'SUPER_ADMIN') {
-    return NextResponse.json(
-      { error: 'SUPER_ADMIN_ONLY', hint: 'MC 法务 vault 仅老板可见' },
-      { status: 403 },
-    );
+    const isMcMember = await prisma.departmentMembership.findFirst({
+      where: {
+        userId: session.user.id,
+        department: { slug: 'mc-legal' },
+      },
+      select: { id: true },
+    });
+    if (!isMcMember) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', hint: 'MC 法务 vault 仅老板 + MC 法务部成员可见' },
+        { status: 403 },
+      );
+    }
   }
 
   const token = process.env.MC_VAULT_GITHUB_TOKEN;

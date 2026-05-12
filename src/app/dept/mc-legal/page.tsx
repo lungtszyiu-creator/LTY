@@ -19,9 +19,11 @@ const META = LEGAL_DEPT_META.mc;
 
 type TabKey = 'requests' | 'vault' | 'services' | 'ai' | 'notifications';
 
-const TABS: { key: TabKey; label: string; ready: boolean; superAdminOnly?: boolean }[] = [
+// vault tab 谁能看：MC 法务部成员（LEAD/MEMBER）+ SUPER_ADMIN
+// requireDeptView('mc-legal') 已经把非成员挡在门外，所以能进到这页就有看 vault 的资格
+const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'requests', label: '需求', ready: true },
-  { key: 'vault', label: '📁 vault 文档', ready: true, superAdminOnly: true },
+  { key: 'vault', label: '📁 vault 文档', ready: true },
   { key: 'services', label: '服务目录', ready: false },
   { key: 'ai', label: 'AI 问答', ready: false },
   { key: 'notifications', label: '通知', ready: false },
@@ -106,16 +108,11 @@ export default async function McLegalPage({
         <KpiCard label="紧急" value={urgentCount} accent={urgentCount > 0 ? 'rose' : 'sky'} />
       </section>
 
-      <TabBar current={tab} basePath={`/dept/${META.slug}`} isSuperAdmin={ctx.isSuperAdmin} />
+      <TabBar current={tab} basePath={`/dept/${META.slug}`} />
 
       <div className="mt-5">
         {tab === 'requests' && <LegalRequestList requests={rows} deptSlug={META.slug} canEdit={canEdit} />}
-        {tab === 'vault' && ctx.isSuperAdmin && <VaultBrowser />}
-        {tab === 'vault' && !ctx.isSuperAdmin && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50/40 px-6 py-12 text-center text-sm text-rose-700">
-            🔒 vault 文档仅老板可见
-          </div>
-        )}
+        {tab === 'vault' && <VaultBrowser />}
         {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
       </div>
 
@@ -135,18 +132,16 @@ export default async function McLegalPage({
 function TabBar({
   current,
   basePath,
-  isSuperAdmin,
 }: {
   current: TabKey;
   basePath: string;
-  isSuperAdmin: boolean;
 }) {
   return (
     <nav
       role="tablist"
       className="-mx-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-4 sm:mx-0 sm:rounded-xl sm:border sm:bg-white sm:px-1.5 sm:py-1"
     >
-      {TABS.filter((t) => !t.superAdminOnly || isSuperAdmin).map((t) => {
+      {TABS.map((t) => {
         const active = current === t.key;
         const href = t.key === 'requests' ? basePath : `${basePath}?tab=${t.key}`;
         return (
