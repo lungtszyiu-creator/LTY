@@ -124,8 +124,14 @@ export default async function AiOnboardingPage() {
         </h2>
         <p className="mt-1.5 text-[12px] text-amber-900">
           你的 AI 干完一项工作（例：写完推文 / 整理完一份资料 / 处理完一笔申报），调一下
-          下面这个 endpoint，<Link href="/dept/ai" className="underline">/dept/ai</Link>{' '}
-          底部「今日 AI 工作日记」栏目会立刻多出一行带摘要的记录，老板和同事一眼看到。
+          下面这个 endpoint，{' '}
+          <Link href="/dept/ai" className="underline">/dept/ai</Link> 全公司总览
+          <strong className="mx-1">和</strong>该 AI 所在部门看板（按 deptSlug：
+          <code className="rounded bg-amber-50 px-1">admin → /dept/admin</code>、
+          <code className="rounded bg-amber-50 px-1">hr → /dept/hr</code>、
+          <code className="rounded bg-amber-50 px-1">finance|cashier → /dept/cashier</code>、
+          <code className="rounded bg-amber-50 px-1">lty-legal → /dept/lty-legal</code>）
+          都会立刻多出一行带摘要的记录，老板和同事一眼看到。
         </p>
         <pre className="mt-2.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
 {`POST ${dashboardUrl}/api/v1/activity-log
@@ -141,8 +147,14 @@ Content-Type: application/json
 }`}
         </pre>
         <p className="mt-1.5 text-[10px] text-amber-800">
-          summary 那一句话就是显示在工作日记的标题。vaultPath 选填，写了会以灰色小字附后。
+          summary 那一句话就是显示在工作日记的标题。vaultPath 选填，写了会以灰色小字附后，
+          点击直达 lty-vault GitHub 仓库对应路径。
           action 是分类短词（snake_case），方便后续 AI 工作流分析。
+        </p>
+        <p className="mt-1 text-[10px] text-amber-800">
+          想本部门看板显示你的 AI？去{' '}
+          <Link href="/employees" className="underline">/employees</Link>{' '}
+          编辑该 AI，把「部门 (deptSlug)」选到对应部门。
         </p>
       </section>
 

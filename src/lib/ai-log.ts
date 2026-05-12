@@ -5,6 +5,8 @@
  * 这是看板"今日活动流"的数据来源，也是审计回溯的依据。
  */
 import { prisma } from './db';
+import { startOfTodayHk, endOfTodayHk } from './budget';
+import type { ActivityRow } from '@/components/ai-dashboard/AiActivityFeed';
 
 export type AiActivityInput = {
   aiRole: string;             // "voucher_clerk" | "chain_bookkeeper" | ...
@@ -55,4 +57,58 @@ export async function getRecentAiActivity(limit: number = 50) {
       apiKey: { select: { name: true, scope: true } },
     },
   });
+}
+
+/**
+ * 部门看板今日 AI 工作日记数据源。
+ *
+ * 老板 5/13：行政部 AI 自己上报的活动应在 /dept/admin 显示（不止 /dept/ai）。
+ * 按 AI 员工 deptSlug 过滤 —— 一个看板可对应多个 deptSlug（例如财务出纳看板
+ * 可能要同时显示 'finance' 与 'cashier'），所以传数组。
+ *
+ * 返回已序列化好的 ActivityRow[]（Date → ISO），server component 拿到直接
+ * 传给 <AiActivityFeed rows={...} />，跟 /dept/ai 同款数据形状。
+ */
+export async function getDeptAiActivitiesToday(
+  deptSlugs: string[],
+  opts: { take?: number } = {},
+): Promise<ActivityRow[]> {
+  if (deptSlugs.length === 0) return [];
+  const rows = await prisma.aiActivityLog.findMany({
+    where: {
+      createdAt: { gte: startOfTodayHk(), lt: endOfTodayHk() },
+      apiKey: {
+        is: {
+          aiEmployee: { is: { deptSlug: { in: deptSlugs } } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: opts.take ?? 200,
+    include: {
+      apiKey: {
+        select: {
+          name: true,
+          aiEmployee: { select: { name: true, role: true } },
+        },
+      },
+    },
+  });
+  return rows.map((a) => ({
+    id: a.id,
+    aiRole: a.aiRole,
+    action: a.action,
+    status: a.status,
+    payload: a.payload,
+    voucherId: a.voucherId,
+    chainTransactionId: a.chainTransactionId,
+    fxRateId: a.fxRateId,
+    reconciliationId: a.reconciliationId,
+    telegramSent: a.telegramSent,
+    vaultWritten: a.vaultWritten,
+    createdAt: a.createdAt.toISOString(),
+    employeeName: a.apiKey?.aiEmployee?.name ?? null,
+    employeeRole: a.apiKey?.aiEmployee?.role ?? null,
+    apiKeyName: a.apiKey?.name ?? null,
+  }));
 }

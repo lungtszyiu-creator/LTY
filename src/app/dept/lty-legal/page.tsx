@@ -14,6 +14,8 @@ import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
 import { VaultBrowser } from '@/components/vault/VaultBrowser';
+import { AiActivityFeed } from '@/components/ai-dashboard/AiActivityFeed';
+import { getDeptAiActivitiesToday } from '@/lib/ai-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +42,7 @@ export default async function LtyLegalPage({
   const tab: TabKey = TABS.some((t) => t.key === requested) ? requested : 'requests';
   const canEdit = ctx.level === 'LEAD' || ctx.isSuperAdmin;
 
-  const [openCount, urgentCount, inProgressCount, allRows] = await Promise.all([
+  const [openCount, urgentCount, inProgressCount, allRows, aiActivities] = await Promise.all([
     prisma.ltyLegalRequest.count({ where: { status: 'OPEN' } }),
     prisma.ltyLegalRequest.count({
       where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: 'URGENT' },
@@ -54,6 +56,7 @@ export default async function LtyLegalPage({
         assignee: { select: { id: true, name: true, email: true } },
       },
     }),
+    getDeptAiActivitiesToday(['lty-legal']),
   ]);
 
   const rows: LegalRequestRow[] = allRows.map((r) => ({
@@ -112,6 +115,11 @@ export default async function LtyLegalPage({
           />
         )}
         {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
+      </div>
+
+      {/* LTY 法务 AI 今日工作日记 — 老板 5/13：法务 AI 自报活动同步显示在本部门看板 + AI 部看板 */}
+      <div className="mt-6">
+        <AiActivityFeed rows={aiActivities} />
       </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
