@@ -272,9 +272,9 @@ Content-Type: application/json
           要把工作成果落成"看板上一条真实业务记录"（员工档案 / 凭证 / 工单 / 资产），
           各部门有专用 endpoint，写入后<strong>看板 KPI + 列表 + 详情页实时刷新</strong>，并自动写一条 activity-log。
         </p>
-        <ul className="mt-2 space-y-1.5 text-[11px] text-rose-900">
-          <li>
-            <strong>人事 · 入职建档：</strong>
+        <div className="mt-2 space-y-2 text-[11px] text-rose-900">
+          <div>
+            <strong>人事 · 入职建档（upsert）：</strong>
             {' '}<code className="rounded bg-rose-50 px-1">POST /api/v1/hr/employee-profile</code>
             {' / '}
             <code className="rounded bg-rose-50 px-1">PATCH /api/v1/hr/employee-profile/&lt;id&gt;</code>
@@ -282,17 +282,36 @@ Content-Type: application/json
               · scope <code className="rounded bg-rose-50 px-1">HR_AI:hr_onboard</code> /{' '}
               <code className="rounded bg-rose-50 px-1">HR_AI:hr_clerk</code> /{' '}
               <code className="rounded bg-rose-50 px-1">HR_ADMIN</code>
-              {' '}— body: <code className="rounded bg-rose-50 px-1">userEmail</code>{' '}或{' '}
-              <code className="rounded bg-rose-50 px-1">userId</code>{' '}+ position / hireDate / status...
             </span>
-          </li>
-          <li>
-            <span className="text-rose-700">
-              <strong>其他部门写 DB 接口</strong> — 财务凭证 / 行政证照资产 / 法务工单等：陆续补（按上面 HR 同模式抄）。
-              暂时可用 ② <code className="rounded bg-rose-50 px-1">vault/commit</code> 落 markdown 报告兜底。
-            </span>
-          </li>
-        </ul>
+          </div>
+          <pre className="overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`POST ${dashboardUrl}/api/v1/hr/employee-profile
+X-Api-Key: lty_xxxx... (HR_AI 权限)
+Content-Type: application/json
+
+{
+  "name": "张三",                  // 三选一：name / userEmail / userId（User 必须先存在）
+  "department": "产研部",
+  "position": "前端工程师",         // 也接受 positionTitle
+  "workType": "fulltime",          // fulltime/parttime/intern/contractor（也接受大写 FULL_TIME 等）
+  "location": "remote",            // remote/onsite
+  "joinDate": "2026-05-13",        // 也接受 hireDate
+  "status": "active"               // active/probation/resigned
+}
+
+→ 201 created（首次）或 200 updated（同 userId 已有档案，自动 upsert）`}
+          </pre>
+          <p className="text-[10px] text-rose-800">
+            • <strong>upsert 默认</strong>：同 userId 已有档案直接 update 返 200；要严格只创建传{' '}
+            <code className="rounded bg-rose-50 px-1">mode:"create"</code> 重复会 409。
+            • <strong>User 必须先存在</strong>：`name` 找不到或重名 → 404/422，提示传{' '}
+            <code className="rounded bg-rose-50 px-1">userEmail</code> 精确匹配。
+          </p>
+          <div className="border-t border-rose-200 pt-2 text-rose-700">
+            <strong>其他部门写 DB 接口</strong> — 财务凭证 / 行政证照资产 / 法务工单等：陆续补（按上面 HR 同模式抄）。
+            暂时可用 ② <code className="rounded bg-rose-50 px-1">vault/commit</code> 落 markdown 报告兜底。
+          </div>
+        </div>
       </section>
 
       {/* 步骤 ① · plugin schema */}

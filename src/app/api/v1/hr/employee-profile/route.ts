@@ -8,36 +8,43 @@
  * 这是「AI 把工作成果实际落到看板对应位置」这个 paradigm 的第一个具体落地。
  * 后续 行政 / 法务 / 财务 各部门按同样模式开类似端点。
  *
- * POST /api/v1/hr/employee-profile
+ * POST /api/v1/hr/employee-profile     —— 创建（同 userEmail 已有档案则自动 upsert update）
  *   X-Api-Key: lty_xxxx       (scope ∈ {HR_AI:hr_clerk, HR_AI:hr_onboard, HR_ADMIN})
- *   Body:
+ *   Body（兼容 Cici manus 的字段命名 + 大小写宽松）：
  *     {
- *       "userId": "cuid..." | "userEmail": "..." ,   // 二选一必填，先确保 User 存在
- *       "department": "营销部",                       // 选填
- *       "positionTitle": "市场专员",                  // 选填
- *       "employmentType": "FULL_TIME" | "PART_TIME" | "INTERN" | "CONTRACTOR",
- *       "workLocation": "ONSITE" | "REMOTE",
- *       "hireDate": "2026-05-13",                    // YYYY-MM-DD
+ *       // 用户身份：以下三个**至少传一个**
+ *       "userId": "cuid...",         // 精确匹配
+ *       "userEmail": "...@...",      // 推荐：HR 入职流程必有的工作邮箱
+ *       "name": "张三",              // 兜底：按姓名查 User 表，重名时拒
+ *
+ *       "department": "产研部",
+ *       "position": "前端工程师",    // 或 positionTitle，二选一
+ *       "workType": "fulltime",      // 或 employmentType；接受 fulltime/parttime/intern/contractor
+ *                                    // 也接受大写 FULL_TIME / PART_TIME / INTERN / CONTRACTOR
+ *       "location": "remote",        // 或 workLocation；接受 remote/onsite 或 REMOTE/ONSITE
+ *       "joinDate": "2026-05-13",    // 或 hireDate
  *       "probationEnd": "2026-08-13",
  *       "contractEnd": null,
- *       "idType": "ID_CARD" | "PASSPORT" | "WORK_PERMIT",
+ *       "idType": "ID_CARD",         // 接受 ID_CARD / PASSPORT / WORK_PERMIT
  *       "idNumber": "...",
  *       "idExpireAt": "2030-...",
- *       "status": "ACTIVE" | "PROBATION" | "RESIGNED",
+ *       "status": "active",          // 接受 active/probation/resigned 或大写 ACTIVE/PROBATION/RESIGNED
  *       "notes": "..."
  *     }
  *
  * 行为：
  *   1. requireApiKey 校验 scope（HR_AI:hr_clerk / HR_AI:hr_onboard / HR_ADMIN）
- *   2. userId 或 userEmail 至少一个；userEmail 优先解析到 userId
- *   3. 校验 User 存在 + 没有重复 HrEmployeeProfile（userId 唯一约束）
- *   4. zod 校验跟现有 Server Action profileSchema 对齐
- *   5. 写 HrEmployeeProfile + revalidatePath('/dept/hr', '/dept/hr/employees')
+ *   2. userId > userEmail > name 三级解析到 User
+ *   3. **upsert 模式**（默认）：同 userEmail 已存在 → 自动 update 返 200，不再 409
+ *      也可显式传 `mode: "create"` 强制只创建（重复返 409）
+ *   4. zod schema 双 alias 兼容 Cici spec + 老 LTY spec；值大小写双接受
+ *   5. revalidatePath('/dept/hr', '/dept/hr/employees') 看板实时刷新
  *   6. 顺手 logAiActivity → 自动出现在 /dept/ai 「今日 AI 工作日记」
  *
  * 返回：
- *   201 { ok: true, id, displayedAt: "/dept/hr/employees/<id>", aiActivityLogId }
- *   404 USER_NOT_FOUND / 409 PROFILE_ALREADY_EXISTS / 422 VALIDATION_FAILED
+ *   201 (created) / 200 (updated via upsert)
+ *   { ok, id, displayedAt, aiActivityLogId, action: "created" | "updated", echo: { name } }
+ *   404 USER_NOT_FOUND / 409 PROFILE_ALREADY_EXISTS (mode=create) / 422 NAME_AMBIGUOUS / VALIDATION_FAILED
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -51,27 +58,72 @@ export const dynamic = 'force-dynamic';
 
 const ALLOWED_SCOPES = ['HR_AI:hr_clerk', 'HR_AI:hr_onboard', 'HR_ADMIN'];
 
-const profileWriteSchema = z
+/** 把 Cici 风格的小写 alias 值映射到 DB 枚举大写值；已经大写则原样返回 */
+function normEmploymentType(v: string): string | null {
+  const lower = v.toLowerCase();
+  const map: Record<string, string> = {
+    fulltime: 'FULL_TIME',
+    full_time: 'FULL_TIME',
+    parttime: 'PART_TIME',
+    part_time: 'PART_TIME',
+    intern: 'INTERN',
+    contractor: 'CONTRACTOR',
+  };
+  return map[lower] ?? null;
+}
+function normWorkLocation(v: string): string | null {
+  const lower = v.toLowerCase();
+  const map: Record<string, string> = {
+    remote: 'REMOTE',
+    onsite: 'ONSITE',
+    on_site: 'ONSITE',
+  };
+  return map[lower] ?? null;
+}
+function normStatus(v: string): string | null {
+  const lower = v.toLowerCase();
+  const map: Record<string, string> = {
+    active: 'ACTIVE',
+    probation: 'PROBATION',
+    resigned: 'RESIGNED',
+  };
+  return map[lower] ?? null;
+}
+function normIdType(v: string): string | null {
+  const upper = v.toUpperCase();
+  return ['ID_CARD', 'PASSPORT', 'WORK_PERMIT'].includes(upper) ? upper : null;
+}
+
+const inputSchema = z
   .object({
+    // 身份
     userId: z.string().min(1).optional(),
     userEmail: z.string().email().optional(),
+    name: z.string().min(1).max(80).optional(),
+
+    // upsert 行为
+    mode: z.enum(['upsert', 'create']).optional(), // 默认 upsert
+
+    // 字段（双 alias）
     department: z.string().max(100).nullable().optional(),
+    position: z.string().max(100).nullable().optional(),
     positionTitle: z.string().max(100).nullable().optional(),
-    employmentType: z
-      .enum(['FULL_TIME', 'PART_TIME', 'INTERN', 'CONTRACTOR'])
-      .default('FULL_TIME'),
-    workLocation: z.enum(['ONSITE', 'REMOTE']).default('ONSITE'),
+    workType: z.string().nullable().optional(),
+    employmentType: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+    workLocation: z.string().nullable().optional(),
+    joinDate: z.string().nullable().optional(),
     hireDate: z.string().nullable().optional(),
     probationEnd: z.string().nullable().optional(),
     contractEnd: z.string().nullable().optional(),
-    idType: z.enum(['ID_CARD', 'PASSPORT', 'WORK_PERMIT']).nullable().optional(),
+    idType: z.string().nullable().optional(),
     idNumber: z.string().max(64).nullable().optional(),
     idExpireAt: z.string().nullable().optional(),
-    status: z.enum(['ACTIVE', 'PROBATION', 'RESIGNED']).default('ACTIVE'),
+    status: z.string().nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
   })
-  .refine((d) => d.userId || d.userEmail, {
-    message: 'userId 或 userEmail 至少要传一个',
+  .refine((d) => d.userId || d.userEmail || d.name, {
+    message: 'userId / userEmail / name 至少传一个用于定位 User',
     path: ['userId'],
   });
 
@@ -95,7 +147,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const parsed = profileWriteSchema.safeParse(body);
+  const parsed = inputSchema.safeParse(body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     return NextResponse.json(
@@ -108,9 +160,12 @@ export async function POST(req: NextRequest) {
     );
   }
   const d = parsed.data;
+  const mode = d.mode ?? 'upsert';
 
-  // userEmail → userId 解析（先查 User 表）
+  // ====== 1. 解析 userId（按优先级：userId > userEmail > name）======
   let userId = d.userId;
+  let resolvedBy: 'userId' | 'userEmail' | 'name' | null = userId ? 'userId' : null;
+
   if (!userId && d.userEmail) {
     const u = await prisma.user.findUnique({
       where: { email: d.userEmail },
@@ -126,6 +181,37 @@ export async function POST(req: NextRequest) {
       );
     }
     userId = u.id;
+    resolvedBy = 'userEmail';
+  }
+
+  if (!userId && d.name) {
+    // 按 name 模糊匹配（精确等值；考虑大小写不敏感的话生产环境通常用 ILIKE，但 Prisma 这里走 equals）
+    const candidates = await prisma.user.findMany({
+      where: { name: d.name.trim() },
+      select: { id: true, email: true, name: true },
+      take: 5,
+    });
+    if (candidates.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'USER_NOT_FOUND',
+          hint: `name="${d.name}" 找不到 User。先让管理员去 /admin/users 创建账号（系统不会自动建 User 防止账号失控），或本次调用同时传 userEmail。`,
+        },
+        { status: 404 },
+      );
+    }
+    if (candidates.length > 1) {
+      return NextResponse.json(
+        {
+          error: 'NAME_AMBIGUOUS',
+          hint: `name="${d.name}" 匹配到 ${candidates.length} 个 User，请改用 userEmail 或 userId 精确指定。`,
+          candidates: candidates.map((c) => ({ id: c.id, email: c.email, name: c.name })),
+        },
+        { status: 422 },
+      );
+    }
+    userId = candidates[0].id;
+    resolvedBy = 'name';
   }
 
   if (!userId) {
@@ -135,86 +221,183 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // userId 存在性校验
-  const userExists = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, name: true, email: true },
+  // ====== 2. 统一字段（合并 alias，归一大小写）======
+  const positionTitle = (d.position ?? d.positionTitle)?.trim() || null;
+  const employmentTypeRaw = d.workType ?? d.employmentType;
+  const workLocationRaw = d.location ?? d.workLocation;
+  const hireDateRaw = d.joinDate ?? d.hireDate;
+
+  let employmentType: string | undefined;
+  if (employmentTypeRaw) {
+    const v = normEmploymentType(employmentTypeRaw);
+    if (!v) {
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          hint: `workType/employmentType 值不合法：${employmentTypeRaw}。接受 fulltime/parttime/intern/contractor（或大写 FULL_TIME 等）`,
+        },
+        { status: 422 },
+      );
+    }
+    employmentType = v;
+  }
+
+  let workLocation: string | undefined;
+  if (workLocationRaw) {
+    const v = normWorkLocation(workLocationRaw);
+    if (!v) {
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          hint: `location/workLocation 值不合法：${workLocationRaw}。接受 remote/onsite（或大写）`,
+        },
+        { status: 422 },
+      );
+    }
+    workLocation = v;
+  }
+
+  let status: string | undefined;
+  if (d.status) {
+    const v = normStatus(d.status);
+    if (!v) {
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_FAILED',
+          hint: `status 值不合法：${d.status}。接受 active/probation/resigned（或大写）`,
+        },
+        { status: 422 },
+      );
+    }
+    status = v;
+  }
+
+  let idType: string | null | undefined;
+  if (d.idType !== undefined) {
+    if (d.idType === null) {
+      idType = null;
+    } else {
+      const v = normIdType(d.idType);
+      if (!v) {
+        return NextResponse.json(
+          {
+            error: 'VALIDATION_FAILED',
+            hint: `idType 值不合法：${d.idType}。接受 ID_CARD/PASSPORT/WORK_PERMIT（大小写均可）`,
+          },
+          { status: 422 },
+        );
+      }
+      idType = v;
+    }
+  }
+
+  // ====== 3. upsert 模式实现 ======
+  // 同 userId 已有档案：mode=upsert 走 update，mode=create 返 409
+  const existing = await prisma.hrEmployeeProfile.findUnique({
+    where: { userId },
+    select: { id: true },
   });
-  if (!userExists) {
+
+  if (existing && mode === 'create') {
     return NextResponse.json(
-      { error: 'USER_NOT_FOUND', hint: `userId=${userId} 不存在` },
-      { status: 404 },
+      {
+        error: 'PROFILE_ALREADY_EXISTS',
+        hint: '该 User 已有员工档案。改字段请用 PATCH /api/v1/hr/employee-profile/:id，或本次调用传 mode:"upsert"（默认）。',
+        existingProfileId: existing.id,
+      },
+      { status: 409 },
     );
   }
 
-  try {
-    const profile = await prisma.hrEmployeeProfile.create({
-      data: {
-        userId,
-        department: d.department?.trim() || null,
-        positionTitle: d.positionTitle?.trim() || null,
-        employmentType: d.employmentType,
-        workLocation: d.workLocation,
-        hireDate: parseDate(d.hireDate),
-        probationEnd: parseDate(d.probationEnd),
-        contractEnd: parseDate(d.contractEnd),
-        idType: d.idType ?? null,
-        idNumber: d.idNumber?.trim() || null,
-        idExpireAt: parseDate(d.idExpireAt),
-        status: d.status,
-        notes: d.notes?.trim() || null,
-      },
-      select: { id: true, createdAt: true },
-    });
+  // 用户档案 echo 用：取 User 名 + email
+  const userInfo = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true },
+  });
 
-    // 看板透明文化：HR Bot 写入也算一次"工作成果"，落到 /dept/ai 工作日记
+  // 拼写入 / 更新 data
+  const writeData = {
+    department: d.department?.trim() || null,
+    positionTitle,
+    employmentType: employmentType ?? (existing ? undefined : 'FULL_TIME'),
+    workLocation: workLocation ?? (existing ? undefined : 'ONSITE'),
+    hireDate: parseDate(hireDateRaw),
+    probationEnd: parseDate(d.probationEnd),
+    contractEnd: parseDate(d.contractEnd),
+    idType: idType ?? null,
+    idNumber: d.idNumber?.trim() || null,
+    idExpireAt: parseDate(d.idExpireAt),
+    status: status ?? (existing ? undefined : 'ACTIVE'),
+    notes: d.notes?.trim() || null,
+    // 离职状态自动写 resignedAt（切回非离职时清空）
+    resignedAt: status === 'RESIGNED' ? new Date() : status ? null : undefined,
+  };
+
+  try {
+    let profile;
+    let action: 'created' | 'updated';
+    if (existing) {
+      profile = await prisma.hrEmployeeProfile.update({
+        where: { id: existing.id },
+        data: writeData,
+        select: { id: true, updatedAt: true, createdAt: true },
+      });
+      action = 'updated';
+    } else {
+      profile = await prisma.hrEmployeeProfile.create({
+        data: {
+          userId,
+          ...writeData,
+          // create 时必填字段不能 undefined
+          employmentType: writeData.employmentType ?? 'FULL_TIME',
+          workLocation: writeData.workLocation ?? 'ONSITE',
+          status: writeData.status ?? 'ACTIVE',
+        },
+        select: { id: true, updatedAt: true, createdAt: true },
+      });
+      action = 'created';
+    }
+
     const aiActivityLogId = await logAiActivity({
       aiRole: 'hr_onboard',
-      action: 'create_hr_employee_profile',
+      action: action === 'created' ? 'create_hr_employee_profile' : 'update_hr_employee_profile',
       apiKeyId: auth.apiKeyId,
       payload: {
-        summary: `入职建档：${userExists.name ?? userExists.email}${d.positionTitle ? ` · ${d.positionTitle}` : ''}${d.department ? ` · ${d.department}` : ''}`,
+        summary: `${action === 'created' ? '入职建档' : '档案更新'}：${userInfo?.name ?? userInfo?.email ?? d.name ?? '?'}${positionTitle ? ` · ${positionTitle}` : ''}${d.department ? ` · ${d.department}` : ''}`,
         profileId: profile.id,
         userId,
-        status: d.status,
+        resolvedBy,
+        action,
       },
-    }).catch(() => null); // log 失败不阻塞主路径
+    }).catch(() => null);
 
-    // 触发 /dept/hr 看板数字 + 列表实时更新
     revalidatePath('/dept/hr');
     revalidatePath('/dept/hr/employees');
+    if (existing) revalidatePath(`/dept/hr/employees/${profile.id}`);
 
     return NextResponse.json(
       {
         ok: true,
         id: profile.id,
+        action,
+        resolvedBy,
+        echo: { name: userInfo?.name ?? d.name, email: userInfo?.email },
         createdAt: profile.createdAt.toISOString(),
+        updatedAt: profile.updatedAt.toISOString(),
         displayedAt: `/dept/hr/employees/${profile.id}`,
         aiActivityLogId,
-        hint: '档案已建，/dept/hr KPI 自动刷新；本次操作已记录到 /dept/ai 今日 AI 工作日记。',
+        hint:
+          action === 'created'
+            ? '档案已建，/dept/hr KPI 自动刷新；本次操作已记录到 /dept/ai 今日 AI 工作日记。'
+            : '档案已更新（同 userId 已有档案 → upsert），/dept/hr 实时刷新；本次操作已记录到 /dept/ai。',
       },
-      { status: 201 },
+      { status: action === 'created' ? 201 : 200 },
     );
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      // P2002 唯一约束冲突 = 该 User 已有档案
-      if (e.code === 'P2002') {
-        const existing = await prisma.hrEmployeeProfile.findUnique({
-          where: { userId },
-          select: { id: true },
-        });
-        return NextResponse.json(
-          {
-            error: 'PROFILE_ALREADY_EXISTS',
-            hint: '该 User 已有员工档案。要改字段请用 PATCH /api/v1/hr/employee-profile/:id',
-            existingProfileId: existing?.id ?? null,
-          },
-          { status: 409 },
-        );
-      }
       console.error('[hr/employee-profile POST] prisma:', e.code, e.message);
       return NextResponse.json(
-        { error: 'DB_ERROR', hint: e.message },
+        { error: 'DB_ERROR', code: e.code, hint: e.message },
         { status: 500 },
       );
     }
