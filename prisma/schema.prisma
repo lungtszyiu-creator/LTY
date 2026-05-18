@@ -169,6 +169,9 @@ model User {
   cashierReimbApproved   CashierReimbursement[]      @relation("CashierReimbApprover")
   cashierReconTasksOwned CashierReconciliationTask[] @relation("CashierReconTaskOwner")
   cashierComplianceOwned CashierComplianceEntry[]    @relation("CashierComplianceResponsible")
+
+  // AI 输出归集审核（5/18 起 · 防 vault 污染 paradigm）
+  aiOutputsReviewed AiOutput[] @relation("AiOutputReviewer")
 }
 
 // Audit trail for every change to a user's leave balances. Each entry is one
@@ -768,6 +771,8 @@ model ApiKey {
   activityLogs AiActivityLog[]
   // 一个 ApiKey 最多挂一个 AiEmployee（员工档案模块）
   aiEmployee   AiEmployee?
+  // AI 输出归集（5/18 起）—— 每条 AI 产出落地都关 key 做审计
+  aiOutputs    AiOutput[]
 
   @@index([scope, active])
 }
@@ -1483,6 +1488,69 @@ model LtyLegalRequest {
 // =====================================================
 // 法务部 · MC Markets 外包业务（物理隔离）
 // =====================================================
+
+// =====================================================
+// AI 输出归集（防 vault 污染 paradigm · 5/18 起）
+// =====================================================
+//
+// 痛点：vault (lty-vault GitHub repo) = "经人工整理后的目录"。AI 自动产出
+// 大量草稿（合同审查 3 文本 + 牌照答疑 + 周报）如果直接写 vault 会污染
+// 人工知识库。Maggie 5/18 反馈这是法务部 paradigm 的核心红线。
+//
+// 修法：AI 产出 → 本表 (reviewStatus=pending_human_review) → 人工审核 →
+// approved 后系统才自动 commit 到 vault。rejected 留 audit 不入 vault。
+//
+// 通用性：dept 用 String 字段（不绑 enum），初期只接 lty-legal / mc-legal
+// 8 个 Bot，后续行政/财务/HR Bot 想做"AI 输出 inbox 审核流"时直接复用本表。
+//
+// 容量：合同审查 3 个 50k 字符 + 30k sourceInput + 50k contentMarkdown
+// ≈ 230k 字符 / 行 → Postgres TEXT 类型无问题（理论 1GB/行）。
+// 旧 String? 默认 Postgres 是 TEXT；这里显式 @db.Text 让 Maggie 一眼看清楚。
+model AiOutput {
+  id String @id @default(cuid())
+
+  // Bot 提供的幂等 key（"lty-contract-2026-05-18T1234" 格式）；同 outputId
+  // 重复调用走 upsert，防 Bot 重试落两条
+  outputId String? @unique
+
+  // AI 来源识别
+  agentName  String // "LTY-合同审查" / "MC-牌照管家" 等 Bot 名（人类友好）
+  deptSlug   String // "lty-legal" / "mc-legal" / future "admin" / "hr" 等
+  outputType String // "contract_review" / "license_query" / "task_triage" / "weekly_report" / 自由 string
+
+  // 内容主体（合同审查走 3 文本；其他 type 只用 contentMarkdown）
+  title           String
+  contentMarkdown String  @db.Text // 主报告 50k
+  revisedDoc      String? @db.Text // 修订版 50k（contract_review 用）
+  cleanDoc        String? @db.Text // 签约版 50k（contract_review 用）
+  sourceInput     String? @db.Text // 原始输入 30k 留 audit
+  metadata        Json?
+  triggeredBy     String? // Telegram @username / 触发人标识
+
+  // 审核流（防 vault 污染核心）
+  reviewStatus String    @default("pending_human_review") // pending_human_review / approved / rejected
+  reviewedById String?
+  reviewedBy   User?     @relation("AiOutputReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  // approved 后系统自动 commit 到 vault 的痕迹（PR B 落地）
+  vaultPath        String?
+  vaultCommitSha   String?
+  vaultCommittedAt DateTime?
+
+  // AI 凭据 + 成本审计
+  apiKeyId     String?
+  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  tokenCostHkd Decimal? @db.Decimal(12, 6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deptSlug, reviewStatus, createdAt])
+  @@index([outputType])
+  @@index([reviewedById])
+}
 
 model McLegalRequest {
   id             String    @id @default(cuid())

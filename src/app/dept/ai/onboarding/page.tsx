@@ -117,14 +117,14 @@ export default async function AiOnboardingPage() {
         </div>
       </section>
 
-      {/* 三档写入 endpoint 总览 — 老板 5/13：行政 AI / HR Bot 都反馈"AI 干完没法把成果真落看板"
-          → 现在 3 个 endpoint 分场景用：日记 / 文件 / 部门专用 DB 表 */}
+      {/* 四档写入 endpoint 总览 — 老板 5/13 + Maggie 5/18 反馈：AI 直接写 vault
+          会污染人工目录。新增 ④ ai-outputs 走"先 inbox 后审批后入 vault"流。 */}
       <section className="mb-6 rounded-xl border-2 border-emerald-300 bg-emerald-50/60 p-4">
         <h2 className="text-sm font-semibold text-emerald-900">
-          🚀 AI 写入看板 · 三个接口对照表
+          🚀 AI 写入看板 · 四个接口对照表
         </h2>
         <p className="mt-1.5 text-[12px] text-emerald-900">
-          你的 AI 干完一项工作要把成果"交"到看板上，按 <strong>成果有多重</strong> 选 endpoint：
+          你的 AI 干完一项工作要把成果"交"到看板上，按 <strong>成果有多重 / 需不需要人工审批</strong> 选 endpoint：
         </p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-[11px]">
@@ -150,14 +150,31 @@ export default async function AiOnboardingPage() {
               </tr>
               <tr className="border-t border-emerald-200/60">
                 <td className="px-2 py-2 align-top">
-                  <strong>📁 真落一个文件到 vault</strong>
-                  <div className="text-[10px] text-emerald-700">报告 / markdown / PDF / 图片</div>
+                  <strong>📥 AI 输出待审 inbox</strong>{' '}
+                  <span className="ml-1 rounded-full bg-amber-200/70 px-1 py-0.5 text-[9px] font-medium text-amber-900">5/18 新</span>
+                  <div className="text-[10px] text-emerald-700">
+                    需人工审批后才入 vault — <strong>法务/合规高风险产出走这条</strong>（防污染人工目录）
+                  </div>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  <code className="rounded bg-white px-1">POST /api/v1/ai-outputs</code>
+                </td>
+                <td className="px-2 py-2 align-top">
+                  落 AiOutput 表 (pending) → /dept/&lt;部门&gt;?tab=ai-outputs 审核 → approved 后<strong>系统自动 commit 到 vault</strong>
+                </td>
+              </tr>
+              <tr className="border-t border-emerald-200/60">
+                <td className="px-2 py-2 align-top">
+                  <strong>📁 直接落 vault</strong>
+                  <div className="text-[10px] text-emerald-700">
+                    简单 markdown / PDF — <strong>不需要人工审批</strong>的常规归档（行政部审计报告等）
+                  </div>
                 </td>
                 <td className="px-2 py-2 align-top">
                   <code className="rounded bg-white px-1">POST /api/v1/vault/commit</code>
                 </td>
                 <td className="px-2 py-2 align-top">
-                  文件真提交 GitHub <code className="text-[10px]">lty-vault</code>；同时自动写一条 activity-log（不用重复调）；部门看板 vault tab + /dept/ai 日记 vaultPath 都可点
+                  文件提交 GitHub <code className="text-[10px]">lty-vault</code> 直入对应部门目录（法务部已禁此路径，强制走 ④ inbox）；自动写日记
                 </td>
               </tr>
               <tr className="border-t border-emerald-200/60">
@@ -176,9 +193,47 @@ export default async function AiOnboardingPage() {
           </table>
         </div>
         <p className="mt-2 text-[10px] text-emerald-800">
-          💡 三个接口可<strong>叠加</strong>：复杂工作（比如行政 AI 完成执照年检）= 先 <code className="rounded bg-white px-1">vault/commit</code>{' '}
-          落审计 PDF + 再 <code className="rounded bg-white px-1">activity-log</code> 补一条总结 ——
-          但单纯文件场景，<code className="rounded bg-white px-1">vault/commit</code> 已经自动写日记，无需重复调。
+          💡 <strong>怎么挑：</strong> AI 产出会进 vault 知识库吗？需要 → 走 ②（人工审批门）或 ③（绕过审批，慎用）；
+          不进 vault，只是看板业务记录 → 走 ④；只是日记，没文件没 DB → 走 ①。
+        </p>
+      </section>
+
+      {/* ② AI 输出审核 inbox（防 vault 污染）— Maggie 5/18 paradigm 修正后核心路径 */}
+      <section className="mb-6 rounded-xl border-2 border-amber-400 bg-amber-50/60 p-4">
+        <h2 className="text-sm font-semibold text-amber-900">
+          📥 ② AI 输出审核 inbox · <code className="rounded bg-amber-100 px-1.5 py-0.5">/api/v1/ai-outputs</code>
+          <span className="ml-2 rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[9px] font-medium text-amber-900">
+            5/18 新
+          </span>
+        </h2>
+        <p className="mt-1.5 text-[12px] text-amber-900">
+          法务合同审查 / MC 法务牌照答疑 / 跨部门高风险产出走这条 — <strong>不直接污染 vault</strong>。
+          AI 落到待审 inbox → 人工 approve → 系统自动 commit 到 vault `raw/&lt;部门&gt;/AI-审核通过/...`；
+          rejected 留 audit 不入 vault。一份 paradigm，所有部门通用。
+        </p>
+        <pre className="mt-2.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`POST ${dashboardUrl}/api/v1/ai-outputs
+X-Api-Key: lty_xxxx...  (任何 active AI 员工 key)
+Content-Type: application/json
+
+{
+  "output_id": "lty-contract-20260518T1234",   // 选填 · Bot 幂等 key, 同 id 重传 upsert
+  "agent_name": "LTY-合同审查",                 // 默认用 AI 员工档案 name
+  "output_type": "contract_review",            // 自由 string: contract_review/license_query/weekly_report 等
+  "title": "...",
+  "content_markdown": "主报告 markdown ...",    // 必填, 最长 50000 字符
+  "revised_contract": "修订版合同 ...",          // 选填, 最长 50000
+  "clean_contract": "签约版合同 ...",            // 选填, 最长 50000
+  "source_input": "原始输入留 audit",            // 选填, 最长 30000
+  "metadata": { "amount_cny": 100000, "risk_level": "high" },
+  "triggered_by": "@cici_username",
+  "token_cost_hkd": 0.456
+}`}
+        </pre>
+        <p className="mt-1.5 text-[10px] text-amber-800">
+          • <strong>review_status 由系统强制为 pending_human_review</strong>，AI 不能直接传 approved/rejected（防越权审批）。
+          • <strong>output_id 幂等</strong>：同 id 重传走 upsert（但已审核状态不允许覆盖，409）。
+          • <strong>deptSlug 自动用 AI 档案的</strong>，AI 不能写其他部门的 inbox（403 DEPT_MISMATCH）。
         </p>
       </section>
 
@@ -221,7 +276,7 @@ Content-Type: application/json
       {/* ② 重量级：vault/commit（文件真落进 lty-vault GitHub repo）*/}
       <section className="mb-6 rounded-xl border border-violet-300 bg-violet-100/40 p-4">
         <h2 className="text-sm font-semibold text-violet-900">
-          📁 ② 落文件 · <code className="rounded bg-violet-50 px-1.5 py-0.5">/api/v1/vault/commit</code>
+          📁 ③ 直接落 vault · <code className="rounded bg-violet-50 px-1.5 py-0.5">/api/v1/vault/commit</code>
           <span className="ml-2 rounded-full bg-violet-200/70 px-1.5 py-0.5 text-[9px] font-medium text-violet-900">
             5/13 新
           </span>
@@ -266,7 +321,7 @@ Content-Type: application/json
       {/* ③ 部门专用：DB 写入 endpoint（HR 已开 — 其他部门陆续补）*/}
       <section className="mb-6 rounded-xl border border-rose-300 bg-rose-100/40 p-4">
         <h2 className="text-sm font-semibold text-rose-900">
-          📋 ③ 写部门 DB 表 · <code className="rounded bg-rose-50 px-1.5 py-0.5">/api/v1/&lt;dept&gt;/&lt;resource&gt;</code>
+          📋 ④ 写部门 DB 表 · <code className="rounded bg-rose-50 px-1.5 py-0.5">/api/v1/&lt;dept&gt;/&lt;resource&gt;</code>
         </h2>
         <p className="mt-1.5 text-[12px] text-rose-900">
           要把工作成果落成"看板上一条真实业务记录"（员工档案 / 凭证 / 工单 / 资产），
