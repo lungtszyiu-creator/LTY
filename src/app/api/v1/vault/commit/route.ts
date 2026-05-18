@@ -50,13 +50,18 @@ export const dynamic = 'force-dynamic';
 const VAULT_OWNER = 'lungtszyiu-creator';
 const VAULT_REPO = 'lty-vault';
 
-/** deptSlug → 该 AI 允许的 vault path 前缀白名单（多个等价路径都允许） */
+/** deptSlug → 该 AI 允许的 vault path 前缀白名单（多个等价路径都允许）。
+ *
+ * 5/19 paradigm 修正：lty-legal / mc-legal 故意**不在此表** —— 法务部 AI
+ * 走 POST /api/v1/ai-outputs（先入 inbox 审核，approved 才系统自动 commit
+ * 到 vault），不直接写 vault 防污染人工知识库。详见 Maggie V5 反馈 +
+ * `feedback_lty_legal_dual_layer.md`。其他部门（admin/hr/finance/cashier/ai）
+ * 简单 markdown 归档仍可直接走本 endpoint，无需审批门。 */
 const DEPT_PATH_PREFIXES: Record<string, string[]> = {
   admin: ['raw/行政部/'],
   hr: ['raw/人事部/'],
   finance: ['raw/财务部/'],
   cashier: ['raw/财务部/'],
-  'lty-legal': ['raw/法务部/'],
   ai: ['raw/AI部/'],
 };
 
@@ -145,10 +150,21 @@ export async function POST(req: NextRequest) {
 
   const allowedPrefixes = DEPT_PATH_PREFIXES[deptSlug];
   if (!allowedPrefixes) {
+    // 法务部 (lty-legal / mc-legal) 显式拒绝 + 指路：走 ai-outputs 审核流，
+    // 不直接写 vault 防污染人工目录。
+    if (deptSlug === 'lty-legal' || deptSlug === 'mc-legal') {
+      return NextResponse.json(
+        {
+          error: 'DEPT_USES_REVIEW_FLOW',
+          hint: `法务部（${deptSlug}）AI 不能直接写 vault — 走 POST /api/v1/ai-outputs 落 inbox，人工审核 approved 后系统自动 commit 到 raw/法务部/AI-审核通过/...。详见 /dept/ai/onboarding`,
+        },
+        { status: 403 },
+      );
+    }
     return NextResponse.json(
       {
         error: 'DEPT_NOT_SUPPORTED',
-        hint: `部门 slug=${deptSlug} 暂无 vault 写入权限映射；MC 法务请走独立 mc-legal-vault repo`,
+        hint: `部门 slug=${deptSlug} 暂无 vault 写入权限映射`,
       },
       { status: 403 },
     );

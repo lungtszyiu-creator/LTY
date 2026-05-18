@@ -12,27 +12,38 @@ import { LegalRequestList } from '@/components/legal/LegalRequestList';
 import { DeptApiKeysCard } from '@/components/dept/DeptApiKeysCard';
 import { getScopeChoices } from '@/lib/scope-presets';
 import { VaultBrowser } from './_components/VaultBrowser';
+import { AiOutputsList } from '@/components/ai-outputs/AiOutputsList';
+import type { AiOutputRow } from '@/components/ai-outputs/types';
 
 export const dynamic = 'force-dynamic';
 
 const META = LEGAL_DEPT_META.mc;
 
-type TabKey = 'requests' | 'vault' | 'services' | 'ai' | 'notifications';
+type TabKey = 'requests' | 'vault' | 'ai-outputs' | 'services' | 'ai' | 'notifications';
 
 // vault tab 谁能看：MC 法务部成员（LEAD/MEMBER）+ SUPER_ADMIN
 // requireDeptView('mc-legal') 已经把非成员挡在门外，所以能进到这页就有看 vault 的资格
 const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'requests', label: '需求', ready: true },
   { key: 'vault', label: '📁 vault 文档', ready: true },
+  { key: 'ai-outputs', label: '📥 AI 输出审核', ready: true },
   { key: 'services', label: '服务目录', ready: false },
   { key: 'ai', label: 'AI 问答', ready: false },
   { key: 'notifications', label: '通知', ready: false },
 ];
 
+type AiOutputStatusFilter = 'pending_human_review' | 'approved' | 'rejected' | 'all';
+const VALID_STATUS_FILTERS: AiOutputStatusFilter[] = [
+  'pending_human_review',
+  'approved',
+  'rejected',
+  'all',
+];
+
 export default async function McLegalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; status?: string; id?: string }>;
 }) {
   const ctx = await requireDeptView(META.slug);
   const sp = await searchParams;
@@ -40,21 +51,48 @@ export default async function McLegalPage({
   const tab: TabKey = TABS.some((t) => t.key === requested) ? requested : 'requests';
   const canEdit = ctx.level === 'LEAD' || ctx.isSuperAdmin;
 
-  const [openCount, urgentCount, inProgressCount, allRows] = await Promise.all([
-    prisma.mcLegalRequest.count({ where: { status: 'OPEN' } }),
-    prisma.mcLegalRequest.count({
-      where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: 'URGENT' },
-    }),
-    prisma.mcLegalRequest.count({ where: { status: 'IN_PROGRESS' } }),
-    prisma.mcLegalRequest.findMany({
-      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
-      take: 100,
-      include: {
-        requester: { select: { id: true, name: true, email: true } },
-        assignee: { select: { id: true, name: true, email: true } },
-      },
-    }),
-  ]);
+  const aiOutputStatus: AiOutputStatusFilter =
+    sp.status && VALID_STATUS_FILTERS.includes(sp.status as AiOutputStatusFilter)
+      ? (sp.status as AiOutputStatusFilter)
+      : 'pending_human_review';
+  const aiOutputSelectedId = sp.id ?? null;
+  const aiOutputWhere = aiOutputStatus === 'all'
+    ? { deptSlug: 'mc-legal' }
+    : { deptSlug: 'mc-legal', reviewStatus: aiOutputStatus };
+
+  const [openCount, urgentCount, inProgressCount, allRows, aiOutputRows, aiOutputCounts] =
+    await Promise.all([
+      prisma.mcLegalRequest.count({ where: { status: 'OPEN' } }),
+      prisma.mcLegalRequest.count({
+        where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: 'URGENT' },
+      }),
+      prisma.mcLegalRequest.count({ where: { status: 'IN_PROGRESS' } }),
+      prisma.mcLegalRequest.findMany({
+        orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+        include: {
+          requester: { select: { id: true, name: true, email: true } },
+          assignee: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      tab === 'ai-outputs'
+        ? prisma.aiOutput.findMany({
+            where: aiOutputWhere,
+            orderBy: [{ reviewStatus: 'asc' }, { createdAt: 'desc' }],
+            take: 100,
+            include: {
+              reviewedBy: { select: { id: true, name: true, email: true } },
+            },
+          })
+        : Promise.resolve([]),
+      tab === 'ai-outputs'
+        ? prisma.aiOutput.groupBy({
+            by: ['reviewStatus'],
+            where: { deptSlug: 'mc-legal' },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
   const rows: LegalRequestRow[] = allRows.map((r) => ({
     id: r.id,
@@ -73,6 +111,43 @@ export default async function McLegalPage({
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }));
+
+  const aiOutputs: AiOutputRow[] = aiOutputRows.map((r) => ({
+    id: r.id,
+    outputId: r.outputId,
+    agentName: r.agentName,
+    deptSlug: r.deptSlug,
+    outputType: r.outputType,
+    title: r.title,
+    contentMarkdown: r.contentMarkdown,
+    revisedDoc: r.revisedDoc,
+    cleanDoc: r.cleanDoc,
+    sourceInput: r.sourceInput,
+    metadata: r.metadata,
+    triggeredBy: r.triggeredBy,
+    reviewStatus: r.reviewStatus as AiOutputRow['reviewStatus'],
+    reviewedBy: r.reviewedBy,
+    reviewedAt: r.reviewedAt?.toISOString() ?? null,
+    reviewNote: r.reviewNote,
+    vaultPath: r.vaultPath,
+    vaultCommitSha: r.vaultCommitSha,
+    vaultCommittedAt: r.vaultCommittedAt?.toISOString() ?? null,
+    tokenCostHkd: r.tokenCostHkd === null ? null : Number(r.tokenCostHkd),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+
+  const countMap: Record<string, number> = {};
+  for (const g of aiOutputCounts) countMap[g.reviewStatus] = g._count._all;
+  const totalsByStatus = {
+    pending_human_review: countMap.pending_human_review ?? 0,
+    approved: countMap.approved ?? 0,
+    rejected: countMap.rejected ?? 0,
+    all:
+      (countMap.pending_human_review ?? 0) +
+      (countMap.approved ?? 0) +
+      (countMap.rejected ?? 0),
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -113,7 +188,17 @@ export default async function McLegalPage({
       <div className="mt-5">
         {tab === 'requests' && <LegalRequestList requests={rows} deptSlug={META.slug} canEdit={canEdit} />}
         {tab === 'vault' && <VaultBrowser />}
-        {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
+        {tab === 'ai-outputs' && (
+          <AiOutputsList
+            rows={aiOutputs}
+            basePath={`/dept/${META.slug}`}
+            statusFilter={aiOutputStatus}
+            totalsByStatus={totalsByStatus}
+            canReview={canEdit}
+            selectedId={aiOutputSelectedId}
+          />
+        )}
+        {tab !== 'requests' && tab !== 'vault' && tab !== 'ai-outputs' && <StubTab tabKey={tab} />}
       </div>
 
       {(ctx.isSuperAdmin || ctx.level === 'LEAD') && (
@@ -174,6 +259,7 @@ function StubTab({ tabKey }: { tabKey: TabKey }) {
   const map: Record<TabKey, string> = {
     requests: '',
     vault: '',
+    'ai-outputs': '',
     services: 'MC Markets 法务服务目录 — v1.1 上线',
     ai: 'AI 法务助手对话窗口 — v1.1 上线（独立 MC Coze workspace）',
     notifications: '法务通知流 — v1.1 上线',
