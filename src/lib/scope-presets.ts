@@ -41,12 +41,14 @@ export const SCOPE_PRESETS: ScopePreset[] = [
   // ⚖️ LTY 法务
   { group: '⚖️ LTY 法务部', prefix: 'LTY_LEGAL_', value: 'LTY_LEGAL_AI:legal_clerk', label: 'LTY 法务工单', desc: '写 LtyLegalRequest' },
   { group: '⚖️ LTY 法务部', prefix: 'LTY_LEGAL_', value: 'LTY_LEGAL_AI:assistant', label: 'LTY 法务助手（v1.1）', desc: 'AI 问答 + 服务目录' },
+  { group: '⚖️ LTY 法务部', prefix: 'LTY_LEGAL_', value: 'LTY_LEGAL_VAULT_READ', label: 'LTY 法务 vault 只读', desc: '专用：仅可调 /api/v1/vault/search 检索本部门档案' },
   { group: '⚖️ LTY 法务部', prefix: 'LTY_LEGAL_', value: 'LTY_LEGAL_ADMIN', label: '👑 LTY 法务全权', desc: 'LTY 法务全读写（慎发）', danger: true },
   { group: '⚖️ LTY 法务部', prefix: 'LTY_LEGAL_', value: 'LTY_LEGAL_READONLY', label: 'LTY 法务只读', desc: '看板被动展示用' },
 
   // 🔒 MC 法务（隔离）
   { group: '🔒 MC 法务部（隔离）', prefix: 'MC_LEGAL_', value: 'MC_LEGAL_AI:legal_clerk', label: 'MC 法务工单', desc: '写 McLegalRequest（与 LTY 隔离）' },
   { group: '🔒 MC 法务部（隔离）', prefix: 'MC_LEGAL_', value: 'MC_LEGAL_AI:assistant', label: 'MC 法务助手（v1.1）', desc: '独立 MC Coze workspace' },
+  { group: '🔒 MC 法务部（隔离）', prefix: 'MC_LEGAL_', value: 'MC_LEGAL_VAULT_READ', label: 'MC 法务 vault 只读', desc: '专用：仅可调 /api/v1/vault/search 检索本部门档案' },
   { group: '🔒 MC 法务部（隔离）', prefix: 'MC_LEGAL_', value: 'MC_LEGAL_ADMIN', label: '👑 MC 法务全权', desc: 'MC 法务全读写（慎发，红线）', danger: true },
   { group: '🔒 MC 法务部（隔离）', prefix: 'MC_LEGAL_', value: 'MC_LEGAL_READONLY', label: 'MC 法务只读', desc: '看板被动展示用' },
 
