@@ -2,24 +2,36 @@
  * MC 法务部 · 需求工单 API
  *
  * GET  /api/dept/mc-legal/requests — 列表（人 session OR MC_LEGAL_READONLY）
- * POST /api/dept/mc-legal/requests — AI 创建工单（MC_LEGAL_AI:legal_clerk / MC_LEGAL_ADMIN）
+ * POST /api/dept/mc-legal/requests — AI 创建工单
  *
- * 物理隔离铁律：操作 McLegalRequest，不与 LTY 共表。Coze workspace 也独立
- * （AI 员工与 LTY 法务的不是同一个 agent）。
+ * 5/19 PR C：body 接受 Maggie V5 spec alias（同 lty-legal）。扩 POST scope
+ * 允许 ADMIN + assistant key 调。详见 lib/legal-request-input.ts。
+ *
+ * 物理隔离铁律：操作 McLegalRequest，不与 LTY 共表。Coze workspace 也独立。
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireDeptAuthOrApiKey } from '@/lib/dept-access';
 import { logAiActivity } from '@/lib/ai-log';
+import {
+  legalRequestCreateInputSchema,
+  resolveLegalRequestInput,
+} from '@/lib/legal-request-input';
 
 export const dynamic = 'force-dynamic';
+
+const POST_ALLOWED_SCOPES = [
+  'MC_LEGAL_AI:legal_clerk',
+  'MC_LEGAL_AI:assistant',
+  'MC_LEGAL_ADMIN',
+];
 
 export async function GET(req: NextRequest) {
   const auth = await requireDeptAuthOrApiKey(req, 'mc-legal', [
     'MC_LEGAL_AI:legal_clerk',
     'MC_LEGAL_AI:assistant',
     'MC_LEGAL_READONLY',
+    'MC_LEGAL_ADMIN',
   ]);
   if (auth instanceof NextResponse) return auth;
 
@@ -40,31 +52,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ requests, _auth: auth.kind });
 }
 
-const createSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().max(4000).optional().nullable(),
-  category: z
-    .enum(['CONTRACT_REVIEW', 'IP', 'COMPLIANCE', 'DISPUTE', 'OTHER'])
-    .optional()
-    .nullable(),
-  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
-  requesterId: z.string().min(1),
-  assigneeId: z.string().optional().nullable(),
-  notes: z.string().max(2000).optional().nullable(),
-  vaultPath: z.string().max(500).optional().nullable(),
-});
-
 export async function POST(req: NextRequest) {
-  const auth = await requireDeptAuthOrApiKey(
-    req,
-    'mc-legal',
-    ['MC_LEGAL_AI:legal_clerk'],
-    'EDIT',
-  );
+  const auth = await requireDeptAuthOrApiKey(req, 'mc-legal', POST_ALLOWED_SCOPES, 'EDIT');
   if (auth instanceof NextResponse) return auth;
 
   const body = await req.json().catch(() => ({}));
-  const parsed = createSchema.safeParse(body);
+  const parsed = legalRequestCreateInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -75,22 +68,50 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const d = parsed.data;
-  const aiRole = auth.kind === 'apikey' ? auth.ctx.scope.replace('MC_LEGAL_AI:', '') : null;
-  const requesterId =
-    auth.kind === 'session' ? auth.userId : d.requesterId.trim();
+  const resolved = await resolveLegalRequestInput({
+    body: parsed.data,
+    expectedDeptSlug: 'mc-legal',
+    sessionUserId: auth.kind === 'session' ? auth.userId : null,
+  });
+  if (!resolved.ok) {
+    return NextResponse.json(
+      {
+        error: resolved.error.code,
+        field: resolved.error.field,
+        hint: resolved.error.hint,
+        candidates: resolved.error.candidates,
+      },
+      { status: 422 },
+    );
+  }
+  const d = resolved.data;
+
+  let aiRole: string | null = null;
+  if (auth.kind === 'apikey') {
+    const scope = auth.ctx.scope;
+    if (scope.startsWith('MC_LEGAL_AI:')) {
+      aiRole = scope.slice('MC_LEGAL_AI:'.length);
+    } else if (scope === 'MC_LEGAL_ADMIN') {
+      aiRole = 'admin';
+    } else {
+      aiRole = scope;
+    }
+    if (parsed.data.source && parsed.data.source.trim() && parsed.data.source.trim() !== 'ai_bot') {
+      aiRole = parsed.data.source.trim();
+    }
+  }
 
   const created = await prisma.mcLegalRequest.create({
     data: {
       title: d.title,
-      description: d.description?.trim() || null,
-      category: d.category || null,
+      description: d.description,
+      category: d.category,
       priority: d.priority,
       status: 'OPEN',
-      requesterId,
-      assigneeId: d.assigneeId?.trim() || null,
-      notes: d.notes?.trim() || null,
-      vaultPath: d.vaultPath?.trim() || null,
+      requesterId: d.requesterId,
+      assigneeId: d.assigneeId,
+      notes: d.notes,
+      vaultPath: d.vaultPath,
       createdByAi: aiRole,
     },
   });
@@ -100,7 +121,13 @@ export async function POST(req: NextRequest) {
       aiRole: aiRole ?? 'unknown',
       action: 'create_mc_legal_request',
       apiKeyId: auth.ctx.apiKeyId,
-      payload: { id: created.id, title: created.title, priority: created.priority },
+      payload: {
+        summary: `创建 MC 法务工单：${created.title}`,
+        id: created.id,
+        priority: created.priority,
+        category: created.category,
+        resolvedBy: resolved.resolvedBy,
+      },
     });
   }
 
