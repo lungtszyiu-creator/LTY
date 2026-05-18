@@ -16,25 +16,36 @@ import { getScopeChoices } from '@/lib/scope-presets';
 import { VaultBrowser } from '@/components/vault/VaultBrowser';
 import { AiActivityFeed } from '@/components/ai-dashboard/AiActivityFeed';
 import { getDeptAiActivitiesToday } from '@/lib/ai-log';
+import { AiOutputsList } from '@/components/ai-outputs/AiOutputsList';
+import type { AiOutputRow } from '@/components/ai-outputs/types';
 
 export const dynamic = 'force-dynamic';
 
 const META = LEGAL_DEPT_META.lty;
 
-type TabKey = 'requests' | 'vault' | 'services' | 'ai' | 'notifications';
+type TabKey = 'requests' | 'vault' | 'ai-outputs' | 'services' | 'ai' | 'notifications';
 
 const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'requests', label: '需求', ready: true },
   { key: 'vault', label: '📁 vault 文档', ready: true },
+  { key: 'ai-outputs', label: '📥 AI 输出审核', ready: true },
   { key: 'services', label: '服务目录', ready: false },
   { key: 'ai', label: 'AI 问答', ready: false },
   { key: 'notifications', label: '通知', ready: false },
 ];
 
+type AiOutputStatusFilter = 'pending_human_review' | 'approved' | 'rejected' | 'all';
+const VALID_STATUS_FILTERS: AiOutputStatusFilter[] = [
+  'pending_human_review',
+  'approved',
+  'rejected',
+  'all',
+];
+
 export default async function LtyLegalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; status?: string; id?: string }>;
 }) {
   const ctx = await requireDeptView(META.slug);
   const sp = await searchParams;
@@ -42,22 +53,53 @@ export default async function LtyLegalPage({
   const tab: TabKey = TABS.some((t) => t.key === requested) ? requested : 'requests';
   const canEdit = ctx.level === 'LEAD' || ctx.isSuperAdmin;
 
-  const [openCount, urgentCount, inProgressCount, allRows, aiActivities] = await Promise.all([
-    prisma.ltyLegalRequest.count({ where: { status: 'OPEN' } }),
-    prisma.ltyLegalRequest.count({
-      where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: 'URGENT' },
-    }),
-    prisma.ltyLegalRequest.count({ where: { status: 'IN_PROGRESS' } }),
-    prisma.ltyLegalRequest.findMany({
-      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
-      take: 100,
-      include: {
-        requester: { select: { id: true, name: true, email: true } },
-        assignee: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    getDeptAiActivitiesToday(['lty-legal']),
-  ]);
+  // AI 输出审核 tab 的过滤参数
+  const aiOutputStatus: AiOutputStatusFilter =
+    sp.status && VALID_STATUS_FILTERS.includes(sp.status as AiOutputStatusFilter)
+      ? (sp.status as AiOutputStatusFilter)
+      : 'pending_human_review';
+  const aiOutputSelectedId = sp.id ?? null;
+
+  const aiOutputWhere = aiOutputStatus === 'all'
+    ? { deptSlug: 'lty-legal' }
+    : { deptSlug: 'lty-legal', reviewStatus: aiOutputStatus };
+
+  const [openCount, urgentCount, inProgressCount, allRows, aiActivities, aiOutputRows, aiOutputCounts] =
+    await Promise.all([
+      prisma.ltyLegalRequest.count({ where: { status: 'OPEN' } }),
+      prisma.ltyLegalRequest.count({
+        where: { status: { in: ['OPEN', 'IN_PROGRESS'] }, priority: 'URGENT' },
+      }),
+      prisma.ltyLegalRequest.count({ where: { status: 'IN_PROGRESS' } }),
+      prisma.ltyLegalRequest.findMany({
+        orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+        include: {
+          requester: { select: { id: true, name: true, email: true } },
+          assignee: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      getDeptAiActivitiesToday(['lty-legal']),
+      // 只有 tab=ai-outputs 时才真查（其他 tab 列表不需要）
+      tab === 'ai-outputs'
+        ? prisma.aiOutput.findMany({
+            where: aiOutputWhere,
+            orderBy: [{ reviewStatus: 'asc' }, { createdAt: 'desc' }],
+            take: 100,
+            include: {
+              reviewedBy: { select: { id: true, name: true, email: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // counts by status（每个 tab 都查一次，让 chip 显示数字）
+      tab === 'ai-outputs'
+        ? prisma.aiOutput.groupBy({
+            by: ['reviewStatus'],
+            where: { deptSlug: 'lty-legal' },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
   const rows: LegalRequestRow[] = allRows.map((r) => ({
     id: r.id,
@@ -76,6 +118,45 @@ export default async function LtyLegalPage({
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }));
+
+  // 序列化 AiOutput rows (Date → ISO; Decimal → number)
+  const aiOutputs: AiOutputRow[] = aiOutputRows.map((r) => ({
+    id: r.id,
+    outputId: r.outputId,
+    agentName: r.agentName,
+    deptSlug: r.deptSlug,
+    outputType: r.outputType,
+    title: r.title,
+    contentMarkdown: r.contentMarkdown,
+    revisedDoc: r.revisedDoc,
+    cleanDoc: r.cleanDoc,
+    sourceInput: r.sourceInput,
+    metadata: r.metadata,
+    triggeredBy: r.triggeredBy,
+    reviewStatus: r.reviewStatus as AiOutputRow['reviewStatus'],
+    reviewedBy: r.reviewedBy,
+    reviewedAt: r.reviewedAt?.toISOString() ?? null,
+    reviewNote: r.reviewNote,
+    vaultPath: r.vaultPath,
+    vaultCommitSha: r.vaultCommitSha,
+    vaultCommittedAt: r.vaultCommittedAt?.toISOString() ?? null,
+    tokenCostHkd: r.tokenCostHkd === null ? null : Number(r.tokenCostHkd),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+
+  // count chip 数字
+  const countMap: Record<string, number> = {};
+  for (const g of aiOutputCounts) countMap[g.reviewStatus] = g._count._all;
+  const totalsByStatus = {
+    pending_human_review: countMap.pending_human_review ?? 0,
+    approved: countMap.approved ?? 0,
+    rejected: countMap.rejected ?? 0,
+    all:
+      (countMap.pending_human_review ?? 0) +
+      (countMap.approved ?? 0) +
+      (countMap.rejected ?? 0),
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -114,7 +195,17 @@ export default async function LtyLegalPage({
             repoUrl="https://github.com/lungtszyiu-creator/lty-vault/tree/main/raw/%E6%B3%95%E5%8A%A1%E9%83%A8"
           />
         )}
-        {tab !== 'requests' && tab !== 'vault' && <StubTab tabKey={tab} />}
+        {tab === 'ai-outputs' && (
+          <AiOutputsList
+            rows={aiOutputs}
+            basePath={`/dept/${META.slug}`}
+            statusFilter={aiOutputStatus}
+            totalsByStatus={totalsByStatus}
+            canReview={canEdit}
+            selectedId={aiOutputSelectedId}
+          />
+        )}
+        {tab !== 'requests' && tab !== 'vault' && tab !== 'ai-outputs' && <StubTab tabKey={tab} />}
       </div>
 
       {/* LTY 法务 AI 今日工作日记 — 老板 5/13：法务 AI 自报活动同步显示在本部门看板 + AI 部看板 */}
@@ -174,6 +265,7 @@ function StubTab({ tabKey }: { tabKey: TabKey }) {
   const map: Record<TabKey, string> = {
     requests: '',
     vault: '',
+    'ai-outputs': '',
     services: '常见法务服务目录（合同模板 / 知产申请 / 合规检查 / 争议处理）— v1.1 上线',
     ai: 'AI 法务助手对话窗口 — v1.1 上线（接 Coze plugin）',
     notifications: '法务通知流（@assignee / 状态变更 / 截止日提醒）— v1.1 上线',
