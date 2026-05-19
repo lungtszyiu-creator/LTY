@@ -171,6 +171,34 @@ async function fetchBlobText(
   }
 }
 
+/**
+ * 拉单文件最后一次 commit 的 author date（用于 updated_at）
+ * v1.1 with_mtime=true 时按 result 数量调用（N+1，注意 rate limit）。
+ */
+async function fetchLastCommitDate(
+  repo: string,
+  path: string,
+  token: string,
+): Promise<string | null> {
+  const encodedPath = encodeURIComponent(path);
+  const url = `https://api.github.com/repos/${OWNER}/${repo}/commits?path=${encodedPath}&per_page=1`;
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      cache: 'no-store',
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as Array<{ commit?: { author?: { date?: string } } }>;
+    return data?.[0]?.commit?.author?.date ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 从 path 推导 category（pathPrefix 之后的第一段） */
 function deriveCategory(path: string, pathPrefix: string): string {
   const rel = pathPrefix && path.startsWith(pathPrefix) ? path.slice(pathPrefix.length) : path;
@@ -275,6 +303,8 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim() || null;
   const limitRaw = req.nextUrl.searchParams.get('limit');
   const limit = Math.min(Math.max(parseInt(limitRaw || '5', 10) || 5, 1), 20);
+  // v1.1: with_mtime opt-in 返 updated_at（每 result 1 次 GitHub Commits API 调用，注意 rate limit）
+  const withMtime = req.nextUrl.searchParams.get('with_mtime') === 'true';
 
   // 5. 拉树
   const treeOrErr = await fetchRepoTree(cfg.repo, cfg.token);
@@ -322,6 +352,7 @@ export async function GET(req: NextRequest) {
   const topMatches = nameMatches.slice(0, limit);
 
   // 9. 取 content_snippet（仅 text 文件，前 500 字）
+  //    v1.1: withMtime=true 时同时取 updated_at（每 result 多 1 次 GitHub Commits API 调用）
   const results = await Promise.all(
     topMatches.map(async (entry) => {
       let snippet = '';
@@ -340,14 +371,17 @@ export async function GET(req: NextRequest) {
         .split('/')
         .map((s) => encodeURIComponent(s))
         .join('/');
+      // updated_at 仅在 with_mtime=true 时调；默认 null 省 N+1 GitHub Commits API 调用
+      const updatedAt = withMtime
+        ? await fetchLastCommitDate(cfg.repo, entry.path, cfg.token!)
+        : null;
       return {
         doc_id: entry.sha,
         title: deriveTitle(entry.path),
         category: deriveCategory(entry.path, cfg.pathPrefix),
         file_url: `https://github.com/${OWNER}/${cfg.repo}/blob/main/${encodedPath}`,
         content_snippet: snippet,
-        // updated_at: v1.1 加 — 需额外 commits API 调用，省成本暂不传
-        updated_at: null,
+        updated_at: updatedAt,
         path: entry.path,
         size_bytes: entry.size ?? 0,
       };
@@ -361,9 +395,11 @@ export async function GET(req: NextRequest) {
     category,
     q,
     limit,
+    with_mtime: withMtime,
     hint:
       'file_url 是 GitHub web 链接（私有 repo，需 Maggie 本地配 GitHub PAT 才能打开）。'
       + ' 若 AI 需要文件正文：（a）markdown 已在 content_snippet 前 500 字；'
-      + '（b）大文件 / PDF 待 v1.1 加 /api/v1/vault/file?path=... proxy endpoint。',
+      + '（b）PDF / docx 调 GET /api/v1/vault/file?dept=...&path=... 拿抽好的纯文本（v1.1 已上线）。'
+      + ' 需要修改时间加 with_mtime=true（每 result 多 1 次 GitHub 调用，限频时建议关）。',
   });
 }

@@ -350,6 +350,87 @@ Content-Type: application/json
         </ul>
       </section>
 
+      {/* ⑤ vault 只读检索 + ⑥ 单文件正文 — Maggie V5.2 / 5/19 v1.1 法务"管家"答疑路径 */}
+      <section className="mb-6 rounded-xl border-2 border-sky-300 bg-sky-50/60 p-4">
+        <h2 className="text-sm font-semibold text-sky-900">
+          🔍 AI 读 vault · 两个只读接口（法务证照管家 / MC 牌照管家用）
+          <span className="ml-2 rounded-full bg-sky-200/70 px-1.5 py-0.5 text-[9px] font-medium text-sky-900">
+            5/19 v1.1
+          </span>
+        </h2>
+        <p className="mt-1.5 text-[12px] text-sky-900">
+          法务"管家"类 AI 员工答疑（&ldquo;商业登记证什么时候到期？&rdquo; / &ldquo;装修发票在哪？&rdquo; / &ldquo;营业执照号是多少？&rdquo;）需要
+          <strong>只读</strong>vault 已有档案。两个 endpoint 配合用：
+          <strong className="ml-1">⑤ 检索</strong>找到候选文件 →
+          <strong className="ml-1">⑥ 单文件深读</strong>拿正文做精准回答。
+        </p>
+
+        {/* ⑤ vault/search */}
+        <div className="mt-3 rounded-lg border border-sky-200 bg-white/60 p-3">
+          <h3 className="text-[12px] font-semibold text-sky-900">
+            ⑤ vault 检索 · <code className="rounded bg-sky-100 px-1">GET /api/v1/vault/search</code>
+          </h3>
+          <pre className="mt-1.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`GET ${dashboardUrl}/api/v1/vault/search?dept=lty-legal&category=证照&q=登记证&limit=5&with_mtime=true
+X-Api-Key: lty_xxx  (或 X-Read-Key, 等价 alias)`}
+          </pre>
+          <p className="mt-1.5 text-[10px] text-sky-800">
+            • <strong>dept</strong> 必填，接受 <code className="rounded bg-sky-50 px-1">lty-legal / mc-legal / 法务部 / MC法务 / LTY_LEGAL / MC_LEGAL</code>
+            <br />
+            • <strong>category</strong> 选填，按 vault 第一级目录过滤（LTY: 证照/合同/票据/声明/争议诉讼）
+            <br />
+            • <strong>q</strong> 选填，模糊匹配路径 + 文本文件正文
+            <br />
+            • <strong>limit</strong> 默认 5，最大 20
+            <br />
+            • <strong>with_mtime=true</strong> 选填 v1.1，返每个 result 的最后 commit 时间（每 result 多 1 次 GitHub 调用，限频时建议关）
+          </p>
+          <p className="mt-1 text-[10px] text-sky-800">
+            返回 <code className="rounded bg-sky-50 px-1">results[]</code>：
+            doc_id / title / category / file_url / content_snippet（前 500 字摘要）/ path / size_bytes / updated_at
+          </p>
+        </div>
+
+        {/* ⑥ vault/file（5/19 v1.1）*/}
+        <div className="mt-3 rounded-lg border border-sky-200 bg-white/60 p-3">
+          <h3 className="text-[12px] font-semibold text-sky-900">
+            ⑥ vault 单文件正文 · <code className="rounded bg-sky-100 px-1">GET /api/v1/vault/file</code>
+            <span className="ml-2 rounded-full bg-sky-200/70 px-1.5 py-0.5 text-[9px] font-medium text-sky-900">
+              5/19 v1.1 新
+            </span>
+          </h3>
+          <p className="mt-1.5 text-[11px] text-sky-900">
+            vault/search 给的 content_snippet 对 PDF 只有 <code className="rounded bg-sky-50 px-1">[PDF 文件] 文件名</code>，
+            AI 答不了 &ldquo;营业执照号是多少 / 注册资本多少 / 到期日&rdquo; 这类需要正文的问题。本 endpoint 给 path
+            返完整文本（PDF 抽文字 / docx 抽文字 / markdown 原文）。
+          </p>
+          <pre className="mt-1.5 overflow-x-auto rounded bg-slate-900 p-3 font-mono text-[10.5px] leading-relaxed text-slate-100">
+{`GET ${dashboardUrl}/api/v1/vault/file?dept=lty-legal&path=raw/法务部/证照/LTY-HK-BR-2024.pdf
+X-Api-Key: lty_xxx  (或 X-Read-Key)`}
+          </pre>
+          <p className="mt-1.5 text-[10px] text-sky-800">
+            • <strong>dept</strong> + <strong>path</strong> 必填，path 必须落在 dept pathPrefix 下（LTY key 读 MC vault 返 403 PATH_OUT_OF_DEPT）
+            <br />
+            • 支持：.pdf（pdf-parse 抽文本）/ .docx（mammoth 抽文本）/ .md / .markdown / .txt / .json / .yaml
+            <br />
+            • 不支持：.doc 老格式 / .xlsx / 图片 — 返占位字符串（要原文件请用 file_url 在 GitHub 看）
+            <br />
+            • 文本上限 500k 字符；超长返 <code className="rounded bg-sky-50 px-1">truncated: true</code>
+            <br />
+            • 单文件 raw 上限 20MB；超过返 413
+          </p>
+          <p className="mt-1 text-[10px] text-sky-800">
+            返回字段：path / mime_type / content_text / size_bytes / sha / updated_at / truncated / extracted_via（pdf-parse | mammoth | raw | placeholder）
+          </p>
+        </div>
+
+        <p className="mt-2.5 text-[10px] text-sky-800">
+          🔐 <strong>物理隔离</strong>：lty-legal → <code className="rounded bg-sky-50 px-1">lty-vault</code> repo（VAULT_GITHUB_TOKEN）；
+          mc-legal → <code className="rounded bg-sky-50 px-1">mc-legal-vault</code> repo（MC_VAULT_GITHUB_TOKEN）。
+          两套 token 独立，scope 跟 dept 强校验（403 SCOPE_DEPT_MISMATCH）。
+        </p>
+      </section>
+
       {/* 步骤 ① · plugin schema */}
       <CozePluginSchemaCard tokenUsageUrl={tokenUsageUrl} />
 
