@@ -1860,3 +1860,51 @@ model CashierMonthlySettlement {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }
+
+// ============ 2026-06-24 加: TG 集成完善 ============
+// (Codex review 提的 architecture debt 1.1 / 1.2 — 实施 Claude)
+//
+// 设计:
+//   ProcessedTGUpdate          — webhook 入口幂等表,防同 update_id 重复处理
+//   PendingTelegramNotification — TG 发送失败 backlog,看板 /admin/telegram-notifications 显示 + 老板手动重发
+//
+// 关联 bridge.py:
+//   _claim_tg_update          — INSERT ProcessedTGUpdate ON CONFLICT(updateId) DO NOTHING
+//   _record_pending_telegram  — send/edit 失败时写 PendingTelegramNotification
+//   /api/telegram-notifications/{id}/resend — bridge HTTP 接口,看板调用
+
+model ProcessedTGUpdate {
+  id         String   @id @default(cuid())
+  updateId   BigInt   @unique // TG 给的 update_id, 绝对唯一
+  chatId     BigInt?
+  messageId  Int?
+  fromUserId BigInt?
+  updateKind String // "message" | "edited_message" | "callback_query" | "other"
+  status     String   @default("RECEIVED") // RECEIVED | PROCESSED | ERROR
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([chatId, createdAt])
+}
+
+model PendingTelegramNotification {
+  id          String    @id @default(cuid())
+  source      String    @default("bridge") // bridge | native_dispatch | other
+  botKey      String // bot token 反查的 short key (entry | voucher | ...) — 看板不存 token
+  method      String // "sendMessage" | "editMessageText"
+  chatId      BigInt
+  messageId   Int? // editMessageText 时必填
+  text        String    @db.Text
+  parseMode   String? // "HTML" | "MarkdownV2" | null
+  status      String    @default("PENDING") // PENDING | SENDING | SENT | FAILED
+  attempts    Int       @default(0)
+  lastError   String?   @db.Text
+  context     Json? // 业务 metadata
+  lastTriedAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
