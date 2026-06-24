@@ -11,10 +11,27 @@
  * - 不抛异常，看板永远能渲染
  */
 
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 const TOKEN = process.env.VAULT_GITHUB_TOKEN;
 const OWNER = 'lungtszyiu-creator';
 const REPO = 'lty-vault';
 const BRANCH = 'main';
+
+// 本地优先读：看板 prod 跑在 iMac、vault 也在同机 → 设 LTY_VAULT_ROOT 即直接读本地文件，
+// 零延迟反映 drudge 实时刷的 dashboard.json（不必等每日 git push）。读不到再回退 GitHub API（Vercel 冷备）。
+const LOCAL_VAULT_ROOT = process.env.LTY_VAULT_ROOT;
+
+async function readLocalVaultJson<T>(relPath: string): Promise<T | null> {
+  if (!LOCAL_VAULT_ROOT) return null;
+  try {
+    const raw = await readFile(join(LOCAL_VAULT_ROOT, relPath), 'utf-8');
+    return JSON.parse(raw) as T;
+  } catch {
+    return null; // 文件不在 / 读不了 / JSON 坏 → 让调用方回退 GitHub API
+  }
+}
 
 async function fetchVaultJson<T>(path: string): Promise<T | null> {
   if (!TOKEN) {
@@ -175,10 +192,14 @@ export interface InboxQueueJson {
 // ============ 公开 API ============
 
 export async function getVaultDashboard(): Promise<DashboardJson | null> {
+  const local = await readLocalVaultJson<DashboardJson>('_meta/dashboard.json');
+  if (local) return local;
   return fetchVaultJson<DashboardJson>('_meta/dashboard.json');
 }
 
 export async function getVaultInboxQueue(): Promise<InboxQueueJson | null> {
+  const local = await readLocalVaultJson<InboxQueueJson>('_meta/inbox_queue.json');
+  if (local) return local;
   return fetchVaultJson<InboxQueueJson>('_meta/inbox_queue.json');
 }
 

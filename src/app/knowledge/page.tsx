@@ -585,6 +585,7 @@ function DeptBadge({ dept }: { dept: string }) {
     行政部: 'bg-amber-50 text-amber-700 ring-amber-200',
     人事部: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     MC法务部: 'bg-purple-50 text-purple-700 ring-purple-200',
+    MC业务组: 'bg-sky-50 text-sky-700 ring-sky-200',
   };
   const cls = map[dept] ?? 'bg-slate-50 text-slate-600 ring-slate-200';
   return (

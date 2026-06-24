@@ -47,6 +47,28 @@ const MAX_BYTES = 200 * 1024 * 1024;
 const FOLDER_MAX_FILES = 500;
 const FOLDER_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB 总量
 
+// MC业务组 内容分类（Yoyo 市场获客线）。'auto' = 不标，交 drudge 智能分类；
+// 其余 = 上传者明确选，给文件名注入关键词让 drudge 文件名命中规则确定性归桶。
+type BizCategory = 'auto' | '推文' | '品牌故事' | 'GEO' | '广告';
+const BIZ_OPTIONS: { value: BizCategory; label: string; bucket: string }[] = [
+  { value: 'auto', label: '自动识别', bucket: '交 drudge 按文件名/内容判' },
+  { value: '推文', label: 'X/TG 推文', bucket: '01_素材_推文' },
+  { value: '品牌故事', label: '品牌故事', bucket: '02_素材_品牌故事' },
+  { value: 'GEO', label: 'GEO/技术', bucket: '03_GEO_技术' },
+  { value: '广告', label: '广告/落地页', bucket: '04_广告投放' },
+];
+
+/**
+ * 选了 MC业务组 分类 → 给文件名加 `MC弹药_<关键词>_` 前缀，命中 drudge
+ * config.yaml filename_prefix_hints（dept=MC业务组），conf=0.95 直接归对应桶。
+ * 已带 MC弹药 前缀的不重复加（尊重上传者自己起的命中名）。
+ */
+function applyBizPrefix(name: string, biz: BizCategory): string {
+  if (biz === 'auto') return name;
+  if (/^MC弹药/.test(name)) return name;
+  return `MC弹药_${biz}_${name}`;
+}
+
 export default function UploadButton({
   isSuperAdmin = false,
   canRouteMcLegal = false,
@@ -60,6 +82,8 @@ export default function UploadButton({
   const [description, setDescription] = useState('');
   // 目标 vault：法务部成员 + SUPER_ADMIN 看到 mc-legal-vault 选项；其他人永远 lty-vault
   const [targetVault, setTargetVault] = useState<'lty-vault' | 'mc-legal-vault'>('lty-vault');
+  // MC业务组 内容分类（可选）：选了就给文件名注入 drudge 能命中的关键词 → 确定性归桶，不靠智能猜
+  const [bizCategory, setBizCategory] = useState<BizCategory>('auto');
   // 保留 isSuperAdmin 字段以兼容老调用方（未来可能给老板专属 UI 标识用，目前无差异）
   void isSuperAdmin;
   const router = useRouter();
@@ -133,14 +157,16 @@ export default function UploadButton({
 
     try {
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const safeName = file.name.replace(/[^\w一-鿿.\-]/g, '_');
+      // MC业务组 分类选了就给文件名注入关键词（drudge 据此确定性归桶）
+      const taggedName = applyBizPrefix(file.name, bizCategory);
+      const safeName = taggedName.replace(/[^\w一-鿿.\-]/g, '_');
       const pathname = `knowledge-uploads/${ts}-${safeName}`;
 
       await upload(pathname, file, {
         access: 'public',
         handleUploadUrl: '/api/knowledge/upload',
         clientPayload: JSON.stringify({
-          originalFilename: file.name,
+          originalFilename: taggedName,
           description: trimmedDesc || undefined,
           targetVault: targetVault === 'mc-legal-vault' ? 'mc-legal-vault' : undefined,
         }),
@@ -151,6 +177,7 @@ export default function UploadButton({
 
       setState({ kind: 'done', filename: file.name });
       setDescription('');
+      setBizCategory('auto');
       router.refresh();
       setTimeout(() => setState({ kind: 'idle' }), 3000);
     } catch (e: unknown) {
@@ -222,6 +249,7 @@ export default function UploadButton({
   function cancel() {
     setState({ kind: 'idle' });
     setDescription('');
+    setBizCategory('auto');
   }
 
   const totalSizeMb =
@@ -290,6 +318,9 @@ export default function UploadButton({
             targetVault={targetVault}
             setTargetVault={setTargetVault}
           />
+          {targetVault === 'lty-vault' && (
+            <BizCategorySelector bizCategory={bizCategory} setBizCategory={setBizCategory} />
+          )}
           <DescriptionField description={description} setDescription={setDescription} />
           <div className="mt-2 flex gap-2">
             <button
@@ -504,6 +535,51 @@ function VaultSelector({
       {targetVault === 'mc-legal-vault' && (
         <div className="mt-1 text-[10px] text-rose-700">
           ⚠️ 上传到 MC 法务隔离仓库（mc-legal-vault repo），不进 LTY vault
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * MC业务组 内容分类选择器（可选）
+ *
+ * 默认「自动识别」(不改文件名，交 drudge 智能分类)。选具体桶 → 上传时给
+ * 文件名注入 `MC弹药_<关键词>_` 前缀，命中 drudge 文件名规则确定性归桶，
+ * 不靠模型猜。只在目标 = lty-vault 时显示（MC业务组 在 lty-vault 里）。
+ */
+function BizCategorySelector({
+  bizCategory,
+  setBizCategory,
+}: {
+  bizCategory: BizCategory;
+  setBizCategory: (v: BizCategory) => void;
+}) {
+  return (
+    <div className="mb-2 rounded-lg border border-sky-200/60 bg-sky-50/50 px-2.5 py-1.5">
+      <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-sky-700">
+        MC业务组 分类（可选）
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {BIZ_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setBizCategory(opt.value)}
+            title={opt.bucket}
+            className={`rounded px-2 py-1 text-xs font-medium transition ${
+              bizCategory === opt.value
+                ? 'bg-sky-600 text-white'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {bizCategory !== 'auto' && (
+        <div className="mt-1 text-[10px] text-sky-700">
+          → 归 <span className="font-mono">MC业务组/{BIZ_OPTIONS.find((o) => o.value === bizCategory)?.bucket}</span>（文件名会自动加 MC弹药_{bizCategory}_ 前缀）
         </div>
       )}
     </div>
