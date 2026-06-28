@@ -9,19 +9,24 @@ import {
   formatMoney,
 } from '@/lib/cashier-shared';
 
-export async function ReimbursementsTab({ canEdit }: { canEdit: boolean }) {
+export async function ReimbursementsTab({ canEdit, categoryFilter, excludeCategories, title }: { canEdit: boolean; categoryFilter?: string[]; excludeCategories?: string[]; title?: string }) {
   void canEdit;
+  const whereClause: any = {};
+  if (categoryFilter && categoryFilter.length > 0) whereClause.category = { in: categoryFilter };
+  if (excludeCategories && excludeCategories.length > 0) whereClause.category = { notIn: excludeCategories };
   const reimbs = await prisma.cashierReimbursement.findMany({
+    where: Object.keys(whereClause).length ? whereClause : undefined,
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     take: 100,
     include: { applicant: { select: { name: true, email: true } } },
   });
+  const displayTitle = title ?? '报销申请';
 
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-          报销申请（{reimbs.length}）
+          {displayTitle}（{reimbs.length}）
         </h2>
         <Link
           href="/dept/cashier/reimbursements/new"
@@ -57,7 +62,7 @@ export async function ReimbursementsTab({ canEdit }: { canEdit: boolean }) {
 
       {reimbs.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-10 text-center text-sm text-slate-400">
-          暂无报销记录
+          暂无{displayTitle.includes('工资') ? '工资' : '报销'}记录
         </div>
       ) : (
         <>

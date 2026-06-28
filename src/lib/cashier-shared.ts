@@ -8,6 +8,7 @@
  */
 
 export const CASHIER_REIMB_CATEGORY_LABEL: Record<string, string> = {
+  WAGE: '月度工资',
   TRAVEL: '差旅费',
   MEAL: '餐饮费',
   OFFICE: '办公费',

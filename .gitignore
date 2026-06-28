@@ -26,3 +26,12 @@ prisma/dev.db-journal
 .claude
 tsconfig.tsbuildinfo
 .vercel
+
+# 历史 .env.local 备份(本地保留方便回滚,不进 git)
+.env.local.bak*
+.env.local.neon-bak*
+.env.local.localhost-pg-backup
+.env.local.*-backup
+
+# deploy/ 里手改时的 .bak 文件不进 git
+deploy/*.bak.*

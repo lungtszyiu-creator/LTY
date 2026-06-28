@@ -54,6 +54,7 @@ export default async function FinancePage({
     totalSnapshotCount,
     latestSnapshotMeta,
     recentSnapshots,
+    cozeHealthGroups,
   ] = await Promise.all([
     prisma.voucher.count({ where: { status: 'AI_DRAFT' } }),
     prisma.cryptoWallet.count({ where: { isActive: true } }),
@@ -94,6 +95,15 @@ export default async function FinancePage({
       orderBy: { asOf: 'desc' },
       include: { wallet: { select: { id: true, label: true, chain: true } } },
     }),
+    // Coze 24h 健康度(2026-06-12 Layer 1)
+    prisma.aiActivityLog.groupBy({
+      by: ['status'],
+      where: {
+        aiRole: 'coze_dispatch',
+        createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) },
+      },
+      _count: { _all: true },
+    }),
   ]);
 
   // 构造每个 (walletId, token) 最新一条快照
@@ -132,12 +142,34 @@ export default async function FinancePage({
         <span className="text-xs text-slate-400">数据每次刷新页面即更新</span>
       </header>
 
-      {/* KPI 三连 —— 移动端三列紧凑显示 */}
-      <section className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
-        <KpiCard label="待审凭证" value={pendingVouchersCount} accent="rose" />
-        <KpiCard label="在用钱包" value={walletsCount} accent="amber" />
-        <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
-      </section>
+      {/* KPI 四连(2026-06-12 加 Coze 24h 健康度) */}
+      {(() => {
+        // Coze 24h 健康度计算
+        const cozeCounts = { success: 0, fake_success: 0, error: 0 };
+        for (const g of cozeHealthGroups) {
+          const k = g.status as 'success' | 'fake_success' | 'error';
+          if (k in cozeCounts) cozeCounts[k] = g._count._all;
+        }
+        const cozeTotal = cozeCounts.success + cozeCounts.fake_success + cozeCounts.error;
+        const cozeHealthPct = cozeTotal === 0 ? null : Math.round((cozeCounts.success / cozeTotal) * 100);
+        const cozeAccent: 'emerald' | 'amber' | 'rose' | 'slate' =
+          cozeTotal === 0 ? 'slate'
+            : cozeHealthPct! >= 95 ? 'emerald'
+            : cozeHealthPct! >= 80 ? 'amber'
+            : 'rose';
+        const cozeLabel = cozeTotal === 0
+          ? 'Coze 24h(无调用)'
+          : `Coze 24h(${cozeCounts.success}/${cozeTotal})`;
+        const cozeValue = cozeTotal === 0 ? '—' : `${cozeHealthPct}%`;
+        return (
+          <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <KpiCard label="待审凭证" value={pendingVouchersCount} accent="rose" />
+            <KpiCard label="在用钱包" value={walletsCount} accent="amber" />
+            <KpiCard label="近 30 天活动" value={monthActivityCount} accent="emerald" />
+            <KpiCard label={cozeLabel} value={cozeValue} accent={cozeAccent} />
+          </section>
+        );
+      })()}
 
       {/* 子页面快速入口 —— 6 张大卡片（AI 订阅 5/10 搬到 AI 部全员可填，
           /finance 首页不再列那条入口）；移动端 2 列 / sm 3 列 / lg 6 列 */}
@@ -736,10 +768,11 @@ function KpiCard({
   accent,
 }: {
   label: string;
-  value: number;
-  accent: 'rose' | 'amber' | 'emerald';
+  value: number | string;
+  accent: 'rose' | 'amber' | 'emerald' | 'slate';
 }) {
   const accentMap = {
+    slate: 'from-slate-50 to-slate-100/40 ring-slate-200/60 text-slate-600',
     rose: 'from-rose-50 to-rose-100/40 ring-rose-200/60 text-rose-700',
     amber: 'from-amber-50 to-amber-100/40 ring-amber-200/60 text-amber-700',
     emerald: 'from-emerald-50 to-emerald-100/40 ring-emerald-200/60 text-emerald-700',

@@ -48,7 +48,7 @@ const TABS: { key: TabKey; label: string; ready: boolean }[] = [
   { key: 'compliance', label: '合规台账', ready: true },
   { key: 'budget', label: '预算管理', ready: false },
   { key: 'monthly', label: '月度结算', ready: false },
-  { key: 'payroll', label: '工资单', ready: false },
+  { key: 'payroll', label: '工资单', ready: true },
 ];
 
 export default async function CashierPage({
@@ -187,7 +187,8 @@ export default async function CashierPage({
         </>
       )}
 
-      {tab === 'expense' && <ReimbursementsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} />}
+      {tab === 'expense' && <ReimbursementsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} excludeCategories={['WAGE']} />}
+      {tab === 'payroll' && <ReimbursementsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} categoryFilter={['WAGE']} title='工资单' />}
       {tab === 'reconciliation' && <ReconciliationsTab canEdit={ctx.level === 'LEAD' || ctx.isSuperAdmin} />}
       {tab === 'compliance' && (
         <ComplianceTab
@@ -197,16 +198,12 @@ export default async function CashierPage({
         />
       )}
 
-      {(tab === 'pending' || tab === 'budget' || tab === 'monthly' || tab === 'payroll') && (
+      {(tab === 'pending' || tab === 'budget' || tab === 'monthly') && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-12 text-center">
           <div className="text-2xl">🚧</div>
           <p className="mt-2 text-sm text-slate-500">本 Tab v1.1 接入</p>
           <p className="mt-1 text-xs text-slate-400">
-            {tab === 'payroll'
-              ? '工资单复用 LTY /finance EmployeePayrollProfile，等老板补字段细化'
-              : '等老板发出纳子页详细截图（' +
-                (tab === 'pending' ? '待处理' : tab === 'budget' ? '预算' : '月度结算') +
-                '）后落地'}
+            等老板发出纳子页详细截图（{tab === 'pending' ? '待处理' : tab === 'budget' ? '预算' : '月度结算'}）后落地
           </p>
         </div>
       )}
