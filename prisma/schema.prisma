@@ -1908,3 +1908,30 @@ model PendingTelegramNotification {
   @@index([status, createdAt])
   @@index([createdAt])
 }
+
+// ============ 2026-06-25 加: vault inbox 批量审核 ============
+// drudge 把低置信度文件丢 raw/_inbox/_pending/ + 列入 _meta/inbox_queue.json
+// 看板 /knowledge 显示后,老板批量批准 → 写本表
+// drudge 端 (inbox_consumer.py 由 launchd 每 30s 跑) 读本表 → mv 文件到正确目录 + commit + push
+
+model InboxApprovalDecision {
+  id                  String    @id @default(cuid())
+  itemPath            String    @unique // raw/_inbox/_pending/<filename>
+  decision            String // "APPROVED" | "REJECTED" | "DELETED"
+  approvedDept        String? // 老板覆盖部门;null = 用 originalGuessedDept
+  approvedType        String? // 老板覆盖类型;null = 用 originalGuessedType
+  status              String    @default("PENDING") // PENDING | EXECUTING | DONE | FAILED
+  attempts            Int       @default(0)
+  lastError           String?
+  decidedById         String
+  decidedAt           DateTime  @default(now())
+  executedAt          DateTime?
+  // 原 drudge 元数据快照
+  originalGuessedDept String?
+  originalGuessedType String?
+  originalSummary     String?
+  originalConfidence  Float?
+
+  @@index([status, decidedAt])
+  @@index([decidedById, decidedAt])
+}
