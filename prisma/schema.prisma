@@ -1935,3 +1935,24 @@ model InboxApprovalDecision {
   @@index([status, decidedAt])
   @@index([decidedById, decidedAt])
 }
+
+// 2026-06-29 Task 操作完整审计追踪 (DELETE/UPDATE)
+// 任何 ADMIN 改/删 task 都留痕: who/when/IP/UA/前后完整快照
+model TaskAuditLog {
+  id             String   @id @default(cuid())
+  taskId         String   // 目标 task id (可能已被删,不加 FK)
+  action         String   // "UPDATE" | "DELETE"
+  actorId        String
+  actorEmail     String
+  actorRole      String
+  actorName      String?
+  ipAddress      String?
+  userAgent      String?
+  beforeSnapshot Json?    // 改/删前完整 task 快照 (含 submissions/attachments/claims)
+  afterSnapshot  Json?    // 改后快照, DELETE 时为 null
+  createdAt      DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}

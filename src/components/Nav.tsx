@@ -29,6 +29,7 @@ const MORE_LINKS = [
 ];
 
 const ADMIN_LINKS = [
+  { href: '/admin/audit',           label: '审计中心' },
   { href: '/admin/tasks/new',            label: '发布任务' },
   { href: '/admin/approvals',            label: '审批后台' },
   { href: '/admin/approvals/templates',  label: '审批模板' },
