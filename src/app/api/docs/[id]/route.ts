@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { resolveDocAccess } from '@/lib/docAccess';
 
 // GET single doc with full body. Only callers with canView see content.
@@ -126,11 +127,20 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'SUPER_ADMIN_OR_CREATOR_ONLY' }, { status: 403 });
     }
     await prisma.doc.delete({ where: { id: params.id } });
+    void recordAudit({
+      resourceType: 'Doc', resourceId: params.id, action: 'DELETE',
+      actor: user, request: req, before: doc, metadata: { hard: true },
+    });
     return NextResponse.json({ ok: true, hard: true });
   }
-  await prisma.doc.update({
+  const softDeleted = await prisma.doc.update({
     where: { id: params.id },
     data: { deletedAt: new Date() },
+  });
+  void recordAudit({
+    resourceType: 'Doc', resourceId: params.id, action: 'UPDATE',
+    actor: user, request: req, before: doc, after: softDeleted,
+    metadata: { softDelete: true },
   });
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 
 const schema = z.object({
   title: z.string().min(1).max(120).optional(),
@@ -21,8 +22,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(p);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  await requireAdmin();
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const actor = await requireAdmin();
+  const before = await prisma.position.findUnique({ where: { id: params.id } });
   await prisma.position.delete({ where: { id: params.id } });
+  if (before) {
+    void recordAudit({
+      resourceType: 'Position', resourceId: params.id, action: 'DELETE',
+      actor, request: req, before,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

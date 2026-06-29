@@ -1,27 +1,27 @@
 /**
- * 通用 audit helper — 2026-06-29
+ * 通用 audit helper — 2026-06-29 v2
  *
  * 任何 mutations API 一行调用记 audit:
  *   import { recordAudit } from '@/lib/audit';
  *   ...
- *   await recordAudit({
+ *   recordAudit({
  *     resourceType: 'Submission',
  *     resourceId: id,
  *     action: 'DELETE',
  *     actor,
  *     request: req,
  *     before,
- *   });
+ *   }); // 不要 await — 已自带 .catch + 不阻塞
  *
  * paradigm:
  *   - **不阻断主流程**:audit 失败只 console.error,业务正常返回
  *   - **谁 + 何时 + 何 IP + UA + 前后快照**全留
- *   - 跟现有专属表(TaskAuditLog/VoucherAuditLog)paradigm 兼容
+ *   - resourceType='Task' → 同时写 TaskAuditLog(v1 兼容)+ GenericAuditLog
+ *   - 其他 resourceType → 只写 GenericAuditLog
  *
- * 后续递补这些资源(每个 5 行 helper 调用即可,不用每次再设计表):
- *   - Submission, User, Doc, Folder, Attachment,
- *   - Department, DepartmentMembership, NotificationSetting,
- *   - HrCandidate, HrEmployeeProfile, ...
+ * 涵盖资源(v2 接入,全 DELETE handler):
+ *   Task / Submission / User / Doc / Folder / Department / Position / Announcement / Attachment / Report
+ *   凭证不用接入(VoucherAuditLog 已有专属表)
  */
 import type { NextRequest } from 'next/server';
 import { prisma } from './db';
@@ -63,51 +63,69 @@ interface RecordAuditArgs {
   before?: any;
   /** 改后快照(DELETE 时不传) */
   after?: any;
+  /** 额外上下文 (e.g. 删除原因 / 操作上下文) */
+  metadata?: any;
 }
 
 /**
- * 路由专属 audit 表(已建好)→ 直接写
- * 没有专属表的 → 写到统一 GenericAuditLog 表(待建,目前 fallback console.warn)
+ * 写一条 audit log;**完全不阻断主流程,失败只 console.error**。
  *
- * 当前实现策略:
- *   - resourceType='Task' → 写 TaskAuditLog(已就绪)
- *   - 其他 → 暂时 console.warn 留痕,等 GenericAuditLog 建好再切
- *
- * 后续 v2:
- *   - 加 GenericAuditLog 通用表(resourceType + resourceId + action + actorId/Email/Role + IP/UA + before/after)
- *   - 老 TaskAuditLog 保留(向后兼容)/ 新业务都进 GenericAuditLog
+ * 写入策略:
+ *   - resourceType='Task' → 兼容 v1, 双写 TaskAuditLog + GenericAuditLog
+ *   - 其他 resourceType → 只写 GenericAuditLog
  */
-export async function recordAudit(args: RecordAuditArgs): Promise<void> {
-  const { resourceType, resourceId, action, actor, request, before, after } = args;
+export function recordAudit(args: RecordAuditArgs): Promise<void> {
+  const { resourceType, resourceId, action, actor, request, before, after, metadata } = args;
   const { ipAddress, userAgent } = getRequestMeta(request);
 
-  try {
-    if (resourceType === 'Task') {
-      await prisma.taskAuditLog.create({
+  const commonData = {
+    actorId: actor.id,
+    actorEmail: actor.email ?? '',
+    actorRole: actor.role ?? '',
+    actorName: actor.name ?? null,
+    ipAddress,
+    userAgent,
+    beforeSnapshot: before ?? undefined,
+    afterSnapshot: after ?? undefined,
+  };
+
+  const writes: Promise<unknown>[] = [];
+
+  // 1. 通用表 — 所有 resourceType 都写
+  writes.push(
+    prisma.genericAuditLog.create({
+      data: {
+        ...commonData,
+        resourceType,
+        resourceId,
+        action,
+        metadata: metadata ?? undefined,
+      },
+    }),
+  );
+
+  // 2. v1 兼容 — Task 同时写专属 TaskAuditLog (兼容旧查询/UI)
+  if (resourceType === 'Task') {
+    writes.push(
+      prisma.taskAuditLog.create({
         data: {
+          ...commonData,
           taskId: resourceId,
           action,
-          actorId: actor.id,
-          actorEmail: actor.email ?? '',
-          actorRole: actor.role ?? '',
-          actorName: actor.name ?? null,
-          ipAddress,
-          userAgent,
-          beforeSnapshot: before ?? undefined,
-          afterSnapshot: after ?? undefined,
         },
-      });
-      return;
-    }
-
-    // 未来 resourceType in ['Submission','User','Doc','Folder',...] → 写 GenericAuditLog
-    // 现阶段降级 warn 留痕,不阻断业务
-    console.warn(
-      `[recordAudit] no dedicated audit table for resourceType=${resourceType} yet; ` +
-        `falling back to log. id=${resourceId} action=${action} actor=${actor.email ?? actor.id}`,
+      }),
     );
-  } catch (e) {
-    // 永不阻断主流程
-    console.error('[recordAudit] failed', e);
   }
+
+  // 全部失败只记 console,不影响主流程
+  return Promise.allSettled(writes).then((results) => {
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(
+          `[recordAudit] failed write #${i} resourceType=${resourceType} id=${resourceId}:`,
+          r.reason,
+        );
+      }
+    });
+  });
 }

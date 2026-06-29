@@ -1,17 +1,18 @@
 /**
- * 审计中心 client component — 2026-06-29 v1
- * - tab 切换(QS 同步)
- * - 全局筛选(actor / 关键词 / 时间范围)
- * - 行点击展开 JSON 详情(modal)
+ * 审计中心 v2 client — 2026-06-29
+ * - 5 tab(新增"全局"在第 1 位)
+ * - GlobalTable 显示 GenericAuditLog,可按 resourceType 筛
+ * - 其他 4 tab(Task/凭证/AI/审批)沿用 v1
  */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-type TaskAuditRow = {
+type GlobalAuditRow = {
   id: string;
-  taskId: string;
+  resourceType: string;
+  resourceId: string;
   action: string;
   actorId: string;
   actorEmail: string;
@@ -21,54 +22,35 @@ type TaskAuditRow = {
   userAgent: string | null;
   beforeSnapshot: any;
   afterSnapshot: any;
+  metadata: any;
   createdAt: string | Date;
 };
 
+type TaskAuditRow = {
+  id: string; taskId: string; action: string; actorId: string; actorEmail: string;
+  actorRole: string; actorName: string | null; ipAddress: string | null;
+  userAgent: string | null; beforeSnapshot: any; afterSnapshot: any; createdAt: string | Date;
+};
 type VoucherAuditRow = {
-  id: string;
-  voucherId: string;
-  action: string;
-  changedById: string | null;
-  byAi: string | null;
-  beforeJson: string | null;
-  afterJson: string | null;
-  reason: string | null;
-  createdAt: string | Date;
+  id: string; voucherId: string; action: string; changedById: string | null;
+  byAi: string | null; beforeJson: string | null; afterJson: string | null;
+  reason: string | null; createdAt: string | Date;
 };
-
 type AiActivityRow = {
-  id: string;
-  aiRole: string;
-  action: string;
-  status: string;
-  payload: string | null;
-  errorMessage: string | null;
-  voucherId: string | null;
-  chainTransactionId: string | null;
-  reconciliationId: string | null;
-  fxRateId: string | null;
-  telegramSent: boolean;
-  vaultWritten: boolean;
-  dashboardWritten: boolean;
+  id: string; aiRole: string; action: string; status: string;
+  payload: string | null; errorMessage: string | null;
+  voucherId: string | null; chainTransactionId: string | null;
+  reconciliationId: string | null; fxRateId: string | null;
+  telegramSent: boolean; vaultWritten: boolean; dashboardWritten: boolean;
   createdAt: string | Date;
 };
-
 type ApprovalRow = {
-  id: string;
-  title: string;
-  status: string;
-  initiatorId: string;
+  id: string; title: string; status: string; initiatorId: string;
   initiator: { id: string; name: string | null; email: string } | null;
-  formJson: string;
-  submittedAt: string | Date;
-  completedAt: string | Date | null;
+  formJson: string; submittedAt: string | Date; completedAt: string | Date | null;
   steps: Array<{
-    id: string;
-    nodeId: string;
-    kind: string;
-    decision: string | null;
-    note: string | null;
-    decidedAt: string | Date | null;
+    id: string; nodeId: string; kind: string; decision: string | null;
+    note: string | null; decidedAt: string | Date | null;
     approver: { id: string; name: string | null; email: string } | null;
   }>;
   createdAt: string | Date;
@@ -76,8 +58,10 @@ type ApprovalRow = {
 
 type Props = {
   initialTab: string;
-  initialFilters: { q: string; from: string; to: string; actor: string };
+  initialFilters: { q: string; from: string; to: string; actor: string; resourceType: string };
+  resourceTypeStats: Array<{ resourceType: string; count: number }>;
   data: {
+    global: { rows: GlobalAuditRow[]; total: number };
     task: { rows: TaskAuditRow[]; total: number };
     voucher: { rows: VoucherAuditRow[]; total: number };
     ai: { rows: AiActivityRow[]; total: number };
@@ -86,10 +70,11 @@ type Props = {
 };
 
 const TABS = [
-  { key: 'task', label: '任务操作' },
-  { key: 'voucher', label: '凭证操作' },
+  { key: 'global', label: '全局' },
+  { key: 'task', label: '任务' },
+  { key: 'voucher', label: '凭证' },
   { key: 'ai', label: 'AI 员工' },
-  { key: 'approval', label: '审批流转' },
+  { key: 'approval', label: '审批' },
 ] as const;
 
 function formatTime(t: string | Date | null): string {
@@ -115,6 +100,24 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
+function ResourceBadge({ resourceType }: { resourceType: string }) {
+  const map: Record<string, string> = {
+    Task: 'bg-blue-50 text-blue-700 ring-blue-200',
+    Submission: 'bg-purple-50 text-purple-700 ring-purple-200',
+    User: 'bg-rose-50 text-rose-700 ring-rose-200',
+    Doc: 'bg-cyan-50 text-cyan-700 ring-cyan-200',
+    Folder: 'bg-teal-50 text-teal-700 ring-teal-200',
+    Department: 'bg-orange-50 text-orange-700 ring-orange-200',
+    Position: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
+  };
+  const cls = map[resourceType] ?? 'bg-slate-50 text-slate-700 ring-slate-200';
+  return (
+    <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${cls}`}>
+      {resourceType}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
@@ -133,7 +136,12 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function AuditCenterClient({ initialTab, initialFilters, data }: Props) {
+export default function AuditCenterClient({
+  initialTab,
+  initialFilters,
+  resourceTypeStats,
+  data,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState(initialTab);
@@ -141,16 +149,17 @@ export default function AuditCenterClient({ initialTab, initialFilters, data }: 
   const [from, setFrom] = useState(initialFilters.from);
   const [to, setTo] = useState(initialFilters.to);
   const [actor, setActor] = useState(initialFilters.actor);
+  const [resourceType, setResourceType] = useState(initialFilters.resourceType);
   const [detailRow, setDetailRow] = useState<any>(null);
 
-  // 同步 QS,reload SSR(server 拉数据)
   function applyFilters(nextTab = tab) {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams();
     params.set('tab', nextTab);
-    if (q) params.set('q', q); else params.delete('q');
-    if (from) params.set('from', from); else params.delete('from');
-    if (to) params.set('to', to); else params.delete('to');
-    if (actor) params.set('actor', actor); else params.delete('actor');
+    if (q) params.set('q', q);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (actor) params.set('actor', actor);
+    if (resourceType && nextTab === 'global') params.set('resourceType', resourceType);
     router.push(`/admin/audit?${params.toString()}`);
   }
 
@@ -158,21 +167,19 @@ export default function AuditCenterClient({ initialTab, initialFilters, data }: 
     setTab(key);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', key);
+    if (key !== 'global') params.delete('resourceType');
     router.push(`/admin/audit?${params.toString()}`);
   }
 
   function resetFilters() {
-    setQ(''); setFrom(''); setTo(''); setActor('');
+    setQ(''); setFrom(''); setTo(''); setActor(''); setResourceType('');
     const params = new URLSearchParams();
     params.set('tab', tab);
     router.push(`/admin/audit?${params.toString()}`);
   }
 
-  const currentData = data[tab as keyof typeof data];
-
   return (
     <>
-      {/* tab bar */}
       <nav className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => {
           const count = data[t.key as keyof typeof data]?.total ?? 0;
@@ -196,44 +203,52 @@ export default function AuditCenterClient({ initialTab, initialFilters, data }: 
         })}
       </nav>
 
-      {/* 筛选区 */}
       <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap items-end gap-2 text-xs">
           <div>
             <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">关键词</label>
             <input
-              type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="taskId / voucherId / action / 摘要"
+              type="text" value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="id / action / 摘要"
               className="mt-0.5 rounded-md border border-slate-300 px-2 py-1 text-xs"
             />
           </div>
           <div>
             <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">操作人</label>
             <input
-              type="text"
-              value={actor}
-              onChange={(e) => setActor(e.target.value)}
+              type="text" value={actor} onChange={(e) => setActor(e.target.value)}
               placeholder="email / 名字 / AI role"
               className="mt-0.5 rounded-md border border-slate-300 px-2 py-1 text-xs"
             />
           </div>
+          {tab === 'global' && (
+            <div>
+              <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">资源类型</label>
+              <select
+                value={resourceType}
+                onChange={(e) => setResourceType(e.target.value)}
+                className="mt-0.5 rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs"
+              >
+                <option value="">全部</option>
+                {resourceTypeStats.map((s) => (
+                  <option key={s.resourceType} value={s.resourceType}>
+                    {s.resourceType} ({s.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">起</label>
             <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              type="date" value={from} onChange={(e) => setFrom(e.target.value)}
               className="mt-0.5 rounded-md border border-slate-300 px-2 py-1 text-xs"
             />
           </div>
           <div>
             <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">止</label>
             <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
+              type="date" value={to} onChange={(e) => setTo(e.target.value)}
               className="mt-0.5 rounded-md border border-slate-300 px-2 py-1 text-xs"
             />
           </div>
@@ -252,15 +267,14 @@ export default function AuditCenterClient({ initialTab, initialFilters, data }: 
         </div>
       </div>
 
-      {/* 内容 */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {tab === 'global' && <GlobalTable rows={data.global.rows} onRowClick={setDetailRow} />}
         {tab === 'task' && <TaskTable rows={data.task.rows} onRowClick={setDetailRow} />}
         {tab === 'voucher' && <VoucherTable rows={data.voucher.rows} onRowClick={setDetailRow} />}
         {tab === 'ai' && <AiTable rows={data.ai.rows} onRowClick={setDetailRow} />}
         {tab === 'approval' && <ApprovalTable rows={data.approval.rows} onRowClick={setDetailRow} />}
       </div>
 
-      {/* 详情 modal */}
       {detailRow && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
@@ -289,7 +303,56 @@ export default function AuditCenterClient({ initialTab, initialFilters, data }: 
   );
 }
 
-// ─── 4 个 tab 的表格 ─────────────────────────────────
+function GlobalTable({ rows, onRowClick }: { rows: GlobalAuditRow[]; onRowClick: (r: any) => void }) {
+  if (rows.length === 0)
+    return <EmptyHint text="还没有通用审计记录(v2 接入的 5 个 DELETE handler 还没人触发)。" />;
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr>
+          <th className="px-3 py-2 text-left">时间</th>
+          <th className="px-3 py-2 text-left">资源</th>
+          <th className="px-3 py-2 text-left">动作</th>
+          <th className="px-3 py-2 text-left">操作人</th>
+          <th className="px-3 py-2 text-left">资源 ID</th>
+          <th className="px-3 py-2 text-left">被删/改 摘要</th>
+          <th className="px-3 py-2 text-left">IP</th>
+          <th className="px-3 py-2 text-center">详情</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => {
+          const beforeName =
+            r.beforeSnapshot?.title ??
+            r.beforeSnapshot?.name ??
+            r.beforeSnapshot?.email ??
+            '—';
+          return (
+            <tr
+              key={r.id}
+              className="cursor-pointer border-t border-slate-100 hover:bg-rose-50/20"
+              onClick={() => onRowClick(r)}
+            >
+              <td className="whitespace-nowrap px-3 py-2 text-[11px] text-slate-600">{formatTime(r.createdAt)}</td>
+              <td className="px-3 py-2"><ResourceBadge resourceType={r.resourceType} /></td>
+              <td className="px-3 py-2"><ActionBadge action={r.action} /></td>
+              <td className="px-3 py-2">
+                <div className="text-xs font-medium text-slate-700">{r.actorName ?? r.actorEmail}</div>
+                <div className="text-[10px] text-slate-500">{r.actorEmail} · {r.actorRole}</div>
+              </td>
+              <td className="px-3 py-2 font-mono text-[10px] text-slate-500">…{r.resourceId.slice(-10)}</td>
+              <td className="px-3 py-2 text-xs text-slate-700">
+                <div className="line-clamp-2 max-w-[260px]">{beforeName}</div>
+              </td>
+              <td className="px-3 py-2 font-mono text-[10px] text-slate-500">{r.ipAddress ?? '—'}</td>
+              <td className="px-3 py-2 text-center text-xs text-blue-600">查看</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
 
 function TaskTable({ rows, onRowClick }: { rows: TaskAuditRow[]; onRowClick: (r: any) => void }) {
   if (rows.length === 0)

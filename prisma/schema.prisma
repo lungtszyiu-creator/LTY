@@ -1956,3 +1956,28 @@ model TaskAuditLog {
   @@index([actorId, createdAt])
   @@index([action, createdAt])
 }
+
+// 2026-06-29 v2 通用资源操作审计 (Submission/User/Doc/Folder/Department/Position/...)
+// 跟 v1 TaskAuditLog 共存; Task 双写两边 (兼容); 新接入只写本表
+model GenericAuditLog {
+  id             String   @id @default(cuid())
+  resourceType   String
+  resourceId     String
+  action         String
+  actorId        String
+  actorEmail     String
+  actorRole      String
+  actorName      String?
+  ipAddress      String?
+  userAgent      String?
+  beforeSnapshot Json?
+  afterSnapshot  Json?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([resourceType, action, createdAt])
+  @@index([createdAt])
+}

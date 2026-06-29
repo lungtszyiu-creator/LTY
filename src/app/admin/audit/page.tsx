@@ -1,18 +1,14 @@
 /**
- * 审计中心 v1 — 2026-06-29
+ * 审计中心 v2 — 2026-06-29
  *
- * 一个页面看清 LTY 看板所有"谁动过什么"的留痕。
+ * 加 "全局" tab (GenericAuditLog) 涵盖 Submission/User/Doc/Folder/Department/Position 等所有接入资源
  *
- * 数据源(只读现有 audit 表):
- *   - TaskAuditLog  (今天新加)
+ * 数据源:
+ *   - GenericAuditLog (v2 通用表)
+ *   - TaskAuditLog    (v1 专属, Task 双写两边)
  *   - VoucherAuditLog (已有 42 行)
- *   - AiActivityLog   (已有 540 行)
- *   - ApprovalInstance + ApprovalStep (已有 59/69 行)
- *
- * 路径:/admin/audit
- * 权限:ADMIN+
- *
- * 后续递补:Submission/User/Doc/Folder/Attachment 等业务表的 auditLog(见 src/lib/audit.ts paradigm)
+ *   - AiActivityLog   (已有 540+ 行)
+ *   - ApprovalInstance + ApprovalStep
  */
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/permissions';
@@ -26,17 +22,17 @@ const PAGE_SIZE = 100;
 export default async function AuditCenterPage({
   searchParams,
 }: {
-  searchParams: { tab?: string; q?: string; from?: string; to?: string; actor?: string };
+  searchParams: { tab?: string; q?: string; from?: string; to?: string; actor?: string; resourceType?: string };
 }) {
   await requireAdmin();
 
-  const tab = searchParams.tab || 'task';
+  const tab = searchParams.tab || 'global';
   const q = (searchParams.q || '').trim();
   const fromDate = searchParams.from ? new Date(searchParams.from) : null;
   const toDate = searchParams.to ? new Date(searchParams.to) : null;
   const actorFilter = (searchParams.actor || '').trim();
+  const resourceTypeFilter = (searchParams.resourceType || '').trim();
 
-  // 并行查 5 张审计表 — 各 100 条 + 筛选
   const baseWhere = {
     createdAt: {
       ...(fromDate ? { gte: fromDate } : {}),
@@ -44,7 +40,38 @@ export default async function AuditCenterPage({
     },
   };
 
-  // Task 操作
+  // ─── 全局审计 (GenericAuditLog) ─────────────────────────
+  const globalWhere: any = { ...baseWhere };
+  if (resourceTypeFilter) globalWhere.resourceType = resourceTypeFilter;
+  if (actorFilter) {
+    globalWhere.OR = [
+      { actorEmail: { contains: actorFilter, mode: 'insensitive' } },
+      { actorName: { contains: actorFilter, mode: 'insensitive' } },
+    ];
+  }
+  if (q) {
+    globalWhere.OR = [
+      ...(globalWhere.OR ?? []),
+      { resourceId: { contains: q } },
+      { action: { contains: q } },
+      { resourceType: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+  const [globalAudits, globalAuditTotal, resourceTypeStats] = await Promise.all([
+    prisma.genericAuditLog.findMany({
+      where: globalWhere,
+      orderBy: { createdAt: 'desc' },
+      take: PAGE_SIZE,
+    }),
+    prisma.genericAuditLog.count({ where: globalWhere }),
+    prisma.genericAuditLog.groupBy({
+      by: ['resourceType'],
+      _count: { _all: true },
+      orderBy: { _count: { resourceType: 'desc' } },
+    }),
+  ]);
+
+  // ─── Task 操作(v1 TaskAuditLog 兼容)─────────────────────
   const taskAuditWhere: any = { ...baseWhere };
   if (actorFilter) {
     taskAuditWhere.OR = [
@@ -68,7 +95,7 @@ export default async function AuditCenterPage({
     prisma.taskAuditLog.count({ where: taskAuditWhere }),
   ]);
 
-  // 凭证操作 (VoucherAuditLog — 表字段:changedById/byAi/beforeJson/afterJson)
+  // ─── 凭证操作 ────────────────────────────────────────
   const voucherAuditWhere: any = { ...baseWhere };
   if (actorFilter) {
     voucherAuditWhere.OR = [
@@ -93,7 +120,7 @@ export default async function AuditCenterPage({
     prisma.voucherAuditLog.count({ where: voucherAuditWhere }),
   ]);
 
-  // AI 员工活动 (AiActivityLog)
+  // ─── AI 员工 ────────────────────────────────────────
   const aiAuditWhere: any = { ...baseWhere };
   if (actorFilter) {
     aiAuditWhere.aiRole = { contains: actorFilter, mode: 'insensitive' };
@@ -115,12 +142,11 @@ export default async function AuditCenterPage({
     prisma.aiActivityLog.count({ where: aiAuditWhere }),
   ]);
 
-  // 审批流转 (ApprovalInstance + relations)
+  // ─── 审批流转 ───────────────────────────────────────
   const approvalWhere: any = { ...baseWhere };
   if (q) {
     approvalWhere.title = { contains: q, mode: 'insensitive' };
   }
-  // initiatorId 关联 User,actorFilter 走 initiator.email
   if (actorFilter) {
     approvalWhere.initiator = {
       OR: [
@@ -137,9 +163,7 @@ export default async function AuditCenterPage({
       include: {
         initiator: { select: { id: true, name: true, email: true } },
         steps: {
-          include: {
-            approver: { select: { id: true, name: true, email: true } },
-          },
+          include: { approver: { select: { id: true, name: true, email: true } } },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -151,14 +175,14 @@ export default async function AuditCenterPage({
     <main className="mx-auto max-w-7xl px-4 py-6">
       <header className="mb-6">
         <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-xl font-semibold text-slate-900">审计中心 · v1</h1>
+          <h1 className="text-xl font-semibold text-slate-900">审计中心 · v2</h1>
           <div className="text-xs text-slate-500">
             最近 100 条/tab · 全量请用筛选缩范围
           </div>
         </div>
         <p className="mt-1 text-sm text-slate-600">
-          看板上"谁动过什么"统一入口。2026-06-29 上线 v1,涵盖 4 类:任务操作 / 凭证操作 / AI 员工活动 / 审批流转。
-          其他业务对象(提交 / 用户 / 文件 / 部门)的留痕**正在递补**,以后这页会越来越全。
+          看板上"谁动过什么"统一入口。**v2 新增全局审计**(GenericAuditLog),涵盖 User / Doc / Folder / Department / Position 等通用资源
+          的 DELETE/UPDATE 操作,2026-06-29 上线。Task 留 v1 专属 tab 兼容;凭证/AI/审批延续原有数据源。
         </p>
         <nav className="mt-3 text-xs text-slate-500">
           <span className="mr-2">现有零散审计入口:</span>
@@ -179,8 +203,19 @@ export default async function AuditCenterPage({
 
       <AuditCenterClient
         initialTab={tab}
-        initialFilters={{ q, from: searchParams.from || '', to: searchParams.to || '', actor: actorFilter }}
+        initialFilters={{
+          q,
+          from: searchParams.from || '',
+          to: searchParams.to || '',
+          actor: actorFilter,
+          resourceType: resourceTypeFilter,
+        }}
+        resourceTypeStats={resourceTypeStats.map((s) => ({
+          resourceType: s.resourceType,
+          count: s._count._all,
+        }))}
         data={{
+          global: { rows: globalAudits, total: globalAuditTotal },
           task: { rows: taskAudits, total: taskAuditTotal },
           voucher: { rows: voucherAudits, total: voucherAuditTotal },
           ai: { rows: aiActivities, total: aiActivityTotal },

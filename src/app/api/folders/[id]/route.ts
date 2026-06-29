@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { resolveFolderAccess } from '@/lib/folderAccess';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -80,10 +81,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await requireUser();
   const access = await resolveFolderAccess(params.id, { id: user.id, role: user.role });
   if (!access.canEdit) return NextResponse.json({ error: 'NO_EDIT' }, { status: 403 });
+  const before = await prisma.folder.findUnique({ where: { id: params.id } });
   await prisma.folder.delete({ where: { id: params.id } });
+  if (before) {
+    void recordAudit({
+      resourceType: 'Folder', resourceId: params.id, action: 'DELETE',
+      actor: user, request: req, before,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

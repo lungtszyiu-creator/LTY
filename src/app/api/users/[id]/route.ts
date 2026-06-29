@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { hasMinRole, type Role } from '@/lib/auth';
 import { setLeaveBalance } from '@/lib/leaveBalance';
 import { canManageLeaveBalance } from '@/lib/leaveBalanceAuth';
@@ -90,7 +91,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(user);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const admin = await requireAdmin();
   if (params.id === admin.id)
     return NextResponse.json({ error: 'SELF_DELETE' }, { status: 409 });
@@ -103,5 +104,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'FORBIDDEN_CANNOT_DELETE_ADMIN' }, { status: 403 });
   }
   await prisma.user.delete({ where: { id: params.id } });
+  void recordAudit({
+    resourceType: 'User', resourceId: params.id, action: 'DELETE',
+    actor: admin, request: req, before: target,
+  });
   return NextResponse.json({ ok: true });
 }
