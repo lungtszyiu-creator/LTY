@@ -1,5 +1,9 @@
 # LTY 任务池 · iMac 本地化部署笔记
 
+> ⚠️ **2026-06-29 更新**:本文档描述的 vercel + Neon 双跑阶段已结束,LTY 看板 100% 跑在 iMac 单实例 + GitHub off-site 备份。Neon 项目待 delete (见 `~/Desktop/2026-06-29_SOP_vercel-neon停用.md`)。本文档作历史保留。
+
+---
+
 **部署日期**：2026-05-27/28
 **起因**：Neon Postgres compute quota 超额 → 看板登不上 → 借机迁本地 iMac
 
