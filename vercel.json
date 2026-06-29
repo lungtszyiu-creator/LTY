@@ -1,17 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
-    {
-      "path": "/api/cron/wallet-balance-snapshot",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/wallet-monitor-tx",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/monthly-finance-report",
-      "schedule": "0 2 1 * *"
-    }
-  ]
+  "_note": "2026-06-29 移除所有 cron — vercel 上的 cron 跑 vercel-deployed next.js 写 Neon, 跟 iMac launchd cron 双写漂移导致 Neon 仍被独立写。iMac launchd 已接管所有 cron (见 ~/Library/LaunchAgents/com.lty.taskpool-cron-*)"
 }
