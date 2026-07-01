@@ -24,9 +24,11 @@ import {
   type DashboardJson,
   type InboxQueueJson,
 } from '@/lib/vault-client';
+import { getKbReviewItems } from '@/lib/kb-actions';
 import UploadButton from './upload-button';
 import IngestButton from './ingest-button';
 import PendingSectionClient from './pending-section-client';
+import KbReviewPanel from './kb-review-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +49,7 @@ export default async function KnowledgePage() {
   const ctx = await requireKnowledgeView();
 
   // 并行拉数据（vault JSON + 看板上传记录）
-  const [dashboard, inboxQueue, recentUploads] = await Promise.all([
+  const [dashboard, inboxQueue, recentUploads, kbItems] = await Promise.all([
     getVaultDashboard(),
     getVaultInboxQueue(),
     prisma.pendingUpload.findMany({
@@ -66,6 +68,7 @@ export default async function KnowledgePage() {
         downloadedAt: true,
       },
     }) as Promise<RecentUpload[]>,
+    getKbReviewItems(),
   ]);
 
   return (
@@ -106,6 +109,22 @@ export default async function KnowledgePage() {
 
       {/* 待审待办 — 2026-06-25 v0.3 批量审批 */}
       <PendingSectionClient inboxQueue={inboxQueue} />
+
+      {/* T3 · 知识审核（确认/驳回/定版/入库，全走 kb_action.py 状态机） */}
+      <section className="mb-8">
+        <h2 className="mb-2 flex items-baseline text-sm font-semibold uppercase tracking-wider text-slate-500">
+          知识审核
+          {kbItems.length > 0 && (
+            <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-amber-200">
+              {kbItems.length}
+            </span>
+          )}
+        </h2>
+        <p className="mb-2 text-[11px] text-slate-400">
+          负责人确认有效 → 管家定版（owner/权限/版本）→ 发布入库（git commit）。仅已发布且有 commit_hash 才可被 AI 引用。
+        </p>
+        <KbReviewPanel items={kbItems} isSuperAdmin={ctx.isSuperAdmin} />
+      </section>
 
       {/* 仓库员活动流 */}
       <ScribeActivitySection dashboard={dashboard} />
